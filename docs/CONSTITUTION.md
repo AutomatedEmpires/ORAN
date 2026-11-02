@@ -33,7 +33,7 @@
 - **C14.** The Definition of Done (§13.3) applies to every change.
 - **C15.** Integration tests that touch data or authorization run against real Postgres+PostGIS. Mocking the database or the auth policy in those tests is forbidden.
 - **C16.** Never skip, disable, or weaken a test or check to get green.
-- **C17.** Every PR is ≤ ~400 changed lines excluding tests and fixtures. Split larger work.
+- **C17.** Target about 400 authored changed lines per PR, excluding tests, fixtures and generated lock/type outputs reviewed separately. Split unrelated changes. ADR-0003 records the one-time existing foundation bootstrap exception.
 
 **Design**
 
