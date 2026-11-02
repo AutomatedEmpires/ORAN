@@ -1,2 +1,3 @@
 'use client';
-export default function ErrorPage({ reset }: { reset: () => void }) { return <section role="alert"><h1>We couldn’t load this page</h1><p>Please try again. For local assistance, call 211.</p><button onClick={reset}>Try again</button></section>; }
+import { useMessages } from '@/ui/locale';
+export default function ErrorPage({reset}:{reset:()=>void}) { const t=useMessages();return <section role="alert"><h1>{t.error}</h1><p>{t.retryHelp}</p><button onClick={reset}>{t.retry}</button></section>; }

@@ -1,3 +1,2 @@
-export default function Home() {
-  return <section className="hero"><p className="eyebrow">A community that shows up</p><h1>Find your next<br />step forward.</h1><p className="lede">Local support, maintained by the people who know their community.</p><div className="notice">The development foundation is being prepared. Resource discovery will use the shared catalog.</div></section>;
-}
+import { messages } from '@/server/language';
+export default async function Home() { const {text:t}=await messages(); return <section className="hero"><p className="eyebrow">{t.eyebrow}</p><h1>{t.headline}</h1><p className="lede">{t.lede}</p><div className="notice">{t.scaffold}</div></section>; }
