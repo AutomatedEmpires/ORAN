@@ -49,4 +49,6 @@ jobs:
       - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
+      - name: Verify repeatability in the same database
+        run: pnpm test:integration
       - run: pnpm db:types:check
