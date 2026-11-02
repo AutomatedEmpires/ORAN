@@ -4,15 +4,24 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.9",
-  "engines": { "node": ">=24.22.2 <25", "pnpm": "10.34.9" },
+  "engines": {
+    "node": ">=24.22.2 <25",
+    "pnpm": "10.34.9"
+  },
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
+    "dev": "tsx scripts/dev.ts",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "dev:remote": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next dev --hostname 127.0.0.1",
+    "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
+    "db:types": "tsx scripts/types.ts",
+    "db:types:check": "tsx scripts/types.ts --verify",
+    "admin:grant": "node --env-file-if-exists=.env.local --import tsx scripts/grant-admin.ts",
+    "test:integration": "vitest run tests/catalog.test.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "7.9.23",
@@ -39,5 +48,11 @@
     "typescript": "5.9.3",
     "vitest": "5.1.0"
   },
-  "pnpm": { "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"] }
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
 }

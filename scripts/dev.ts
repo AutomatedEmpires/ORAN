@@ -1,0 +1,22 @@
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { localDatabase } from './local-database';
+import { migrate } from './database';
+import { seed } from './seed';
+import { closeDatabase } from '../src/modules/platform/index';
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw new Error('Local launcher cannot run in production');
+if (process.env.DATABASE_URL || process.env.ORAN_ENV === 'production' || process.env.ORAN_ENV === 'preview') throw new Error('Use dev:remote for an explicitly configured remote environment');
+await mkdir('.local', { recursive: true });
+const local = await localDatabase('.local/postgres');
+Object.assign(process.env, { DATABASE_URL: local.url, ORAN_LOCAL_DEV: '1', ORAN_ENV: 'development', ORAN_SESSION_SECRET: randomBytes(32).toString('hex'), ORAN_APP_ORIGIN: 'http://127.0.0.1:3000' });
+await migrate(local.url);
+await seed();
+await closeDatabase();
+console.log('Local development only · synthetic identities · http://127.0.0.1:3000');
+const child = spawn(process.execPath, ['node_modules/next/dist/bin/next','dev','--hostname','127.0.0.1'], { stdio:'inherit', env:process.env });
+let stopping = false;
+async function stop() { if (stopping) return; stopping = true; child.kill(); await local.close(); }
+process.on('SIGINT', () => { void stop(); });
+process.on('SIGTERM', () => { void stop(); });
+child.on('exit', code => { void stop().then(() => { process.exitCode = code ?? 0; }); });
