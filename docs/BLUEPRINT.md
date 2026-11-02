@@ -2,13 +2,14 @@
 
 **Status:** Draft for founder approval (Gate 0). This is a planning document; nothing in it is implemented.
 **Date:** 2026-11-02
+**Founder amendment:** [ADR-0002](adr/0002-founder-vision-and-native-environment.md) records the authoritative four-domain vision and native Windows environment contract. It supersedes the earlier partner-first, anonymous-only, no-AI assumptions. D0 remains open; this amendment does not approve implementation or the full blueprint.
 **Evidence base** (in the ORAN 1.0 reference repository `AutomatedEmpires/Open-Resource-Access-Network`, PR #140 until merged): [ORAN Comprehensive Platform Audit (2026-11-02)](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_COMPREHENSIVE_PLATFORM_AUDIT_2026-11-02.md) and its [findings register](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_AUDIT_FINDINGS_REGISTER_2026-11-02.md). The audit is treated as evidence, not as a specification. §17 lists where this blueprint departs from the audit's recommendations, and why.
 **Scope rules for this document:** It contains no code, no schemas or DDL, no migrations, and no new repository. Entity descriptions in §6 are conceptual. They become schemas only after Gate 2.
 
 ## How to use this document
 
 - **Founder:** read §1, §16, §18, and §19, then approve, amend, or reject each decision in §19.
-- **AI agents:** §15 (the Constitution) is binding. Everything else explains it. If a task conflicts with §15, stop and raise it, citing the rule ID (C1–C23). Do not resolve the conflict yourself.
+- **AI agents:** §15 (the Constitution), amended by ADR-0002, governs. Follow explicit founder amendments; report unresolved conflicts with the rule or decision ID (C21).
 
 ---
 
@@ -16,7 +17,7 @@
 
 1. Product charter and long-term mission
 2. Target audiences and stakeholder workflows
-3. Competitive differentiation and institutional partnership strategy
+3. Community-first acquisition and institutional interoperability
 4. Regional pilot assumptions and validation requirements
 5. Resource acquisition and reverification architecture
 6. Canonical data model and HSDS interoperability
@@ -46,7 +47,7 @@ The audit's own evidence shows that the hard part is keeping information correct
 
 ### 1.2 Mission
 
-> **ORAN makes local help findable and trustworthy, by showing people what is available, who it is for, how to get it, and how recently someone confirmed it is true.**
+> **By the people. For the people. ORAN is a community-powered assistance network where people find relevant support, organizations own and maintain their resources, approved community members build and verify the catalog, and administrators govern the platform.**
 
 ### 1.3 Charter commitments
 
@@ -54,8 +55,8 @@ The audit's own evidence shows that the hard part is keeping information correct
 | --- | --- |
 | Truth over coverage | ORAN publishes fewer listings it can stand behind rather than more it cannot. Every listing shows when, how, and by whom it was last confirmed. |
 | Accuracy is measured and published | Accuracy is a number ORAN measures monthly with test calls and makes public. It is not an adjective. |
-| Complement, don't compete | ORAN strengthens 211 and community data systems. It credits sources, feeds corrections back, and never scrapes against terms. |
-| Safety and dignity | No account is required to find help. ORAN does not store anyone's circumstances on its servers. A quick exit is always available. Crisis help is visible on every screen. |
+| Community-powered and interoperable | Organizations and approved community members build and maintain the catalog independently. Future 211 and other partnerships expand coverage; source permissions and attribution still apply. |
+| Safety and dignity | Anonymous discovery remains available. Optional accounts and voluntary, purpose-specific profiles enable personalization with consent, access controls, retention and deletion. Quick exit and crisis access remain available. |
 | Plain and fast | Pages work on a low-end phone over a slow connection, are written in plain language, and meet WCAG 2.2 AA. |
 | Honest operation | ORAN never shows a feature, badge, or status that is not real. When the system is down, it says so. |
 
@@ -66,17 +67,17 @@ ORAN is not:
 - a closed-loop referral or case-management system;
 - an eligibility determination engine;
 - a national directory, until it has earned one region;
-- an AI chatbot;
+- a source of invented AI answers or guaranteed eligibility;
 - a replacement for 211's phone and text service.
 
 ### 1.5 Long-term vision (10 years, explicitly unvalidated)
 
-The long-term vision is to be the **open accuracy layer** for human-services information in the United States. That means:
+The long-term vision is a **community-powered resource and personalized assistance network**. Accuracy, ownership, verification and grounded matching support that mission. That means:
 
-- a network of regional data partnerships;
+- a locally maintained network of organization-owned and community-contributed resources, with optional regional data partnerships;
 - provider confirmations that flow back into the systems of record;
 - published, comparable accuracy metrics;
-- a public, accessible discovery experience;
+- public anonymous discovery alongside optional profiles and explainable personalized matching;
 - open HSDS feeds that any navigator tool can use.
 
 Each step outward is earned by meeting the evidence gates in §14.
@@ -85,19 +86,28 @@ Each step outward is earned by meeting the evidence gates in §14.
 
 ## 2. Target audiences and stakeholder workflows
 
-### 2.1 Audiences (in priority order for the pilot)
+### 2.1 Four foundational domains
 
-| # | Audience | Who | What they need | Why this priority |
-| --- | --- | --- | --- | --- |
-| A1 | **Navigators** | Library staff, community health workers, FQHC front desks, coordinated-entry and shelter intake staff, school social workers, 211 specialists | Fast, accurate answers for someone in front of them; confidence that a phone number works; printable/shareable results | They search every day, notice errors instantly, and give feedback. They are the best early adopters and the strongest evidence of value. **Recommended primary pilot user.** (Founder decision D5) |
-| A2 | **Self-navigating seekers** | Adults on phones, often with limited data, time, or digital literacy | Find one or two options nearby that they can actually use today | The ultimate beneficiary; hardest to reach directly in a pilot |
-| A3 | **Proxy seekers** | Family members, friends, case managers searching for someone else | The same as A2, without exposing the other person's details | Common pattern; shapes privacy design |
-| A4 | **Providers** | Program staff at nonprofits, clinics, agencies | A quick, trustworthy way to confirm or correct their listing without creating another account | They are the source of truth for availability |
-| A5 | **Data partners** | 211 resource curators, county data teams, CIE operators | Error reports, provider confirmations, clean HSDS data back; attribution | Partnership is ORAN's data strategy (§3) |
-| A6 | **ORAN operators** | Founder plus 1–3 reviewers/verifiers | One prioritized queue; fast verification logging; safe correction tools | Operations is the real product cost |
-| A7 | **Funders and institutions** | Foundations, United Ways, counties, the Health Care Authority | Evidence of accuracy, reach, and outcomes | Sustainability |
+These are four experiences over shared domain services in one app, not four applications or databases. Navigator and proxy-seeker use remains supported; pilot recruitment (D5) does not remove a domain.
 
-**Safety-sensitive seekers** include domestic-violence survivors, undocumented people, and people in a mental-health crisis. They are not a separate audience; they are a design constraint that applies to every seeker surface.
+| Domain | Responsibilities | Authorization boundary |
+| --- | --- | --- |
+| User | Explore anonymously or create an account; maintain a voluntary profile; express needs; receive explained matches; save resources; report errors and suggest missing resources | Own profile and saved resources only; suggestions enter review |
+| Organization | Register or claim an organization; authorized staff create and maintain one or many services and locations, eligibility, intake, hours and contact details | Membership-scoped ownership; claims approved by admin; routine edits use the acceptance policy and audit trail |
+| Approved community | Apply for admin approval; discover and propose resources, including unclaimed listings; conduct assigned verification and scheduled reverification by geography and category | Approval plus assignment/scope required; corrections to claimed resources enter review; no ownership transfer or access to seeker profiles |
+| Admin | Approve community members and organization claims; resolve disputes; govern sources, publication, verification schedules, matching quality, privacy and operations | Explicit least-privilege grants and audited actions |
+
+Ownership, independent verification and actual intake availability are distinct facts. Organization self-attestation must not be labeled independent community verification. Community evidence may challenge an owner's assertion; an admin resolves disputes with history preserved.
+
+### 2.1.1 Personalized profiles and grounded matching
+
+Profiles may include needs and urgency, location and transport limits, household/dependents, age-related qualifications, income ranges, employment, housing, benefits, language, accessibility and preferences. Each field must have a demonstrated matching purpose; sensitive fields are optional. Keep account identity, personal circumstances, organization memberships and community privileges separate.
+
+Structured rules compare expressed needs and consented profile fields with published service criteria, coverage and known availability. Unknown criteria remain unknown; missing profile data is not a disqualification. Start with deterministic matching, then add AI-assisted interpretation of natural-language needs and explanations grounded in catalog evidence. No model may invent resources, eligibility rules or capacity, or make final qualification decisions.
+
+Explain relevant factors, unmet or unknown requirements, source references and freshness. Keep relevance or potential-eligibility scores separate from verification state; any numerical score needs documented reproducible components and calibration. It never guarantees eligibility, funding or admission. AI/provider selection and evaluation are open implementation decisions, not authority to send sensitive profiles to a model. Require purpose-specific data-sharing controls, minimal payloads and a useful deterministic fallback.
+
+Consent, retention, deletion, access controls, redacted telemetry and external-provider handling must be designed before profile storage or model integration. Users control which fields contribute to personalization; anonymous search remains useful.
 
 ### 2.2 Core workflows (MVP scope marked ◆)
 
@@ -105,7 +115,7 @@ Each step outward is earned by meeting the evidence gates in §14.
 
 1. The seeker chooses a need (one of 8–12 plain-language needs) or types a few words.
 2. They give a location: a ZIP code or city, or the device location, which is coarsened on the device.
-3. They see a list ordered by distance, limited to services whose service area covers that location. Each card shows a verification state and its date.
+3. They see coverage-aware results, with relevance and distance explained. Signed-in users may opt into profile-based matching (§2.1.1). Each card shows verification state and date separately from match relevance.
 4. They open a listing and see:
    - what the service is;
    - who it is for (published criteria);
@@ -124,17 +134,16 @@ Crisis help is visible throughout, and quick exit is always available.
 3. They can add an optional note. A bot check runs, and they submit.
 4. The report creates a review task. It **never auto-hides the listing**, except as described in §5.6.
 
-**W3: Provider confirms or corrects a listing ◆**
+**W3: Organization owns and maintains resources ◆**
 
-1. The provider receives an email (SMS later) with a single-use, expiring link scoped to one listing.
-2. They see the current data with every field visible.
-3. They choose "All correct", or edit fields and submit.
-4. "All correct" creates a provider-attestation verification event. Edits go to operator review.
-5. No account is required.
+1. An authorized representative registers an organization or requests a claim; admin resolves identity and ownership before granting scoped control.
+2. Staff create or update one or many services and locations through the same acceptance service used by every channel. Routine permitted edits need no manual admin approval; sensitive changes and conflicts enter review under an explicit field policy.
+3. Every change retains actor, provenance and history. Independent verification remains separate from owner attestation.
+4. A single-use, expiring attestation link may also support confirmations from organizations that have not created accounts.
 
 **W4: Operator works the queue ◆**
 
-The queue has one list, prioritized by risk tier, overdue reverification, open reports, source changes, and pending provider edits. For each item the operator can:
+Shared work items feed role-specific admin and community queues, prioritized by risk, geography, due date, reports, source changes and pending edits. Approved community members see only eligible assignments; admins triage claims, approvals and disputes. Within their permissions, reviewers can:
 
 - accept or reject proposed changes;
 - log a test-call outcome;
@@ -150,7 +159,7 @@ Every action is audited.
 2. It normalizes them into proposed field assertions and diffs them against accepted values.
 3. Non-conflicting changes from authoritative sources are accepted automatically **only for the low-risk fields that the source agreement allows**. Everything else goes to the operator queue.
 
-**W6: Data partner receives feedback ◆ (as an export)**
+**W6: Data partner receives feedback (when authorized and requested)**
 
 On a schedule, ORAN exports:
 
@@ -163,19 +172,19 @@ for the partner's own curators. The format is HSDS bulk (JSON/CSV) plus a simple
 
 **W7: Navigator shares results (later)**
 
-A print view, a share link, and a session-only shortlist. Nothing is stored on the server.
+A print view and share link support anonymous use. Account holders may save resources under their own access and retention policy; no personal circumstances enter share URLs.
 
 ---
 
-## 3. Competitive differentiation and institutional partnership strategy
+## 3. Community-first acquisition and institutional interoperability
 
 ### 3.1 The landscape (from audit §18, verified 2026-11-02)
 
 | Actor | Role relative to ORAN |
 | --- | --- |
-| 211 / United Way National Data Platform / Connect 211 | **Primary partner.** They own curated regional data. ORAN cannot out-curate them. |
+| 211 / United Way National Data Platform / Connect 211 | Desired future partners and authorized sources, complementary to direct organization and community acquisition. |
 | Findhelp, Unite Us | Closed referral networks sold to health systems, health plans, and states. Do not compete on closed-loop referral; do not use their data. |
-| WA Health Care Authority CIE (Comagine Health lead, 2027 launch) | **The state-level institution ORAN must align with**, or it will be made redundant. |
+| WA Health Care Authority CIE | Potential standards and integration partner; participation is not a launch prerequisite. |
 | USA.gov benefit finder, mRelief, PolicyEngine | Eligibility screeners. PolicyEngine is a possible later rules source. |
 | County and nonprofit lists, spreadsheets, PDFs | Fragmented, often the most current local knowledge. They are sources, not competitors. |
 
@@ -184,19 +193,21 @@ A print view, a share link, and a session-only shortlist. Nothing is stored on t
 | Hypothesis | Verdict | What would make it true |
 | --- | --- | --- |
 | Better design / mobile UX | **Not a moat.** Others ship mobile web. | Necessary but not sufficient |
-| AI recommendations | **Rejected.** It creates risk in a safety context and is not defensible. | — |
+| Grounded personalized matching | **Core capability**, with deterministic constraints and AI-assisted interpretation/explanation | Evaluate evidence grounding, unknowns, privacy, relevance and fallback before release |
 | **Measured, published accuracy** | **Primary differentiator, if operated** | Monthly test-call sampling; accuracy shown per category and county |
 | **Provider confirmation loop** | **Primary differentiator** | Attestation response rate validated in Phase 0 (§4.3) |
 | **Corrections returned to the system of record** | **Partnership wedge** | A partner agrees to receive corrections; the format is agreed |
 | Open HSDS data | Supporting | Licences permit redistribution |
-| Privacy-protective, account-free seeker experience | Supporting, and important for safety-sensitive users | Architecture in §7 |
+| Anonymous discovery plus voluntary personalization | Foundational for users with different privacy needs | Consent, minimization and access boundaries in §7 |
 | Cross-source deduplication | Later | Needs at least two overlapping sources |
 
 **Positioning statement (draft):**
 
-> "ORAN is the accuracy layer for community resources. We help 211s and their communities keep listings true by confirming them directly with providers, measuring accuracy publicly, and returning every correction to the source, while giving people a fast, private, plain-language way to find help."
+> "ORAN helps people find relevant support through a living catalog built and maintained by organizations and approved community members. Grounded matching and visible evidence help people understand their options. By the people. For the people."
 
-### 3.3 Partnership strategy
+### 3.3 Complementary partnership strategy
+
+Direct organization entry, approved community discovery and verification, user suggestions and admin entry form the independent operating baseline. Authorized public datasets can supplement it. A 211 agreement, partner feed or partner response is not required for a functioning pilot.
 
 | Partner | Offer from ORAN | Ask of partner | Evidence needed before building partner features |
 | --- | --- | --- | --- |
@@ -206,9 +217,9 @@ A print view, a share link, and a session-only shortlist. Nothing is stored on t
 | County human services | Verification-as-a-service for county-funded programs | A small contract or grant | One conversation showing willingness to pay or fund |
 | Foundations, United Way local chapters | A public-good accuracy infrastructure | Grant funding for verification labor | An aligned funding call or program officer interest |
 
-**Fallback plans if WA211 declines or cannot engage** (its funding was cut 66% for 2025–27):
+**Independent acquisition paths, usable whether or not WA211 engages:**
 
-- **Plan B:** a county-scoped directory built from authoritative federal sources, county and nonprofit lists that ORAN is authorized to use, and ORAN's own verification. This means a smaller scope, possibly 2–3 categories.
+- **Plan B:** a county-scoped catalog created and maintained by organizations and approved community contributors, supplemented by permitted public datasets. Narrow categories to match verification capacity.
 - **Plan C:** partner with one navigator network, for example a library system, to co-curate the listings their staff already rely on.
 
 ### 3.4 Business model (hypotheses to validate, not assumptions)
@@ -235,9 +246,9 @@ A print view, a share link, and a session-only shortlist. Nothing is stored on t
 | PA3 | Pilot size is ~400–1,500 services | Manageable by 0.5 FTE of verification | Baseline count from WA211 public search plus federal sources for the county | Above 2,000: narrow categories |
 | PA4 | Providers will confirm listings via an emailed link | Industry practice; low friction | **Concierge test:** manually email 50 providers using a form; measure response within 14 days | Below 25% response: switch to phone-first verification and re-budget labor |
 | PA5 | A verification averages ≤ 10 minutes per listing | Audit model (8 min) | Time 100 manual verifications | Above 15 minutes: re-budget or narrow scope |
-| PA6 | A data partner will authorize access | 211 NDP model; WA211's stated interest in national data initiatives | Outreach; DSA draft | No partner within 8 weeks: Plan B |
+| PA6 | Direct organization and community acquisition can sustain a pilot without a feed | Founder direction | Test discovery, owner participation, contributor approval and verification effort | Insufficient capacity: narrow scope or staffing; a partner agreement is not the gate |
 | PA7 | Navigators will use a new tool if it is more accurate | Pain reported by navigators (to be confirmed) | 10–15 navigator interviews plus prototype usability tests | Fewer than 5 of 15 would switch: rethink the value proposition |
-| PA8 | Seekers do not need accounts | Privacy; friction | Interviews and usability tests | Strong demand for cross-device saving: add a privacy-reviewed option later |
+| PA8 | Voluntary profiles improve relevant discovery while anonymous search remains useful | Founder direction | Consent and profile usability tests; deterministic and AI-assisted relevance evaluation | Reduce profile fields or revise matching if benefit or privacy controls are inadequate |
 | PA9 | English and Spanish cover most of the pilot need | WA demographics (county-specific) | ACS language data for the chosen county | Add a third language if it reaches 5% of residents with limited English |
 
 ### 4.2 Pilot-county selection criteria (Founder decision D1)
@@ -261,7 +272,7 @@ Example candidates to evaluate: Pierce, Spokane, Snohomish, Thurston, Whatcom, Y
 | Source accuracy baseline | Test-call 100 randomly sampled listings from existing sources | Baseline accuracy %, which becomes ORAN's improvement target |
 | Provider response | Concierge attestation to 50 providers | Response rate; edit rate; common corrections |
 | Verification cost | Time 100 verifications | Minutes per listing per tier → staffing model |
-| Partner interest | WA211, CIE, 3+ navigator organizations | LOI, email confirmations, or rejections |
+| Participation and acquisition | Organization staff, prospective community contributors, seekers and navigators; optional WA211/CIE outreach | Independent catalog operating plan, approval/assignment capacity and optional partner responses |
 | Legal review | Washington privacy counsel: My Health My Data Act (MHMDA) and consumer health data; DSA template review | Written guidance |
 
 ---
@@ -272,8 +283,8 @@ Example candidates to evaluate: Pierce, Spokane, Snohomish, Thurston, Whatcom, Y
 
 1. **Nothing enters the catalog except through one acceptance path.** Every change becomes a field assertion, which is accepted or rejected. The HSDS tables hold accepted values only.
 2. **Raw source data is immutable.** Every source record is stored as received, with a hash, retrieval time, and source.
-3. **Sources are authorized, not discovered.** Every source has a registry entry and a recorded agreement or licence basis before its first import.
-4. **Verification is an event, not a score.** ORAN records what was checked, how, by whom, and when. It does not compute opaque confidence numbers.
+3. **Discovery and permission are separate.** Organizations and approved contributors can discover resources without a partner agreement. Record submission evidence and provenance; external imports still require source registration and a permitted use basis.
+4. **Verification is an event, not a match score.** Record fields checked, method, actor, evidence and date. Profile relevance never establishes verification or intake capacity.
 5. **Stale is visible, not silent.** Overdue listings show a warning, and are hidden only under explicit rules (§5.6).
 
 ### 5.2 Source registry
@@ -296,10 +307,12 @@ Each source entry records:
 | Partner feed (API or bulk) | ◆ if a partner signs | WA211 via the NDP, or an HSDS export | Connector reuses lessons from the old 211 client (§9) |
 | Federal authoritative files | ◆ | HRSA health centers, SAMHSA FindTreatment (via its API request form), Head Start locations, HUD housing counselors | Registry-backed; low volatility |
 | State and county lists | ◆ where authorized | WSDA food banks, county program lists | Check terms per source |
-| Provider attestation | ◆ | Emailed link (W3) | Highest-value verification |
+| Provider attestation | ◆ | Emailed link (W3) or owner account | Provider statement with recorded scope; distinct from independent checks |
 | Operator entry | ◆ | Gap-filling; phone-verified listings | Labeled as ORAN-originated |
 | Public reports | ◆ | W2 | Triggers review only |
-| Provider self-service accounts | Later | — | Only after attestation shows engagement |
+| Organization accounts and ownership | ◆ | Claimed or newly registered organizations | Directly manage resources through scoped acceptance policy |
+| Approved community contributions | ◆ | Local discovery and unclaimed listings | Evidence, assigned verification and admin-governed publication |
+| User suggestions and admin entry | ◆ | Missing resources | Review and provenance before publication |
 | Web extraction (crawl, LLM) | **Excluded from MVP** | — | High operating cost and legal risk; revisit only for operator assistance (§8) |
 
 **Not sources:**
@@ -398,6 +411,8 @@ Two conditions always apply on top of the table:
 
 ### 5.7 Reverification framework
 
+Admin-approved community members receive location/category-scoped tasks based on due dates, risk, volatility and prior outcomes. Record assignment, evidence, fields checked, method, observed date, result and next due date. Expired/revoked approval prevents further privileged actions; overdue or disputed work escalates to admin. Contributor approval is not evidence that a particular resource is verified.
+
 | Tier | Categories (pilot) | Interval | Attempt schedule | Methods |
 | --- | --- | --- | --- | --- |
 | A | Emergency shelter, DV services, food distribution schedules, rent and utility assistance | 30–45 days | Email on day 0 → reminder on day 5 → test call on day 10 → Stale on day 21 | Provider attestation, test call |
@@ -462,14 +477,15 @@ Notes on how these are used:
 | `source` | Registry entry (§5.2) | owner, access method, agreement reference, permissions (display, redistribute, derive), attribution text, field authority, status |
 | `source_record` | Immutable raw payload | source, external ID, payload, hash, retrieved_at |
 | `field_assertion` | A proposed value for one field of one HSDS entity | entity type and ID, field path, value, origin (source_record, attestation, operator, report), observed_at, status (proposed, accepted, superseded, rejected), decided_by, decided_at |
-| `verification_event` | What was checked, how, and the outcome | service ID, method (source_sync, provider_attestation, test_call, operator_review), scope (fields covered), outcome, actor, observed_at, expires_at |
+| `verification_event` | What was checked, how, and the outcome | service ID, method (source_sync, provider_attestation, test_call, community_check, operator_review), scope (fields covered), outcome, actor, observed_at, expires_at |
 | `listing_state` | Lifecycle and publishability per service | state, tier, entered_at, next_review_due, is_publishable, reason |
 | `attestation_request` | A provider link | service ID, recipient channel, token hash, expires_at, status |
 | `public_report` | A seeker or navigator report | service ID, reason, optional note, created_at, triage status. **No IP address or identifier stored**; abuse is controlled at the edge (§7). |
 | `work_item` | Operator queue entry | type, priority, subject, due_at, assignee, status |
 | `job_run` | Scheduled job ledger | job, started/finished, counts, outcome, error |
 | `audit_event` | Every privileged action | actor, action, subject, before/after reference, at |
-| `membership` | Operator and provider authorization | user, role, organization scope |
+| `membership` | Account authorization, separate from personal profiles | user, role, organization scope, community approval/revocation and geographic/category scope |
+| Personalization and ownership extensions | Concepts to validate before Gate 2; not a second resource catalog | private profile and consent/retention controls; saved resources; organization claims and staff membership; scoped community assignments; reproducible match evidence |
 
 **The single-write-path rule.** HSDS tables are written **only** by the acceptance service, which applies accepted `field_assertion`s and recomputes `listing_state` in the same transaction. No route, job, or script writes HSDS tables directly. This is the most important anti-drift rule in the data model. It replaces ORAN 1.0's three parallel models and its three-way publication query.
 
@@ -498,27 +514,27 @@ Notes on how these are used:
 
 ## 7. Minimal security and privacy architecture
 
-### 7.1 Data minimization (the primary control)
+### 7.1 Data minimization and voluntary personalization
 
-| Data | Collected? | Notes |
-| --- | --- | --- |
-| Seeker identity | **No.** No seeker accounts in the MVP | Founder decision D8 |
-| Seeker circumstances (DV, immigration, health, income, age) | **No**, never sent to or stored on the server | Filters use listing attributes; the seeker's choices stay in the URL or session on the device |
-| Seeker location | Coarsened on the device (~1 km), or ZIP/city resolved from a bundled gazetteer | Never logged; never sent to third parties (no third-party geocoding of seeker input) |
-| Search terms | Not logged with identifiers. Aggregate counters only (category, county, zero-result flag) | Free text is not retained (MHMDA risk) |
-| Public reports | Reason plus optional note; no IP and no identifiers | Notes are warned "do not include personal information" and redacted by the operator if needed |
-| Operator and provider accounts | Clerk identity; DB membership | Least privilege |
-| Provider contact data | Organization or role contacts used for attestation | Stored only as needed; covered by the DSA and privacy policy |
+| Data | Collection and controls |
+| --- | --- |
+| Account identity | Optional for public discovery; required for private profiles and privileged workflows. Separate identity from circumstances and memberships. |
+| Profile circumstances | Voluntary and purpose-specific (§2.1.1); collect only fields justified by matching, with consent, least privilege, retention and deletion controls. No profile access for organization staff or community verifiers. |
+| Location and search input | Use coarse location where practical; no sensitive search/profile data in URLs, logs, analytics or error reports. Document transient processing separately from storage. |
+| External model payloads | Minimize and redact; sensitive profiles are not transmitted by default. Define explicit sharing controls, provider retention and deletion behavior before integration. |
+| Public reports | Reason and optional note; warn against personal information and redact as needed. No stored IP or seeker identifier. |
+| Organization contacts | Organization/role contacts for maintenance and attestation, limited to their stated purpose. |
 
-The **regulatory posture** follows from this minimization. ORAN aims to stay outside "consumer health data" collection under Washington's MHMDA by not collecting it. Washington privacy counsel must confirm this during Phase 0 (evidence item). HIPAA does not apply: ORAN is not a covered entity or business associate. Re-check this if a health-system contract appears.
+Anonymous search does not require storing a profile or search history. Account holders must be able to view, update and delete retained profile information and revoke its use in matching. Assess privacy obligations with qualified counsel based on actual collection, processing, logging and third-party transmission; do not assume regulatory exemptions.
 
 ### 7.2 Authentication and authorization
 
-- **Identity:** Clerk, for operators and provider accounts (later). Provider attestation uses signed, single-use, expiring links scoped to one listing (HMAC token stored only as a hash; 14-day expiry; rate-limited).
+- **Identity:** Clerk, for optional user accounts, organization staff, approved community members and admins. Provider attestation uses signed, single-use, expiring links scoped to one listing (HMAC token stored only as a hash; 14-day expiry; rate-limited).
 - **Roles (minimal):**
   - `admin`: configuration, sources, users.
-  - `reviewer`: queue, verification, edits.
-  - `provider_editor`: one organization's listings, later.
+  - `user`: own private profile and saved resources.
+  - `reviewer`: assigned review and verification within scope; community grants require admin approval.
+  - `provider_editor`: one organization's listings, granted via membership and approved claims.
 - **Enforcement:**
   - A single `authorize(actor, action, resource)` policy module, deny by default.
   - Every route declares its policy.
@@ -530,13 +546,13 @@ The **regulatory posture** follows from this minimization. ORAN aims to stay out
 
 - The app uses a least-privilege runtime role. A separate migration role is used only by CI and deploy. Importers use a role that may write only to `source_record` and `field_assertion`.
 - Row-level security (RLS) is enabled on all tables as a deny-all backstop for browser roles. Supabase Data API exposure is disabled or limited to an empty schema (pattern ported from ORAN 1.0 migrations 0066/0075).
-- Secrets live only in Vercel and GitHub environment secrets. Nothing secret uses the `NEXT_PUBLIC_` prefix. An environment contract validates configuration at boot.
+- Deployed/CI secrets live in Vercel and GitHub environment secrets; local non-production credentials use ignored configuration or a secure local store. Nothing secret uses the `NEXT_PUBLIC_` prefix. An environment contract validates configuration at boot.
 
 ### 7.4 Application security
 
 - **Input:** schema-validated at every boundary.
 - **SQL:** parameterized queries only. A lint rule bans string-built SQL.
-- **Outbound fetch:** importers only, through an SSRF-safe client (ported from ORAN 1.0).
+- **Outbound fetch:** authorized source adapters and an approved model adapter only, through bounded clients; source fetches retain the SSRF-safe policy. No arbitrary user-supplied destination.
 - **Headers:** nonce-based Content Security Policy (no `unsafe-inline` scripts); HSTS; frame-ancestors none.
 - **Rate limiting:** at the edge (Vercel Firewall rules, if the plan supports them), otherwise Postgres-backed.
   - **Public reads fail open** if the limiter backend is unavailable, so availability for people in need wins.
@@ -551,7 +567,7 @@ The **regulatory posture** follows from this minimization. ORAN aims to stay out
 - A quick-exit control on every seeker page. It replaces the page and history entry with a neutral site.
 - Neutral page titles. Sensitive categories such as DV are not put in the `<title>` or in shareable URLs by default.
 - Crisis access on every page: 988, 911, the DV hotline, and 211, with the local 211 included. It is static and needs no classifier.
-- No server-side history of a seeker's activity.
+- No implicit server-side history of seeker activity. Explicitly saved profiles and resources follow consent and retention controls.
 
 ### 7.6 Retention
 
@@ -561,6 +577,7 @@ The **regulatory posture** follows from this minimization. ORAN aims to stay out
 | Public report notes | 12 months, then deleted. The report outcome is kept without the note. |
 | Audit events | 3 years |
 | Application logs | 30 days, scrubbed |
+| Private profiles, consent records and saved resources | Define purpose-specific retention, deletion and backup-erasure handling before storage; indefinite retention is not the default |
 
 A scheduled job enforces retention, and its runs are monitored.
 
@@ -573,10 +590,12 @@ A scheduled job enforces retention, and its runs are monitored.
 | Area | Capabilities |
 | --- | --- |
 | Seeker | Need picker + keyword search; ZIP/city/device location; service-area-aware results ordered by distance; filters (category, language offered, accessibility, "verified within 90 days"); listing detail with verification state and date; call, visit, and directions handoff; share and print; report a problem; quick exit; persistent crisis strip; EN + ES interface |
-| Provider | Attestation link: confirm, or propose edits |
+| Organization | Registration/claim, scoped staff, direct resource and location maintenance through acceptance policy, attestation and history |
+| Community | Admin-approved membership; resource proposals; scoped assignments; evidence-based verification and scheduled reverification |
+| Personalized user | Optional account and voluntary profile; saved resources; deterministic matching plus staged AI-assisted interpretation and grounded explanations, explicit unknowns and fallback |
 | Operator | Prioritized work queue; record view with field-level provenance; accept/reject assertions; log test calls; set temporary closure or closure; merge duplicates with provenance; request attestation; source registry and job-run dashboard; report triage; audit log |
 | Data | Importers for the pilot's authorized sources; acceptance service; lifecycle and publishability; reverification scheduler; retention job |
-| Interop | HSDS bulk export; partner corrections feed |
+| Interop | Permission-filtered HSDS bulk export; partner corrections feed only where authorized and requested |
 | Trust | Public trust page: sources and attribution, verification method, monthly accuracy rate, status driven by real health checks |
 | Platform | Health checks, uptime monitoring, error monitoring, cron monitors, backups with a tested restore |
 
@@ -586,10 +605,9 @@ A scheduled job enforces retention, and its runs are monitored.
 | --- | --- |
 | Map view (MapLibre + privacy-preserving tiles) | Usability tests show navigators or seekers need spatial browsing |
 | "Open now" filter | At least 70% of listings in a category have structured schedules |
-| Provider self-service accounts | Attestation response rate of at least 40% and providers asking for direct editing |
 | SMS attestation | Email response rate below target; SMS test shows lift |
 | Public HSDS API | A named consumer requests it |
-| Session or device shortlist; cross-device save | Interview demand; privacy review |
+| Expanded assistance-journey tools | Validate beyond the foundational profile and saved-resource workflow |
 | Benefits eligibility guidance (PolicyEngine) | Navigators identify benefits screening as a top need; licence review |
 | Translated listing content | Language data plus a partner translation capacity |
 | Partner dashboards and accuracy reporting | Partner requests it |
@@ -600,9 +618,8 @@ A scheduled job enforces retention, and its runs are monitored.
 
 ### 8.3 Excluded (not on the roadmap without a charter change)
 
-- Closed-loop referrals, consent management, case management.
-- Seeker profiles that store circumstances (DV, immigration, health, income).
-- AI-generated answers or recommendations to seekers; opaque scores and "match" percentages.
+- Closed-loop referrals and case management; profile consent controls remain required.
+- Unnecessary sensitive profile collection, default external sharing, fabricated recommendations and opaque qualification percentages.
 - Automated "you qualify" determinations.
 - Scraping sources whose terms prohibit it; using closed-network data (Findhelp, Unite Us).
 - Native mobile apps (the web app must work well on phones).
@@ -632,7 +649,7 @@ All paths in this section refer to the ORAN 1.0 reference repository, `Automated
 | Crisis resource content | `crisisData.ts`, `src/domain/constants.ts` (hotline list) | Verified hotline numbers and copy | Static crisis strip; **do not port the classifier** for the MVP |
 | 211 connector knowledge | `src/agents/ingestion/ndp211Connector.ts`, `docs/_archive/2026-03/working-notes/211_info_001.md` | Base URL, auth header, payload types | Drop the `dataOwners` header; use the correct V2 discovery; contract tests from Trial definitions |
 | Security headers baseline | `next.config.mjs` | HSTS, frame, referrer, permissions policy | Nonce CSP |
-| Account-erasure design thinking | ADR-0014 | Fail-closed, auditable erasure | Much smaller scope: operator and provider accounts only |
+| Account-erasure design thinking | ADR-0014 | Fail-closed, auditable erasure | Reconcile user profiles, saved resources and all four domains; minimize retained identifying data |
 | Seeker copy patterns | `src/components/seeker/*` | "Who may qualify", "Eligibility not guaranteed" | Rewritten against the design system's content standards |
 | Hotline set | migration 0065 data | The 13 verified national hotlines | A versioned seed entering through the normal acceptance path (rebuildable; audit ORAN-039) |
 
@@ -646,7 +663,7 @@ All paths in this section refer to the ORAN 1.0 reference repository, `Automated
 - The agent control plane.
 - Zone and scope management.
 - In-memory rate limiters.
-- The four-portal UI structure.
+- The legacy four-portal implementation; the four founder-defined domain experiences remain foundational in one app.
 - Governance and scenario documentation.
 - The 290k legacy rows.
 
@@ -662,10 +679,10 @@ The current operating contract (`AGENTS.md`) locks the provider direction to Ver
 | Web framework | **Next.js (App Router), constrained subset**: server components for reads, route handlers for writes, no experimental features | React Router 7/Remix; Astro; SvelteKit | Portfolio consistency and agent familiarity. The risk is a high-severity CVE cadence (audit ORAN-004), mitigated by the 7-day patch rule and avoiding rarely needed surfaces (`next/image` optimizer, `use cache`, next/og). Astro would suit a mostly-static seeker site, but it splits the ops console into a second framework. |
 | Hosting | **Vercel** (Pro) | Fly.io, Render, Cloudflare | Locked; simple; preview deploys |
 | Database | **Supabase Postgres + PostGIS, used as plain Postgres** | Neon, RDS, self-hosted | Locked. Avoid Supabase-specific runtime features (Data API, Edge Functions, Storage) unless a validated need appears, to keep portability. Use the **Pro plan**, so the project is never paused for inactivity. |
-| Migrations | **Plain, ordered SQL migrations via the Supabase CLI**; local stack via `supabase start` | Drizzle-kit, Prisma Migrate, node-pg-migrate | SQL is the contract, and PostGIS is first-class. The same tool works locally, in CI, and in production. Trade-off: Docker is needed locally. |
+| Migrations | **Plain, ordered SQL migrations**; validate CLI Windows ARM64 support before choosing execution path | Drizzle-kit, Prisma Migrate, node-pg-migrate | Local development uses an isolated remote development database; real Postgres+PostGIS integration runs in CI. Docker and `supabase start` are optional specialist paths. |
 | DB access | **Kysely query builder with types generated from the live schema** | Drizzle; Prisma; raw `pg` | Types derive from the database, so hand-maintained schema drift cannot happen (ORAN 1.0 had it). Composable SQL with good PostGIS escape hatches. One pool. |
 | Search | **Postgres full-text search + PostGIS** | Meilisearch, Typesense, Elasticsearch | Pilot scale is under 5k listings. One datastore. Revisit above about 100k listings, with measurements. |
-| Auth | **Clerk** for operators and providers; **no seeker accounts** | Supabase Auth; Auth.js | Locked; already integrated. Seekers stay anonymous by design. |
+| Auth | **Clerk** for optional user accounts and privileged participants | Supabase Auth; Auth.js | Provider direction retained; implementation not yet present. Anonymous discovery remains available. |
 | Background jobs | **GitHub Actions scheduled workflows invoking job entry points** (`jobs/*`) against the database; Sentry cron monitors | Vercel Cron; Inngest/Trigger.dev; pg_cron | No serverless timeouts for imports; logs and secrets in one place; no new vendor. Trade-off: Actions schedules can be delayed by minutes, which is acceptable for daily or hourly jobs. **One scheduler only.** |
 | Email | **Resend** (attestation and operator notifications) | Postmark, SES | Already in use; simple |
 | SMS | Deferred | Twilio | Evidence trigger (§8.2) |
@@ -677,7 +694,7 @@ The current operating contract (`AGENTS.md`) locks the provider direction to Ver
 | Testing | Vitest (unit); Vitest against real Postgres+PostGIS (integration); Playwright + axe (e2e/a11y) | Jest; Cypress | Real-database testing is mandatory (audit ORAN-029) |
 | Monitoring | **Sentry** (errors, cron monitors) + **one external uptime monitor** + health-driven status page | Datadog; Better Stack all-in-one | Minimal; the founder gets phone alerts |
 | Analytics | **Aggregate server-side counters in Postgres** (no third-party analytics in the MVP) | Plausible; Vercel Analytics; PostHog | Privacy; MHMDA; enough for pilot questions |
-| Package manager | **pnpm** (matches the control plane) | npm | Consistency with `AGENTS.md` tooling (ORAN 1.0 actually used npm) |
+| Runtime and package manager | **Node.js 24 LTS baseline, pnpm 10.x**; choose and pin exact versions when scaffolded | npm | Native Windows ARM64, Cursor and PowerShell contract in AGENTS.md; verify installed tools rather than assuming historical patch versions. |
 
 **Estimated monthly software cost (list prices, not verified charges):** Vercel Pro $20, Supabase Pro $25+, Sentry Team $26, uptime monitor $0–20, Resend $0–20, Clerk $0. Total: about **$75–$115 per month**.
 
@@ -702,6 +719,8 @@ The current operating contract (`AGENTS.md`) locks the provider direction to Ver
   - only `platform` and `ui` are shared by all modules.
 
 ### 11.3 Modules
+
+The four domains share these services. Add conceptual `profiles` (private consented circumstances and saved resources), `organizations` (claims and staff ownership), `community` (approval-scoped contribution assignments) and `matching` (structured constraints, evidence and model adapter) boundaries. They depend on public catalog/identity/platform interfaces as needed; catalog never depends on private profiles or AI. Validate dependency direction and exact entity ownership before Gate 2; this is not a schema freeze.
 
 | Module | Responsibility | Owns (conceptual entities) | Depends on |
 | --- | --- | --- | --- |
@@ -734,7 +753,10 @@ oran/
   src/
     app/
       (seeker)/              # public discovery pages
-      (ops)/                 # operator console (Clerk-protected)
+      (user)/                # optional private profile and saved resources
+      (organization)/        # membership-scoped resource management
+      (community)/           # approved contributor assignments
+      (ops)/                 # admin operations (Clerk-protected)
       (attest)/              # provider attestation flow (token-protected)
       api/                   # route handlers (each declares policy)
     modules/<module>/        # index.ts, domain/, data/, policy.ts, *.test.ts
@@ -757,7 +779,7 @@ oran/
 
 1. **One next step.** Every seeker screen answers one question and shows the obvious next action.
 2. **Plain language.** Target a grade 6–8 reading level. Avoid agency jargon. Use verbs such as "Call", "Get directions", "What to bring".
-3. **Truthful status.** Use the standard verification vocabulary (§12.4) and nothing else. No scores, stars, or "match %".
+3. **Truthful status.** Use the verification vocabulary (§12.4) for evidence state. Present matching factors and unknowns separately; any relevance score must meet §2.1.1 and cannot imply qualification or verification.
 4. **Fast on bad networks.** Seeker pages are server-rendered and usable without client JavaScript for the core search and detail flow (progressive enhancement).
 5. **Calm and safe.** Use neutral visuals, a quick exit, crisis access, and no alarming animation.
 6. **Consistent.** Build screens only from approved layouts and components. Add a new component only through the design-system process.
@@ -789,6 +811,7 @@ oran/
 | Provider-Confirmed | "Confirmed by provider" | "{N} days ago" |
 | Source-Confirmed (test call) | "Confirmed by ORAN" | "Phone check, {N} days ago" |
 | Source-Confirmed (sync) | "From {Source}" | "Updated {date}" |
+| Source-Confirmed (community check) | "Checked by approved community contributor" | "{Method}, {N} days ago; {fields checked}" |
 | Reverification Due | "Confirmation overdue" | "Last confirmed {N} days ago, call ahead" |
 | Stale | "May be out of date" | "We couldn't confirm this recently, call ahead" |
 | Disputed | "Being reviewed" | "Someone reported a problem; call ahead" |
@@ -819,7 +842,7 @@ Every screen must design each of these states: loading, empty (no input), zero r
 | Unit | Pure domain logic: lifecycle transitions, publishability, conflict precedence, policy decisions | Required for every domain rule |
 | Integration (**real Postgres + PostGIS**, migrations applied from scratch) | Acceptance service, imports (idempotency, drift guard), service-area matching, authorization and organization scoping, retention | **Mandatory for any change touching data or authorization.** Mocking the database is forbidden in integration tests. |
 | Contract | Each importer against recorded real payload fixtures (licence permitting) and the provider's published schema | Fails on schema change |
-| E2E + a11y | Playwright + axe against the preview deployment with a seeded fixture database: search → detail → report; attestation; operator queue → accept | Runs on every PR |
+| E2E + a11y | Playwright + axe against isolated synthetic fixtures: anonymous search → detail → report; optional profile → grounded match; organization → resource; approved scoped contributor → verify/reverify; admin → approve/dispute | Runs on every PR |
 | Export validation | HSDS export validated against the pinned schema | Runs on every PR touching catalog or interop |
 
 ### 13.2 Required PR checks (all blocking)
@@ -837,8 +860,8 @@ Every screen must design each of these states: loading, empty (no input), zero r
 
 ### 13.3 Definition of Done (applies to every change, human or agent)
 
-1. It works **end-to-end against a real database** in the preview environment.
-2. Tests at the right layer were added, and they would fail without the change.
+1. Product changes work **end-to-end against a real database** in an isolated non-production environment. Documentation-only changes require consistency, link and diff review; do not invent unavailable product checks.
+2. Behavior changes have meaningful tests at the appropriate layer. Check four-domain scope boundaries, consent/deletion and grounded matching/fallback when those capabilities are implemented.
 3. There are no new environment variables, tables, routes, or dependencies without the matching contract or ADR entry.
 4. User-facing copy uses the design system and trust vocabulary, and is present in EN and ES catalogs.
 5. Observability is in place: errors reach Sentry, and jobs have cron monitors.
@@ -849,10 +872,12 @@ Every screen must design each of these states: loading, empty (no input), zero r
 
 | Environment | Database | Purpose |
 | --- | --- | --- |
-| Local | `supabase start` (Docker) | Development |
+| Native local app | Isolated remote development/test Postgres+PostGIS | Cursor + PowerShell; no mandatory WSL, Docker or local Supabase containers |
 | CI | Ephemeral Postgres+PostGIS service | Integration tests |
-| Preview (per PR) | Shared staging database with a seeded fixture dataset (no real seeker data exists anywhere) | E2E, review |
+| Preview / staging | Isolated non-production database with synthetic fixtures | E2E and review; never production credentials or real user profiles |
 | Production | Supabase Pro, with automated backups | Pilot |
+
+**Isolation contract:** development/testing, preview/staging and production have separate credentials and data. Never fall back to production when non-production configuration is missing; fail with an explicit configuration error. ORAN, LogLoads and Explore&Earn do not share credentials, databases, migrations or deployment resources.
 
 **Deploy pipeline** (GitHub Actions orchestrates it; Vercel's automatic production deploy-on-merge is **disabled**):
 
@@ -882,7 +907,7 @@ This fixes ORAN 1.0's code-ahead-of-schema incidents.
 
 ```mermaid
 flowchart LR
-  G0((Gate 0<br/>Blueprint approved)) --> P0[Phase 0<br/>Evidence & partners<br/>4-8 wks, no product code]
+  G0((Gate 0<br/>Blueprint approved)) --> P0[Phase 0<br/>Evidence & participation<br/>4-8 wks, no product code]
   P0 --> G1((Gate 1<br/>Evidence threshold))
   G1 --> P1[Phase 1<br/>Walking skeleton<br/>4-6 wks]
   P1 --> G2((Gate 2<br/>Architecture & schema freeze))
@@ -894,11 +919,11 @@ flowchart LR
 
 | Phase | Goal | Key deliverables | Exit gate criteria (all required) | Approver |
 | --- | --- | --- | --- | --- |
-| **Gate 0** | Approve the foundation | This blueprint, amended; decisions D1–D15 answered | Founder sign-off; the Constitution is frozen as v1.0 | Founder |
-| **Phase 0: Evidence and partnerships** (no product code; prototypes on paper or in Figma allowed) | Validate the pilot assumptions (§4) | Interviews; data baseline; source accuracy baseline; concierge attestation test; verification timing; partner outreach; counsel review; county selected | **Gate 1:** county chosen; at least one authorized data path (a partner DSA or LOI, or a Plan B source set with licence review); attestation response rate and verification time measured; counsel guidance received; 5+ of 15 navigators would adopt | Founder |
-| **Phase 1: Walking skeleton** | Prove the architecture end-to-end with one real source | New repo scaffold; CI with real DB; schema ADR (HSDS subset + extension); one importer (HRSA or partner); acceptance service; lifecycle; minimal operator queue; seeker search + detail; health, monitors, deploy pipeline | **Gate 2:** one source imported idempotently (re-run = no change); 50 listings verified by test call through the operator UI; seeker can search and see verification states; restore drill done; architecture review finds no boundary violations; schema frozen for Phase 2 (changes need an ADR) | Founder + independent architecture review agent |
-| **Phase 2: Pilot data operations** | Reach a trustworthy pilot catalog | All pilot sources; attestation flow; reverification scheduler; reports; merge; HSDS export + corrections feed; full design system for MVP screens; Spanish; trust page; privacy and security review | **Gate 3:** target listing count from the Phase 0 baseline; **test-call accuracy ≥ 85%** for two consecutive months; Tier A reverification compliance ≥ 90%; zero P0/P1 open security findings; counsel sign-off on the privacy policy; 30 days of monitored uptime ≥ 99.5% in production with soft-launch users; navigator usability task success ≥ 80% | Founder |
-| **Phase 3: Public pilot** | Measure real value | Launch with 3+ navigator organizations; monthly accuracy publication; partner corrections delivered | **Gate 4:** navigator weekly active use sustained for 8 weeks; partner confirms the value of corrections; verification cost per listing within budget; a funding path identified. Decide: continue, expand to a second county, or stop. | Founder |
+| **Gate 0** | Approve the foundation | This blueprint, amended; required open decisions from D0–D18 answered | Founder sign-off; the Constitution is frozen as v1.0 | Founder |
+| **Phase 0: Evidence and participation** (no product code; prototypes on paper or in Figma allowed) | Validate the pilot assumptions (§4) | Interviews; data baseline; source accuracy baseline; concierge attestation test; verification timing; partner outreach; counsel review; county selected | **Gate 1:** county chosen; a permitted organization/community acquisition path with provenance, contributor approval and verification capacity (partner feeds optional); attestation response rate and verification time measured; counsel guidance received; 5+ of 15 navigators would adopt | Founder |
+| **Phase 1: Walking skeleton** | Prove the architecture end-to-end with one real source | New repo scaffold; CI with real DB; schema ADR (HSDS subset + extension); one acquisition adapter plus direct organization/community submissions; acceptance service; lifecycle; four-domain vertical flows (profile, ownership, approved verification, admin); deterministic matching; seeker search + detail; health, monitors, deploy pipeline | **Gate 2:** native Windows ARM64 onboarding exercised and recorded; role, profile privacy and ownership boundaries tested; one source imported idempotently (re-run = no change); 50 listings verified by test call through the operator UI; seeker can search and see verification states; restore drill done; architecture review finds no boundary violations; schema frozen for Phase 2 (changes need an ADR) | Founder + independent architecture review agent |
+| **Phase 2: Pilot data operations** | Reach a trustworthy pilot catalog | Organization/community-maintained pilot catalog without a required partner feed; attestation flow; geographically scoped reverification scheduler; evaluated AI-assisted grounded matching with deterministic fallback; reports; merge; HSDS export + optional authorized corrections feed; full design system for MVP screens; Spanish; trust page; privacy and security review | **Gate 3:** target listing count from the Phase 0 baseline; **test-call accuracy ≥ 85%** for two consecutive months; Tier A reverification compliance ≥ 90%; zero P0/P1 open security findings; counsel sign-off on the privacy policy; 30 days of monitored uptime ≥ 99.5% in production with soft-launch users; navigator usability task success ≥ 80% | Founder |
+| **Phase 3: Public pilot** | Measure real value | Launch with 3+ navigator organizations; monthly accuracy publication; organization and community participation measured; partner corrections delivered where an agreement exists | **Gate 4:** navigator weekly active use sustained for 8 weeks; users, organizations and approved contributors demonstrate value; partner feedback is supplementary; verification cost per listing within budget; a funding path identified. Decide: continue, expand to a second county, or stop. | Founder |
 
 **Gate discipline for agents:** no work item may begin that belongs to a later phase. A request that requires a later-phase capability is logged as an evidence item, not built.
 
@@ -920,14 +945,14 @@ flowchart LR
 - **C5.** Raw source records are immutable. Every accepted value is traceable to its assertion and origin.
 - **C6.** A source must be registered, with its agreement or licence basis recorded, before its first import. Never scrape a source whose terms prohibit it.
 - **C7.** Reports and upstream updates never hide a listing automatically, except under the rules in §5.6.
-- **C8.** Never store seeker identity or circumstances on the server. Never log seeker search free text or location.
+- **C8.** Anonymous discovery remains available. Store personal profiles only with voluntary, purpose-specific consent, least-privilege access, retention and deletion controls. Never log sensitive profile, search or location data; sensitive profiles are not sent to external models by default (§2.1.1, §7).
 
 **Architecture**
 
 - **C9.** Use one deployable app, one database, one connection pool, and one scheduler (GitHub Actions jobs). New services, queues, vendors, or runtimes need an ADR and founder approval.
 - **C10.** Respect module boundaries (§11.3). Import only through a module's `index.ts`. Only `platform` and `ui` are shared.
 - **C11.** Use parameterized SQL through Kysely only. Types are generated from the database, never hand-written.
-- **C12.** Every route declares an authorization policy. Deny by default. Organization scope comes from memberships.
+- **C12.** Every route declares an authorization policy; deny by default. Users access only their private profiles; organization control comes from scoped memberships and approved claims; community verification requires admin approval and assignment scope. Audit privileged actions (§2, §7).
 - **C13.** New tables, environment variables, routes, dependencies, or feature flags each require an entry in their contract or ADR. Feature flags have an owner and an expiry date.
 
 **Quality**
@@ -945,7 +970,7 @@ flowchart LR
 **Process**
 
 - **C20.** Decisions that change architecture, data model, security, privacy, or scope go in a numbered ADR: context, options, decision, consequences. The founder approves.
-- **C21.** Agents do not resolve conflicts between this Constitution and a task. They stop and report the conflict.
+- **C21.** Follow explicit founder amendments recorded in decisions and ADRs. For unresolved conflicts, report the specific rule or decision; do not invent approval or silently choose a new product direction.
 - **C22.** Documentation is limited to the core set (§11.4) plus ADRs. Do not generate audit, scenario, or status documents inside the product repository.
 - **C23.** Port code from ORAN 1.0 only by re-implementation with tests, citing the source path and commit.
 
@@ -955,13 +980,13 @@ flowchart LR
 
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 | --- | --- | --- | --- | --- | --- |
-| R1 | No data partner authorizes access | Medium–High | High | Plan B/C (§3.3); federal baseline; scope narrowing | Founder |
+| R1 | Direct acquisition and verification capacity is insufficient | Medium–High | High | Organization onboarding; approved local contributors; timed verification; scope narrowing; optional licensed feeds | Founder |
 | R2 | Providers don't respond to attestations | Medium | High | Concierge test in Phase 0; phone-first fallback; budget | Founder |
 | R3 | Verification labor exceeds budget | Medium | High | Measure in Phase 0; tiering; narrow categories; grant funding | Founder |
-| R4 | Incumbent occupies the niche (WA CIE in 2027, Unite Us-style public directories) | Medium | High | Position as the accuracy layer and contributor to the CIE, not a competitor; engage early | Founder |
+| R4 | Existing directories already meet local needs | Medium | High | Validate community ownership, direct maintenance and personalized assistance value; integrate where useful | Founder |
 | R5 | Architectural drift across multiple AI agents | High without controls | High | The Constitution; lint-enforced boundaries; generated types; PR size limits; ADRs; Gate 2 architecture review | Founder + review agent |
 | R6 | Scope creep (re-building the ORAN 1.0 breadth) | High | High | Capability map exclusions; evidence triggers; gate discipline | Founder |
-| R7 | Privacy or regulatory exposure (MHMDA, FTC) | Low–Medium with minimization | High | Do not collect; counsel review; honest policy | Founder + counsel |
+| R7 | Privacy exposure from voluntary profiles or model transmission | To assess | High | Purpose limitation, consent, least privilege, retention/deletion, minimal model payloads, evaluation and counsel review | Founder + counsel |
 | R8 | Next.js security cadence | Medium | Medium | 7-day patch rule; avoid risky surfaces; dependency automation | Agents |
 | R9 | Source licence or withdrawal surprises | Medium | Medium | Registry permissions; kill switch; redistribution filters on exports | Founder |
 | R10 | Founder single point of failure (operations, decisions) | High | High | Small runbooks; alerting; part-time verifier or volunteer; documented gates | Founder |
@@ -982,7 +1007,7 @@ flowchart LR
 | "Ops console" with merge, restore, etc. | Same, but **queue-first**; restore via assertion history | Simpler than a separate history feature |
 | Map in Horizon 2 | **Map excluded until evidence; directions handoff instead** | Cheaper, more private, likely sufficient for navigators |
 | Possibly retain the shared Postgres rate limiter | **Edge-first limiter; reads fail open** | Availability during database incidents |
-| Score per listing removed from UI | **No scoring at all; verification events and states only** | Truthful and explainable |
+| Score per listing removed from UI | **No opaque verification score.** Evidence events/states remain distinct from explained personalized relevance (§2.1.1). | Grounded matching must not masquerade as eligibility or verification |
 
 ---
 
@@ -991,43 +1016,48 @@ flowchart LR
 | Item | Type | Needed by | How it is resolved |
 | --- | --- | --- | --- |
 | Pilot county | Decision + evidence | Gate 1 | §4.2 scoring with partner input |
-| Data partner terms (display, redistribution, derivatives, attribution, withdrawal) | Evidence | Gate 1 | DSA negotiation |
+| Direct contribution rights and optional partner terms | Evidence | Before publication/import for the channel | Submission permission and source review; DSA for feeds when used |
 | Whether WA211 participates in the 211 NDP | Evidence | Phase 0 | Direct inquiry |
 | Provider attestation response rate | Evidence | Gate 1 | Concierge test (n=50) |
 | Verification minutes per listing per tier | Evidence | Gate 1 | Timed sample (n=100) |
 | Baseline accuracy of existing sources | Evidence | Gate 1 | Test-call sample (n=100) |
-| MHMDA applicability given minimization | Legal | Gate 1 | Counsel |
+| Privacy obligations for profiles, consent and external model processing | Review | Before collection or integration | Counsel and privacy design; no assumed exemption |
 | Tier C "Not yet reviewed" visibility (D13) | Decision | Gate 2 | Founder, informed by the baseline accuracy |
 | ORAN-originated data licence (e.g., CC BY 4.0 vs ODbL) (D12) | Decision | Gate 2 | Founder + partner preference |
 | Edge rate-limiting availability on the Vercel plan | Evidence | Phase 1 | Plan check |
 | HSDS 3.3.x exact field names | Evidence | Gate 2 | Verify against the tagged release |
 | Spanish translation capacity | Evidence | Phase 2 | Partner or contractor |
 | Funding path for verification labor | Evidence | Gate 3 | Grant and contract pipeline |
+| Profile purpose, consent, retention/deletion and AI sharing | Design + review | Before collection/integration | Validate field benefit, permissions, payload minimization and deletion, including backups |
+| Grounded matching and provider/model choice | Decision + evaluation | Before AI release | Relevance, evidence support, unknown eligibility, location constraints, misleading guarantees, outages and deterministic fallback |
 
 ---
 
 ## 19. Prioritized founder decisions required before Phase 1
 
-Decisions are ordered by how much depends on them. **D1–D8 block Phase 0 work. D9–D15 block Phase 1.**
+Decisions are ordered by how much depends on them. **Unresolved D0–D8 details block Phase 0 work. Unresolved D9–D16 details block Phase 1. D17/D18 record approved founder direction; they do not approve D0 or close unrelated decisions.**
 
 | # | Decision | Recommendation | Why it matters |
 | --- | --- | --- | --- |
 | **D0** | Approve, amend, or reject this blueprint and its Constitution (§15) | Approve with amendments | Everything else follows from it |
 | **D1** | Pilot region: confirm Washington and authorize county selection by the §4.2 criteria | Washington; choose the county in Phase 0 | Determines partners, sources, languages, law |
-| **D2** | Data strategy: pursue WA211 as the primary partner, with Plan B/C fallbacks; name who does outreach and by when | Yes; founder-led outreach starts within 2 weeks | Data before discovery; the longest lead time |
+| **D2** | Independent resource acquisition | Founder direction recorded: organization and approved-community first; 211 and other integrations complementary | No institutional partner agreement blocks the pilot |
 | **D3** | Organizational form: nonprofit, fiscal sponsorship, or for-profit | Nonprofit or fiscal sponsor | Partner trust, 211 fees, taxonomy licence tier, grants |
 | **D4** | Verification labor: who does test calls and attestations (founder, part-time verifier, volunteers, university partner) and the budget | About 0.5 FTE funded or committed for the pilot | The dominant cost; without it the product fails |
 | **D5** | Primary pilot user: navigators first (recommended) or self-navigating seekers first | Navigators first, seekers served by the same app | Shapes recruitment, design, metrics |
 | **D6** | Keep the locked stack (Vercel + Supabase + Clerk), plus the additions: GitHub Actions jobs, Kysely, Supabase CLI migrations, Resend, Census geocoder, an uptime monitor, pnpm | Keep and approve the additions | Agents need a fixed stack |
-| **D7** | Repository: a new repository (recommended) vs a `v2/` folder; repository name; when to archive ORAN 1.0 | New repo; archive 1.0 after Gate 3. **Founder indicated approval of a new repo (2026-11-02); the name is still open.** Until Gate 1 it holds only the Constitution and core docs: no application code. | Prevents drift into 1.0 patterns |
-| **D8** | Seeker privacy stance: no seeker accounts and no server-stored circumstances in the MVP | Confirm | The foundation of the privacy architecture |
-| **D9** | MVP exclusions: chat, AI, map, eligibility determination, closed-loop referral | Confirm all | Scope control |
+| **D7** | Repository: a new repository (recommended) vs a `v2/` folder; repository name; when to archive ORAN 1.0 | New repo; archive 1.0 after Gate 3. **Founder created AutomatedEmpires/ORAN on 2026-11-02; archive timing remains open.** Until Gate 1 it holds only the Constitution and core docs: no application code. | Prevents drift into 1.0 patterns |
+| **D8** | Optional accounts and voluntary purpose-specific profiles | Founder direction recorded; anonymous discovery retained; privacy controls before storage | Enables personalized matching without mandatory disclosure |
+| **D9** | Scope and matching | AI-assisted grounded matching is foundational and staged after deterministic rules; retain exclusion of final eligibility decisions and case management | Detailed release sequence remains open |
 | **D10** | Launch languages: English + Spanish | Confirm; review after the county is chosen | Translation budget |
 | **D11** | ORAN 1.0 production: keep in an honest maintenance mode (recommended) vs restore and maintain during Phase 0–2 | Maintenance mode with crisis numbers and a WA211 link | Avoids maintaining two products; ends the misleading outage |
 | **D12** | Open-data stance and licence for ORAN-originated data (CC BY 4.0 recommended), subject to source permissions | CC BY 4.0 for ORAN-originated data | Partnership value; interoperability |
 | **D13** | Visibility of unreviewed Tier C (registry-backed) listings | Visible with "Not yet reviewed", only if baseline accuracy ≥ 80% | Coverage vs trust trade-off |
 | **D14** | Infrastructure and tooling budget ceiling (suggested: $150/month software; legal and translation separate) | Approve a ceiling | Prevents vendor sprawl |
 | **D15** | Agent governance: who approves ADRs and gates; whether an independent review agent audits each phase; PR size limit | Founder approves; independent review at Gates 2–4; ~400-line limit | Prevents architectural drift |
+| **D16** | Code licence for the public repository | Open; see DECISIONS.md before the first code lands | Not selected by this amendment |
+| **D17** | Four-domain product vision | Approved founder direction; see ADR-0002 | User, organization, approved community and admin are foundational |
+| **D18** | Native environment contract | Approved founder direction; see AGENTS.md | Windows 11 ARM64, Cursor, PowerShell, Node/pnpm; no mandatory WSL/Docker |
 
 ---
 
