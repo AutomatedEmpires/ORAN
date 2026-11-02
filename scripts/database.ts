@@ -2,7 +2,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Client } from 'pg';
 export async function migrate(url: string) {
- const client = new Client({ connectionString: url });
+ const parsed = new URL(url), local = ['127.0.0.1','localhost','[::1]'].includes(parsed.hostname);
+ for (const name of ['sslmode','sslcert','sslkey','sslrootcert']) parsed.searchParams.delete(name);
+ const client = new Client({ connectionString: parsed.toString(), ssl: local ? false : {rejectUnauthorized:true} });
  await client.connect();
  try {
   await client.query('CREATE SCHEMA IF NOT EXISTS oran_meta');
