@@ -42,19 +42,24 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   return id;
  });
 }
-export async function publicResources() {
- return database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id')
+export async function publicResources(filters?:{postal_code:string;needs:readonly string[]}) {
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id')
  .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.category','l.checked_at','l.next_review_due','a.extent as postal_code'])
  .select(eb=>[eb.selectFrom('verification_event as v').select('v.method').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('check_method'),eb.selectFrom('verification_event as v').select('v.fields_checked').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('fields_checked')])
- .where('s.status','=','active').where('l.state','=','checked').where('l.next_review_due','>',new Date()).orderBy('s.name').limit(100).execute();
-}
-export async function ownedResources(userId:string) {
- const actor = await actorFor(userId);
- if (!['admin','organization'].includes(actor.role)) throw new Error('Access denied');
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.category','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
- if (actor.role === 'organization') query = query.where('s.organization_id','=',actor.organization_id!);
+ .where('s.status','=','active').where('l.state','=','checked').where('l.next_review_due','>',new Date());
+ if(filters){if(!filters.needs.length)return [];query=query.where('a.extent','=',filters.postal_code).where('l.category','in',filters.needs);}
  return query.orderBy('s.name').limit(100).execute();
 }
+export async function ownedResources(userId:string,resourceId?:string) {
+ const actor = await actorFor(userId);
+ if (!['admin','organization'].includes(actor.role)) throw new Error('Access denied');
+ if(resourceId&&!z.uuid().safeParse(resourceId).success)return [];
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.category','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
+ if (actor.role === 'organization') query = query.where('s.organization_id','=',actor.organization_id!);
+ if(resourceId)query=query.where('s.id','=',resourceId);
+ return query.orderBy('s.name').limit(100).execute();
+}
+export async function ownedResource(userId:string,resourceId:string){return (await ownedResources(userId,resourceId))[0];}
 export async function verificationQueue(userId:string) {
  const actor = await actorFor(userId);
  if (actor.role !== 'admin' && !(actor.role === 'community' && actor.approved)) throw new Error('Access denied');

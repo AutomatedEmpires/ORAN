@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
-import { acceptResource,publicResources,ownedResources,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
@@ -110,6 +110,16 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await database().updateTable('membership').set({approved:false}).where('user_id','=',user.community).execute();
   await expect(verificationQueue(user.community)).rejects.toThrow('Access denied');
  });
+ it('filters matching and authorized editing before the 100-row result cap',async()=>{
+  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,postal_code:'98102',category:'work'});await verify(user.admin,id);}
+  const id=await acceptResource(user.org,{...input,name:'ZZZ matching target'});await verify(user.admin,id);
+  expect((await publicResources()).some(r=>r.id===id)).toBe(false);
+  expect((await publicResources({postal_code:'98101',needs:['food']})).some(r=>r.id===id)).toBe(true);
+  expect((await ownedResources(user.org)).some(r=>r.id===id)).toBe(false);
+  expect((await ownedResource(user.org,id))?.id).toBe(id);
+  expect(await ownedResource(user.org,'invalid')).toBeUndefined();
+  await expect(ownedResource(user.seeker,id)).rejects.toThrow('Access denied');
+ },60000);
  it('requires profile consent, saves only the authenticated profile and deletes it',async()=>{
   await expect(saveProfile(user.seeker,{postal_code:'98101',needs:['food'],consent:false})).rejects.toThrow();
   await saveProfile(user.seeker,{postal_code:'98101',needs:['food'],consent:true});

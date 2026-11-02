@@ -1,6 +1,6 @@
 # ORAN 2.0 Constitution (v1.0-draft)
 
-**Status:** Draft, pending founder approval (decision D0 in [DECISIONS.md](DECISIONS.md)).
+**Status:** Development baseline adopted within the founder-authorized bootstrap (D0 and ADR-0003). Pilot and public-release gates remain open; see [DECISIONS.md](DECISIONS.md).
 
 **Authority:** These rules bind every contributor, human or AI agent. They are synchronized with §15 of [BLUEPRINT.md](BLUEPRINT.md), as amended by [ADR-0002](adr/0002-founder-vision-and-native-environment.md), and section references (§) point to that document. Changing a rule requires a founder-approved ADR in [adr/](adr/).
 
