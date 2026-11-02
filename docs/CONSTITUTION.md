@@ -2,9 +2,9 @@
 
 **Status:** Draft, pending founder approval (decision D0 in [DECISIONS.md](DECISIONS.md)).
 
-**Authority:** These rules bind every contributor, human or AI agent. They are copied verbatim from §15 of [BLUEPRINT.md](BLUEPRINT.md), and section references (§) point to that document. Changing a rule requires a founder-approved ADR in [adr/](adr/).
+**Authority:** These rules bind every contributor, human or AI agent. They are synchronized with §15 of [BLUEPRINT.md](BLUEPRINT.md), as amended by [ADR-0002](adr/0002-founder-vision-and-native-environment.md), and section references (§) point to that document. Changing a rule requires a founder-approved ADR in [adr/](adr/).
 
-**On conflict:** if a task conflicts with any rule, stop and report the conflict, citing the rule ID (C1–C23). Do not resolve it yourself.
+**On conflict:** follow C21. The explicit founder amendment in ADR-0002 supersedes earlier contradictory assumptions; unrelated decisions remain open.
 
 **Purpose and scope**
 
@@ -18,14 +18,14 @@
 - **C5.** Raw source records are immutable. Every accepted value is traceable to its assertion and origin.
 - **C6.** A source must be registered, with its agreement or licence basis recorded, before its first import. Never scrape a source whose terms prohibit it.
 - **C7.** Reports and upstream updates never hide a listing automatically, except under the rules in §5.6.
-- **C8.** Never store seeker identity or circumstances on the server. Never log seeker search free text or location.
+- **C8.** Anonymous discovery remains available. Store personal profiles only with voluntary, purpose-specific consent, least-privilege access, retention and deletion controls. Never log sensitive profile, search or location data; sensitive profiles are not sent to external models by default (§2.1.1, §7).
 
 **Architecture**
 
 - **C9.** Use one deployable app, one database, one connection pool, and one scheduler (GitHub Actions jobs). New services, queues, vendors, or runtimes need an ADR and founder approval.
 - **C10.** Respect module boundaries (§11.3). Import only through a module's `index.ts`. Only `platform` and `ui` are shared.
 - **C11.** Use parameterized SQL through Kysely only. Types are generated from the database, never hand-written.
-- **C12.** Every route declares an authorization policy. Deny by default. Organization scope comes from memberships.
+- **C12.** Every route declares an authorization policy; deny by default. Users access only their private profiles; organization control comes from scoped memberships and approved claims; community verification requires admin approval and assignment scope. Audit privileged actions (§2, §7).
 - **C13.** New tables, environment variables, routes, dependencies, or feature flags each require an entry in their contract or ADR. Feature flags have an owner and an expiry date.
 
 **Quality**
@@ -43,6 +43,6 @@
 **Process**
 
 - **C20.** Decisions that change architecture, data model, security, privacy, or scope go in a numbered ADR: context, options, decision, consequences. The founder approves.
-- **C21.** Agents do not resolve conflicts between this Constitution and a task. They stop and report the conflict.
+- **C21.** Follow explicit founder amendments recorded in decisions and ADRs. For unresolved conflicts, report the specific rule or decision; do not invent approval or silently choose a new product direction.
 - **C22.** Documentation is limited to the core set (§11.4) plus ADRs. Do not generate audit, scenario, or status documents inside the product repository.
 - **C23.** Port code from ORAN 1.0 only by re-implementation with tests, citing the source path and commit.

@@ -1,6 +1,6 @@
 # 0001. Adopt the ORAN 2.0 foundation blueprint and Constitution
 
-- Status: Proposed
+- Status: Proposed (D0 remains open; amended by ADR-0002)
 - Date: 2026-11-02
 - Deciders: Founder
 - Related: [BLUEPRINT.md](../BLUEPRINT.md), [CONSTITUTION.md](../CONSTITUTION.md), decisions D0 and D7
@@ -32,7 +32,7 @@ The audit recommended a controlled restart. The founder approved a restart in pr
 Adopt option 1.
 
 - `docs/CONSTITUTION.md` is binding on all contributors.
-- `docs/BLUEPRINT.md` is the single source of product and architecture intent until Gate 2.
+- `docs/BLUEPRINT.md` describes product and architecture intent until Gate 2, subject to the explicit founder amendment in [ADR-0002](0002-founder-vision-and-native-environment.md).
 - No application code, schemas, migrations, dependencies, or CI are added before D0 is approved and Gate 1 is passed.
 
 ## Consequences
