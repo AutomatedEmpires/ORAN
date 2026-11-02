@@ -1,4 +1,4 @@
-import { Kysely, PostgresDialect } from 'kysely';
+import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DB } from './db.generated';
 export type { DB } from './db.generated';
@@ -28,6 +28,7 @@ export function database() {
  return globalDb.oranDb.withSchema('oran');
 }
 export async function closeDatabase() { await globalDb.oranDb?.destroy(); globalDb.oranDb = undefined; }
+export async function lockCatalog(trx: Kysely<DB>) { await sql`SELECT pg_advisory_xact_lock(729195)`.execute(trx); }
 export function sameOrigin(request: Request) {
  const cfg = config();
  if (request.headers.get('origin') !== cfg.origin) throw new Error('Invalid request origin');
