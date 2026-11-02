@@ -51,4 +51,5 @@ jobs:
       - run: pnpm test:integration
       - name: Verify repeatability in the same database
         run: pnpm test:integration
+      - run: pnpm db:migrate
       - run: pnpm db:types:check

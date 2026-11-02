@@ -14,30 +14,26 @@ async function verify(user:string,id:string,data:unknown=check) {const state=awa
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
-let ready=false;
+let ready=false,baseUrl:string|undefined,createdDatabase=false,roleCreated=false;
+const databaseName='oran_test_'+run;
 beforeAll(async()=>{
  if(process.env.DATABASE_URL){if(process.env.ORAN_ENV!=='test'||process.env.ORAN_DATABASE_HOST!==new URL(process.env.DATABASE_URL).hostname)throw new Error('Integration database must explicitly identify as test');}
  else {local=await localDatabase();process.env.DATABASE_URL=local.url;}
  process.env.ORAN_ENV='test';process.env.ORAN_DATABASE_HOST=new URL(process.env.DATABASE_URL!).hostname;
+ if(!local){baseUrl=process.env.DATABASE_URL!;await sql`CREATE DATABASE ${sql.id(databaseName)}`.execute(database());createdDatabase=true;await closeDatabase();const isolated=new URL(baseUrl);isolated.pathname='/'+databaseName;process.env.DATABASE_URL=isolated.toString();}
  await migrate(process.env.DATABASE_URL!);await migrate(process.env.DATABASE_URL!);ready=true;
  await database().insertInto('organization').values({id:fixtureOrg,name:input.organization_name}).execute();
  for(const role of ['admin','organization','community','user'] as const){const id=role==='admin'?user.admin:role==='organization'?user.org:role==='community'?user.community:user.seeker;await database().insertInto('membership').values({user_id:id,role,display_name:'Synthetic '+role,organization_id:role==='organization'?fixtureOrg:null,approved:role!=='community',postal_code:role==='community'?'98101':null}).execute();}
 });
 afterAll(async()=>{
- if(ready){const db=database(),actors=Object.values(user);const records=await db.selectFrom('listing_state as l').innerJoin('service as s','s.id','l.service_id').select(['s.id','s.organization_id']).where('l.created_by','in',actors).execute();const ids=records.map(r=>r.id);
-  if(ids.length){for(const table of ['work_item','verification_event','listing_state','field_assertion','service_area'] as const)await db.deleteFrom(table).where('service_id','in',ids).execute();await db.deleteFrom('service').where('id','in',ids).execute();}
-  await db.deleteFrom('audit_event').where('actor_id','in',actors).execute();await db.deleteFrom('personal_profile').where('user_id','in',actors).execute();
-  const memberships=await db.selectFrom('membership').select('organization_id').where('user_id','in',actors).execute();await db.deleteFrom('membership').where('user_id','in',actors).execute();
-  const orgs=[fixtureOrg,...records.map(r=>r.organization_id),...memberships.flatMap(m=>m.organization_id?[m.organization_id]:[])];await db.deleteFrom('organization').where('id','in',orgs).execute();
-  await sql`DROP ROLE IF EXISTS ${sql.id(deniedRole)}`.execute(db);
- }
- await closeDatabase();await local?.close();
+ try {if(ready&&roleCreated)await sql`DROP ROLE IF EXISTS ${sql.id(deniedRole)}`.execute(database());}
+ finally {await closeDatabase();if(createdDatabase&&baseUrl){process.env.DATABASE_URL=baseUrl;try{await sql`DROP DATABASE ${sql.id(databaseName)}`.execute(database());}finally{await closeDatabase();}}await local?.close();}
 });
 describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  it('has PostGIS and denies a role without schema grants',async()=>{
   const ext=await sql<{version:string}>`SELECT postgis_version() AS version`.execute(database());
   expect(ext.rows[0].version).toBeTruthy();
-  await sql`CREATE ROLE ${sql.id(deniedRole)} NOLOGIN`.execute(database());
+  await sql`CREATE ROLE ${sql.id(deniedRole)} NOLOGIN`.execute(database());roleCreated=true;
   await expect(database().transaction().execute(async trx=>{
    await sql`SET LOCAL ROLE ${sql.id(deniedRole)}`.execute(trx);
    await trx.selectFrom('personal_profile').selectAll().execute();
@@ -100,6 +96,13 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await acceptResource(user.admin,input,id);
   expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to).toBe(user.second);
   await verify(user.second,id);
+ });
+ it('keeps assignments within current scope when approval and edits race',async()=>{
+  const id=await acceptResource(user.admin,input);
+  await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,postal_code:'98102'},id)]);
+  const item=await database().selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('membership as m','m.user_id','w.assigned_to').select(['m.postal_code','a.extent','m.category_scope']).where('w.service_id','=',id).executeTakeFirstOrThrow();
+  expect(item.postal_code).toBe(item.extent);expect(item.category_scope).toContain('food');
+  await approveContributor(user.admin,user.community,'98101',['food']);
  });
  it('rechecks approval and geography at mutation time',async()=>{
   const id=await acceptResource(user.admin,{...input,postal_code:'98102'});
