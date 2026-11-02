@@ -66,6 +66,6 @@ $projects = Join-Path $env:USERPROFILE 'AutomatedEmpires\Projects'
 
 If pnpm is unavailable, install the pinned version using a supported native method (Corepack only where supported) before dependencies. Resolve a runtime mismatch explicitly; do not assume the historical inventory is current. No tool installation is part of this documentation change.
 
-**Current repository:** documentation only, no `package.json` or runnable app. After the approved scaffold exists, document `pnpm install --frozen-lockfile`, `pnpm dev`, `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build` with actual scripts and isolated environment setup. Do not claim those commands work today.
+**Current repository:** Next.js development scaffold with pinned Node 24.22.2 and pnpm 10.34.9. Run `pnpm install --frozen-lockfile`, `pnpm dev`, `pnpm typecheck`, `pnpm lint` and `pnpm build` from Cursor PowerShell. The initial shell needs no credentials; database-backed workflows follow in the next reviewed slice. See README and docs/ARCHITECTURE.md for actual status and dependency contracts.
 
 Before handoff, record the exact pinned runtime/package-manager versions, PowerShell first run, environment-variable and database-isolation contracts, external dependencies, actual CI/branch-protection status and Windows ARM64 checks exercised. Identify untested behavior and open decisions honestly.

@@ -6,11 +6,11 @@ This repository is **ORAN 2.0**, a controlled restart. The original implementati
 
 ## Status
 
-**Gate 0: foundation under review.** There is no application code yet. The [blueprint](docs/BLUEPRINT.md) sets the order of work: an evidence phase comes before any product build.
+**Gate 0: foundation under review.** The native application scaffold is being prepared for local development. The [blueprint](docs/BLUEPRINT.md) sets the order of work: an evidence phase comes before any product build.
 
 The [founder amendment](docs/adr/0002-founder-vision-and-native-environment.md) supersedes earlier partner-first, anonymous-only and no-AI assumptions. Organization/community acquisition must work independently of future 211 and other integrations. Public anonymous discovery remains available.
 
-The target local workflow is **Windows 11 ARM64 + Cursor + native PowerShell + pnpm**, without mandatory WSL or Docker. See the [environment contract and onboarding checks](AGENTS.md#6-native-development-environment-contract). There is no package.json or runnable app yet.
+The target local workflow is **Windows 11 ARM64 + Cursor + native PowerShell + pnpm**, without mandatory WSL or Docker. See the [environment contract and onboarding checks](AGENTS.md#6-native-development-environment-contract). A minimal app shell is runnable; resource workflows follow in the next reviewed slice.
 
 ## Start here
 
@@ -21,3 +21,16 @@ The target local workflow is **Windows 11 ARM64 + Cursor + native PowerShell + p
 | [docs/BLUEPRINT.md](docs/BLUEPRINT.md) | Strategic foundation: charter, architecture, data model, roadmap |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Founder decision log and scope of recorded approvals |
 | [docs/adr/](docs/adr/) | Architecture decision records |
+
+## Native first run
+
+Use Node 24.22.2 ARM64 and pnpm 10.34.9 in Cursor PowerShell.
+
+```powershell
+git clone https://github.com/AutomatedEmpires/ORAN.git oran
+Set-Location oran
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open <http://127.0.0.1:3000>. The initial shell requires no credentials, WSL or Docker. Run `pnpm typecheck`, `pnpm lint` and `pnpm build` to check the scaffold. Native ARM64 checks passed; data/auth/browser tests follow with the resource slice. [Dependency contracts](docs/ARCHITECTURE.md) describe current scope.
