@@ -4,7 +4,7 @@
 **Date:** 2026-11-02
 **Founder amendment:** [ADR-0002](adr/0002-founder-vision-and-native-environment.md) records the authoritative four-domain vision and native Windows environment contract. It supersedes the earlier partner-first, anonymous-only, no-AI assumptions. D0 remains open; this amendment does not approve implementation or the full blueprint.
 **Evidence base** (in the ORAN 1.0 reference repository `AutomatedEmpires/Open-Resource-Access-Network`, PR #140 until merged): [ORAN Comprehensive Platform Audit (2026-11-02)](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_COMPREHENSIVE_PLATFORM_AUDIT_2026-11-02.md) and its [findings register](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_AUDIT_FINDINGS_REGISTER_2026-11-02.md). The audit is treated as evidence, not as a specification. §17 lists where this blueprint departs from the audit's recommendations, and why.
-**Scope rules for this document:** It contains no code, no schemas or DDL, no migrations, and no new repository. Entity descriptions in §6 are conceptual. They become schemas only after Gate 2.
+**Scope rules for this document:** It contains no code, no schemas or DDL, no migrations, and no new repository. Entity descriptions in §6 are conceptual. They become schemas in Phase 1 (after Gate 1), through a founder-approved schema ADR, and the schema is frozen at Gate 2.
 
 ## How to use this document
 
@@ -439,7 +439,7 @@ This is ORAN's north-star quality metric.
 | B. A custom ORAN model with an HSDS export mapper | Freedom to optimize | The mapper becomes a second model, which is the drift that hurt ORAN 1.0 | Rejected |
 | C. Store HSDS JSON documents (JSONB) per service | Simple ingestion | Weak constraints; hard geospatial and relational queries; drift inside JSON | Rejected for the core; acceptable for immutable raw source records |
 
-**Version.** Pin HSDS to the 3.3.x line (latest release 3.3.1, 2026-09-09). Before Gate 2, an agent must confirm field names against the tagged schema files. Public docs pages may lag; one documentation page observed on 2026-11-02 still rendered the 3.0.1 reference.
+**Version.** Pin HSDS to the 3.3.x line (latest release 3.3.1, 2026-09-09). Before the Phase 1 schema ADR, an agent must confirm field names against the tagged schema files. Public docs pages may lag; one documentation page observed on 2026-11-02 still rendered the 3.0.1 reference.
 
 ### 6.2 HSDS core objects used in the MVP
 
@@ -470,7 +470,7 @@ Notes on how these are used:
 
 **Deferred HSDS objects:** `program`, `funding`, `cost_option`, `service_capacity`, `unit`. Add them when a validated workflow needs them. `service_capacity` is the likely first, for shelter beds.
 
-### 6.3 ORAN extension entities (conceptual; no schema until Gate 2)
+### 6.3 ORAN extension entities (conceptual; implemented in Phase 1, frozen at Gate 2)
 
 | Entity | Purpose | Key attributes (conceptual) |
 | --- | --- | --- |
