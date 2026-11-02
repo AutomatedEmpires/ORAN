@@ -4,13 +4,14 @@
 **Date:** 2026-11-02
 **Bootstrap amendment:** ADR-0003 authorizes the local app and direct admin entry before completion of pilot evidence; it does not declare any evidence gate passed.
 **Founder amendment:** [ADR-0002](adr/0002-founder-vision-and-native-environment.md) records the authoritative four-domain vision and native Windows environment contract. It supersedes the earlier partner-first, anonymous-only, no-AI assumptions. This product-direction amendment did not itself authorize implementation; the later scoped authorization is recorded in ADR-0003.
+**Conversational product amendment:** [ADR-0004](adr/0004-conversational-resource-guide.md) records the founder's calm personal guide direction: Seek, Chat, Map and Profile; resource-focused assistance using catalog and web evidence; structured discoveries that improve the catalog. This supersedes the earlier deferral of maps/conversation and blanket exclusion of web extraction. Detailed designs below are implementation proposals, not evidence of shipped features or approval of a model vendor, external data sharing, or unreviewed publication.
 **Evidence base** (in the ORAN 1.0 reference repository `AutomatedEmpires/Open-Resource-Access-Network`, PR #140 until merged): [ORAN Comprehensive Platform Audit (2026-11-02)](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_COMPREHENSIVE_PLATFORM_AUDIT_2026-11-02.md) and its [findings register](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_AUDIT_FINDINGS_REGISTER_2026-11-02.md). The audit is treated as evidence, not as a specification. §17 lists where this blueprint departs from the audit's recommendations, and why.
 **Scope rules for this document:** It contains no code, no schemas or DDL, no migrations, and no new repository. Entity descriptions in §6 are conceptual. They are implemented incrementally as an evolving HSDS-aligned subset under the [ADR-0003](adr/0003-authorize-development-bootstrap.md) development bootstrap, and the schema is frozen at Gate 2.
 
 ## How to use this document
 
 - **Founder:** read §1, §16, §18, and §19, then approve, amend, or reject each decision in §19.
-- **AI agents:** §15 (the Constitution), amended by ADR-0002, governs. Follow explicit founder amendments; report unresolved conflicts with the rule or decision ID (C21).
+- **AI agents:** §15 (the Constitution) governs, with explicit founder direction recorded in ADR-0002–ADR-0004. Follow those amendments; report unresolved conflicts with the rule or decision ID (C21).
 
 ---
 
@@ -104,7 +105,7 @@ Ownership, independent verification and actual intake availability are distinct 
 
 Profiles may include needs and urgency, location and transport limits, household/dependents, age-related qualifications, income ranges, employment, housing, benefits, language, accessibility and preferences. Each field must have a demonstrated matching purpose; sensitive fields are optional. Keep account identity, personal circumstances, organization memberships and community privileges separate.
 
-Structured rules compare expressed needs and consented profile fields with published service criteria, coverage and known availability. Unknown criteria remain unknown; missing profile data is not a disqualification. Start with deterministic matching, then add AI-assisted interpretation of natural-language needs and explanations grounded in catalog evidence. No model may invent resources, eligibility rules or capacity, or make final qualification decisions.
+Structured rules compare expressed needs and consented profile fields with published service criteria, coverage and known availability. Unknown criteria remain unknown; missing profile data is not a disqualification. Deterministic matching supports AI-assisted interpretation and explanations grounded in catalog evidence and permitted, attributed web discoveries (§2.3, §5.8). No model may invent resources, eligibility rules or capacity, or make final qualification decisions.
 
 Explain relevant factors, unmet or unknown requirements, source references and freshness. Keep relevance or potential-eligibility scores separate from verification state; any numerical score needs documented reproducible components and calibration. It never guarantees eligibility, funding or admission. AI/provider selection and evaluation are open implementation decisions, not authority to send sensitive profiles to a model. Require purpose-specific data-sharing controls, minimal payloads and a useful deterministic fallback.
 
@@ -174,6 +175,97 @@ for the partner's own curators. The format is HSDS bulk (JSON/CSV) plus a simple
 **W7: Navigator shares results (later)**
 
 A print view and share link support anonymous use. Account holders may save resources under their own access and retention policy; no personal circumstances enter share URLs.
+
+### 2.3 The seeker product: a calm personal guide
+
+**Product promise:** help someone find relevant support and understand the next practical step as quickly and easily as possible. The founder selected a calm personal guide and proposed four pinned seeker tabs. These are complementary views of one resource system, sharing result identities and permitted personal context. They are not the four authorization domains in §2.1.
+
+| Experience | Primary job | Proposed content and behavior |
+| --- | --- | --- |
+| **Seek** | Find support directly | Plain-language needs, keyword search, location/coverage, filters, sorting and optional profile matching. Show why an option fits and which requirements are unknown. Provide useful results without a conversation or account. |
+| **Chat** | Describe a situation and work toward support | Natural-language input plus preset question paths; permitted profile context; catalog queries and web discovery; concise explanations with source-backed resource cards and next actions. |
+| **Map** | Explore where help is available | Search-linked pins/clusters, accessible synchronized list, service-area and remote options. Selecting a pin opens an organization/location summary and its available services. |
+| **Profile** | Control personalization and continuity | Optional circumstances, current needs, preferences, saved resources, consent, conversation-history controls and deletion. Explain what each field improves. |
+
+The proposed entry screen welcomes people with **“What would help today?”**, a conversational input, suggested needs and a visible browse option. Chat is the proposed first-visit entry; returning users can resume an explicitly saved activity or choose another tab. Default entry and resume behavior need usability testing before layout approval. No separate marketing homepage blocks access to help.
+
+On mobile, persist the labeled four-tab bottom navigation, with safe-area and keyboard handling so the composer and focused controls remain visible. Larger screens may use a side navigation with the same names. The account menu exposes authorized organization, community and admin workspaces. Switching workspace never carries private seeker circumstances into a staff view.
+
+Carry need, coarse location, explicit filters and selected resource IDs across Seek, Chat and Map within the active session. Preserve scroll position and conversation position when switching tabs. Show editable context chips such as need, area, travel limits and “Use my profile”; explain whether a constraint came from today's conversation or a saved preference. Offer “Start fresh” and helping-someone-else mode; do not silently overwrite the account owner's profile with another person's circumstances.
+
+**Seek design:** filter by category, service area, delivery/remote access, language offered, accessibility, cost, appointment/intake method and evidence freshness where structured data supports it. Sort by explained relevance, distance or freshness; expose which sort is active. Hard user-selected constraints apply before ranking and pagination. Distinguish no matching records, unknown coverage and a system failure. Widening a search requires a visible change, never a hidden relaxation of needs or eligibility.
+
+**Map design:** a pin represents a public service location, which may host several services; an organization's registered address is not automatically an intake site. Distinguish a service's coverage from its physical location. Remote, delivery and coverage-only services remain discoverable in a companion list. Show approximate-location uncertainty, cluster dense areas, and do not label straight-line distance as a walking/transit journey. Restricted addresses never enter pins, client payloads or directions. Map/tiles/geocoding vendors and attribution remain D6 implementation decisions.
+
+**Continuity:** saved resources reference canonical IDs, so corrections propagate rather than becoming stale copied cards. Let people group a small shortlist around their present need and record private, optional next-step notes. “Saved,” “contacted” or “helpful” reflects the person's own action/feedback; it does not establish a referral outcome or provider capacity. Anonymous use remains valuable without durable history.
+
+### 2.4 Chat behavior and the grounded answer contract
+
+ORAN's assistant helps people discover assistance, understand published requirements, compare options, prepare documents or questions for a provider, and decide what to try next. It can explain resource-related concepts when needed for that task. General entertainment, unrelated content generation and arbitrary research are outside its purpose. A brief redirect should offer a relevant resource action rather than an argument about scope.
+
+| Conversation stage | Behavior | User control and evidence |
+| --- | --- | --- |
+| Understand | Interpret expressed needs, timing, coarse location and material access constraints | Show an editable summary; ask one useful question at a time, with shortcuts and a skip option. |
+| Clarify | Select preset questions from the relevant need path | Ask only missing information that changes a result; allow “I don't know” and natural answers; do not re-ask permitted current profile facts. |
+| Retrieve | Query eligible catalog results and, when useful, permitted web sources | Catalog results can arrive first; describe actual search progress without fabricated activity. Broaden web discovery when coverage or freshness requires it. |
+| Compare | Apply coverage/criteria rules, rank relevance and inspect source conflicts | Separate a user's firm constraints from preferences; identify unmet or unknown requirements and material conflicts. |
+| Answer | Explain a small useful set of options with consistent resource cards | Attribute operational claims, say what is unknown, and present call/directions/apply/save/map actions supported by real data. |
+| Continue | Help with practical follow-up, refine the search or prepare provider questions | “Is there something closer?” retains context. Sending messages, booking or submitting applications requires a separately authorized workflow; advice alone does not perform those actions. |
+| Improve catalog | Extract permitted discoveries into structured proposals (§5.8) | Candidate persistence has a real outcome independent of the answer; never claim a record was saved, updated or verified unless that operation succeeded. |
+
+Preset paths should cover needs such as food, housing, bills, healthcare, work, transport and legal support. A food path might ask timing and pickup/delivery constraints; housing might ask household type and timeframe; financial assistance might ask the expense and deadline. Each question needs a documented matching purpose. Material profile changes are offered for confirmation, never inferred into permanent storage from casual conversation.
+
+**Every recommendation has a reason and a next step.** Explain “serves your area” or “offers delivery” only when supported. Prefer a few actionable options over a long undifferentiated list; allow more results and direct exploration. Do not invent a numerical match percentage. Potential eligibility, information quality and actual availability are separate dimensions.
+
+**Answer evidence:** return structured resource references and field-level supporting sources alongside prose. Cards resolve catalog values from an accepted revision, not from model recollection. Web-only cards use an explicitly separate discovery status, source URL and retrieval time; a web retrieval date does not become the source's publication date or an independent check. Critical unsupported facts remain unknown. When sources conflict, label the field and provide a supported contact path rather than silently picking a convenient value.
+
+For address, phone, hours, cost, eligibility, deadlines and application links, preserve which source supports each fact and the applicable service/location. “Published hours indicate open” requires a timezone, structured schedule and relevant exceptions; it is not confirmation that someone can receive help now. Funding, appointments, food stock or beds require time-bounded provider evidence. Never turn a stale capacity claim into present availability.
+
+Example interaction, **illustrative only, with no real provider claims**: a seeker says they need food this week and have no car. ORAN asks for an area if missing, searches for delivery and reachable pickup, identifies evidence for those options, and explains any unknown delivery coverage. “Show these on the map” carries the same result IDs. Saving a discovery retains its source/discovery status; it does not grant verification.
+
+If web search fails, use available catalog results and say broader discovery is unavailable. If the model fails, Seek and Map remain usable and the person can retry without losing explicit filters. A catalog outage must not be described as “no resources exist.” Stop, retry, timeouts and partial-result states need honest copy. Crisis entry remains available independently of model classification; the assistant supports resource navigation and cannot promise emergency monitoring.
+
+### 2.5 Profiles, identity and onboarding
+
+An extensive profile is a set of optional purpose-specific sections, not an up-front questionnaire. The minimum search is a need and enough location/coverage information to find help. An account is useful for continuity; anonymous search and session-only conversation should be supported under a documented transient-processing policy. Persistent history is a separate choice from profile storage and external model sharing.
+
+| Profile section | Examples | Matching purpose and constraints |
+| --- | --- | --- |
+| Current support needs | Category, timeframe, priorities, preferred next step | Separate a temporary situation from lasting circumstances; let the person dismiss outdated needs. |
+| Area and access | ZIP/city, travel limits, transport, remote/delivery preference | Prefer coarse location; precise location is optional and task-limited, with no background tracking. |
+| Household and qualifications | Household size, dependents, relevant age/income bands, benefits, housing/employment situation | Ask only when published criteria make it useful; disclose the reason, accept unknown, and avoid unnecessary exact identifiers or documents. |
+| Communication and accessibility | Interface language, service language, contact preference, access requirements | Distinguish translated ORAN text from a provider's supported languages; ask about functional access needs without requiring a diagnosis. |
+| Saved support | Canonical resource references, private notes and optional activity/history | Own-user access, explicit retention/deletion and clear limits on what ORAN remembers. |
+| Privacy and personalization | Field use, external sharing, history, correction and erasure | Make controls reachable and understandable; show which information contributes to a recommendation. |
+
+**Seeker onboarding:** welcome → describe need or browse → choose area if necessary → get useful results → optionally save/create an account → selectively add relevant profile sections. If someone chooses profile setup first, offer a short template with optional deeper sections. No profile-completion pressure, public seeker identity, or required photo. Helping another person uses separate temporary context and does not imply their consent to permanent storage.
+
+**Organization onboarding:** identify the organization → find an existing listing before creating another → request a claim or register → admin validates authority → invite appropriately scoped staff → complete service/location templates → submit/maintain through the shared acceptance path. A draft workspace clearly explains pending control; requesting a claim cannot grant edit rights. A public organization profile contains mission, public contacts, service locations and services; its private staff workspace shows completeness, proposed changes, evidence and tasks.
+
+**Community onboarding:** apply with service area, categories, skills/languages and availability → admin reviews → acknowledge verification/evidence and privacy guidance → receive scoped approval and assignments. Pending applicants receive no verification permissions. The contributor's private work profile shows approved scope, due tasks, evidence history and account controls. Public attribution uses a role or consented display identity, never personal contact details or seeker activity; quality is assessed through evidence and review, not a competitive leaderboard.
+
+**Admin onboarding/profile:** provision a verified identity through the authorized bootstrap/role-grant process, then configure permitted responsibilities and notifications. There is no public self-signup that grants admin. The admin workspace opens on actionable queues: direct resource entry, community approvals, claims, conflicts, discovery proposals, overdue checks, source health and privacy requests. An admin profile represents operational identity, permissions and audit responsibility; it is not a view into every seeker's personal circumstances. Any future support access needs a distinct, justified and audited permission.
+
+One account can hold several memberships. Use explicit workspace switching and independently enforced server policies; do not assign one permanent global “user type.” Organization ownership, community approval and admin responsibilities never create incidental profile access.
+
+### 2.6 Resource identity, templates and presentation
+
+The service is the unit of help, the organization is its provider, and locations/coverage explain access. One organization may run several programs at several locations, with different hours, costs and intake rules. Model those relationships using HSDS semantics; do not duplicate an entire organization per service or place an intake address on every organization by assumption.
+
+**Shared resource page:** begin with service name, provider, concise help offered, relevant access/coverage information and the most useful next action. Follow with who it serves, how to get help, what to prepare, hours/deadlines, cost, languages/accessibility, related services and evidence details. Show unknown operational facts in context. Use progressive disclosure for detailed provenance and requirements; show material restrictions before someone travels or applies.
+
+| Template module | Information that may vary |
+| --- | --- |
+| Food and essentials | Distribution windows, delivery/collection, household limits, frequency, dietary/access accommodations |
+| Housing and shelter | Household types served, intake route, stay limits, referral requirements, confidential access instructions; capacity only when supported |
+| Financial assistance | Expenses covered, geography, income/household criteria, documents, deadlines, whether funding is currently known |
+| Healthcare and wellbeing | Services offered, ages served, appointment/referral process, insurance/sliding fees, language/access arrangements |
+| Legal, employment and education | Issues or goals served, jurisdiction, intake screening, appointment/workshop schedule, fees, format |
+| Childcare, transport and remote services | Ages, service radius, booking or scheduling, accessibility, remote access channels and coverage restrictions |
+
+Templates select applicable fields and approved components from a shared library. Support multiple service modules and omit irrelevant sections. Require a minimum operational identity and source evidence, not invented completeness. Preserve the difference between unknown, not provided and not applicable. Proposed new fields need a purpose, owner, type, validation, privacy classification, evidence policy and HSDS mapping/justified extension (§6); arbitrary custom HTML or a second JSON catalog is not a template strategy.
+
+Organizations can maintain useful descriptions and branding within the shared layout. Seek, Chat, Map, organization pages and admin previews resolve the same canonical service identity and accepted facts. All public renderers enforce the same suppression, confidentiality and field-visibility policies.
 
 ---
 
@@ -314,7 +406,7 @@ Each source entry records:
 | Organization accounts and ownership | ◆ | Claimed or newly registered organizations | Directly manage resources through scoped acceptance policy |
 | Approved community contributions | ◆ | Local discovery and unclaimed listings | Evidence, assigned verification and admin-governed publication |
 | User suggestions and admin entry | ◆ | Missing resources | Review and provenance before publication |
-| Web extraction (crawl, LLM) | **Excluded from MVP** | — | High operating cost and legal risk; revisit only for operator assistance (§8) |
+| Chat-assisted web discovery and extraction | **Foundational direction; staged** | Permitted provider/public sources | ADR-0004 and §5.8: attributed discoveries, structured proposals and acceptance rules; source permissions and release evaluation required |
 
 **Not sources:**
 
@@ -428,6 +520,38 @@ Admin-approved community members receive location/category-scoped tasks based on
 
 This is ORAN's north-star quality metric.
 
+### 5.8 Chat-assisted acquisition and catalog improvement
+
+Discovery is partner-independent and demand-informed: a seeker's search can reveal an unmet catalog need and collect a reusable resource description. **Saving a candidate, accepting field values, publishing a service and independently verifying it are four different operations.** Automatic candidate collection is part of the target; public visibility and automatic acceptance require explicit field/source/risk policies (D21). Chat cannot bypass C4–C6 or infer permission from a page being public.
+
+```mermaid
+flowchart LR
+  Q[Resource request] --> C[Catalog search]
+  Q --> W[Permitted web discovery]
+  C --> A[Grounded answer and resource cards]
+  W --> E[Source evidence and visibility checks]
+  E --> A
+  E --> P[Structured candidate assertions]
+  P --> D[Deduplicate and compare revisions]
+  D --> R{Acceptance policy}
+  R -->|Permitted low-risk nonconflicting fields| S[Catalog acceptance transaction]
+  R -->|Conflict or stronger evidence needed| H[Scoped review queue]
+  H --> S
+  S --> V[Recompute publication state]
+  V --> T[Verification and scheduled reverification]
+```
+
+1. **Discover and qualify the source.** Prefer original provider pages and authoritative public sources while allowing discovery beyond a fixed partner list. Search snippets and model knowledge are leads, not sufficient evidence of operational facts. Assess source identity, permissions, attribution, withdrawal and field authority before durable import. Transient answer display and durable storage/export may have different permitted uses; do not equate a search provider's access with ORAN's reuse rights.
+2. **Extract supported template fields.** Capture service/provider identity, applicable location/coverage, public contact/intake, hours/timezone, cost/criteria and relevant modules. Each proposed value keeps its source, retrieval time, observed/effective date if known, evidence reference and extractor/policy version. Leave missing facts unknown. Store permitted source evidence independently of private user context; never copy a seeker transcript or profile into a public resource record.
+3. **Resolve identity before adding.** Match external identifiers first, then supported organization/service/location relationships. Shared phone, domain or address can support review but do not establish that two services are identical. Group repeat discoveries idempotently; ambiguous duplicates enter review. A new resource remains a candidate until entity-creation and publication policies permit promotion.
+4. **Propose changes against a revision.** Compare source-supported assertions with accepted values. New evidence need not overwrite stronger existing evidence. Proposed changes preserve the last accepted catalog revision and do not invalidate it merely by being discovered; accepted edits recompute verification/publication under the applicable policy. Refetch/recompare when a record changes during a conversation.
+5. **Automate within a measured policy.** Automatic acceptance is eligible only for registered, permitted, field-authoritative sources, supported low-risk values, no unresolved conflict, valid identity and a successful policy check. Model confidence alone is insufficient. High-harm operational changes, closures, ownership, sensitive addresses, disputed identity and bulk drift require stronger review. D21 must define the field allowlist, thresholds, kill switch and rollback before automatic acceptance is enabled; until then, discoveries stay proposals.
+6. **Separate discovery display from catalog trust.** A permitted web discovery can be useful before independent checking only under the approved display/risk policy. Label it “Found on provider website” or “Found on the web,” link its sources, show retrieved time and unknowns. This is not a verified catalog listing, and does not silently expand D13. Suppressed, withdrawn or confidential resources and fields cannot reappear through web search, answer prose, saved cards or map pins.
+7. **Route the maintenance work.** Approved contributors receive eligible geographic/category verification tasks; organizations receive proposed corrections to their owned services; admins resolve disputes, source permissions and identity/ownership issues. Discovery must not auto-claim an organization or grant a contributor privileges. Schedule reverification according to the accepted evidence's field scope and risk.
+8. **Bound acquisition cost and backlog.** Persist authorized proposals durably and retry idempotently; an answer may succeed even if candidate persistence fails. Limit per-turn searches/extractions, deduplicate work, monitor pending volume/age and pause new automated acquisition when review capacity is exceeded. Preserve direct organization/community/admin entry during a model outage. Operational metrics contain no raw seeker queries or precise locations.
+
+The goal is a useful feedback loop: searches improve coverage, owners maintain facts, community checks improve evidence, and better evidence improves future recommendations. Repeated model answers are not independent corroboration. Seeker feedback triggers review; it cannot prove resource availability or automatically remove a listing.
+
 ---
 
 ## 6. Canonical data model and HSDS interoperability
@@ -487,6 +611,7 @@ Notes on how these are used:
 | `audit_event` | Every privileged action | actor, action, subject, before/after reference, at |
 | `membership` | Account authorization, separate from personal profiles | user, role, organization scope, community approval/revocation and geographic/category scope |
 | Personalization and ownership extensions | Concepts to validate before Gate 2; not a second resource catalog | private profile and consent/retention controls; saved resources; organization claims and staff membership; scoped community assignments; reproducible match evidence |
+| Conversational acquisition and continuity | Conceptual extensions under ADR-0004; see DATA_MODEL | evidence-backed candidate/assertion processing, template version/applicability, source-policy decisions, optional private history and resource references; no public seeker linkage |
 
 **The single-write-path rule.** HSDS tables are written **only** by the acceptance service, which applies accepted `field_assertion`s and recomputes `listing_state` in the same transaction. No route, job, or script writes HSDS tables directly. This is the most important anti-drift rule in the data model. It replaces ORAN 1.0's three parallel models and its three-way publication query.
 
@@ -579,6 +704,7 @@ Anonymous search does not require storing a profile or search history. Account h
 | Audit events | 3 years |
 | Application logs | 30 days, scrubbed |
 | Private profiles, consent records and saved resources | Define purpose-specific retention, deletion and backup-erasure handling before storage; indefinite retention is not the default |
+| Opted-in conversation history and private notes | Separate purpose-specific consent/retention; session-only is distinct from saved history; provider processing and deletion limitations disclosed before integration |
 
 A scheduled job enforces retention, and its runs are monitored.
 
@@ -590,12 +716,12 @@ A scheduled job enforces retention, and its runs are monitored.
 
 | Area | Capabilities |
 | --- | --- |
-| Seeker | Need picker + keyword search; ZIP/city/device location; service-area-aware results ordered by distance; filters (category, language offered, accessibility, "verified within 90 days"); listing detail with verification state and date; call, visit, and directions handoff; share and print; report a problem; quick exit; persistent crisis strip; EN + ES interface |
+| Seeker | Foundational Seek / Chat / Map / Profile experiences (§2.3–§2.6), delivered in evaluated increments; anonymous direct discovery, shared resource cards, personalized guidance, source evidence, next actions and useful model-independent fallback |
 | Organization | Registration/claim, scoped staff, direct resource and location maintenance through acceptance policy, attestation and history |
 | Community | Admin-approved membership; resource proposals; scoped assignments; evidence-based verification and scheduled reverification |
 | Personalized user | Optional account and voluntary profile; saved resources; deterministic matching plus staged AI-assisted interpretation and grounded explanations, explicit unknowns and fallback |
 | Operator | Prioritized work queue; record view with field-level provenance; accept/reject assertions; log test calls; set temporary closure or closure; merge duplicates with provenance; request attestation; source registry and job-run dashboard; report triage; audit log |
-| Data | Importers for the pilot's authorized sources; acceptance service; lifecycle and publishability; reverification scheduler; retention job |
+| Data | Authorized imports and chat-assisted discovery proposals (§5.8); one acceptance service; field/source/risk policy before automatic acceptance; lifecycle, publishability, reverification and retention |
 | Interop | Permission-filtered HSDS bulk export; partner corrections feed only where authorized and requested |
 | Trust | Public trust page: sources and attribution, verification method, monthly accuracy rate, status driven by real health checks |
 | Platform | Health checks, uptime monitoring, error monitoring, cron monitors, backups with a tested restore |
@@ -604,7 +730,7 @@ A scheduled job enforces retention, and its runs are monitored.
 
 | Capability | Evidence trigger |
 | --- | --- |
-| Map view (MapLibre + privacy-preserving tiles) | Usability tests show navigators or seekers need spatial browsing |
+| Advanced travel/routing and offline map support | Build beyond the foundational map when access research supports it; no routing vendor is selected here |
 | "Open now" filter | At least 70% of listings in a category have structured schedules |
 | SMS attestation | Email response rate below target; SMS test shows lift |
 | Public HSDS API | A named consumer requests it |
@@ -614,8 +740,8 @@ A scheduled job enforces retention, and its runs are monitored.
 | Partner dashboards and accuracy reporting | Partner requests it |
 | Embeddable widget for CBO websites | 3+ organizations request it |
 | Second county or region | Gate 4 |
-| AI-assisted operator tools (diff summaries, extraction drafts, always human-reviewed) | Operator time data shows a bottleneck AI could cut by at least 30% |
-| Guided conversational search | Strong evidence that guided search outperforms the need picker; expert-built crisis test set |
+| Expanded AI-assisted maintenance tools | Measure time saved and error rates beyond foundational discovery/extraction; all accepted changes follow the same explicit policy |
+| Voice conversation and richer assistance journeys | Validate access benefit and privacy beyond foundational text chat; no autonomous case-management authority |
 
 ### 8.3 Excluded (not on the roadmap without a charter change)
 
@@ -680,22 +806,22 @@ The current operating contract (`AGENTS.md`) locks the provider direction to Ver
 | Web framework | **Next.js (App Router), constrained subset**: server components for reads, route handlers for writes, no experimental features | React Router 7/Remix; Astro; SvelteKit | Portfolio consistency and agent familiarity. The risk is a high-severity CVE cadence (audit ORAN-004), mitigated by the 7-day patch rule and avoiding rarely needed surfaces (`next/image` optimizer, `use cache`, next/og). Astro would suit a mostly-static seeker site, but it splits the ops console into a second framework. |
 | Hosting | **Vercel** (Pro) | Fly.io, Render, Cloudflare | Locked; simple; preview deploys |
 | Database | **Supabase Postgres + PostGIS, used as plain Postgres** | Neon, RDS, self-hosted | Locked. Avoid Supabase-specific runtime features (Data API, Edge Functions, Storage) unless a validated need appears, to keep portability. Use the **Pro plan**, so the project is never paused for inactivity. |
-| Migrations | **Plain, ordered SQL migrations**; validate CLI Windows ARM64 support before choosing execution path | Drizzle-kit, Prisma Migrate, node-pg-migrate | Local development uses an isolated remote development database; real Postgres+PostGIS integration runs in CI. Docker and `supabase start` are optional specialist paths. |
+| Migrations | **Plain, ordered SQL migrations** through the native Node runner | Drizzle-kit, Prisma Migrate, node-pg-migrate | Bootstrap uses isolated local PostgreSQL/PostGIS; dedicated remote non-production work is optional. Standard Postgres+PostGIS integration runs in CI. Docker and `supabase start` are optional specialist paths. |
 | DB access | **Kysely query builder with types generated from the live schema** | Drizzle; Prisma; raw `pg` | Types derive from the database, so hand-maintained schema drift cannot happen (ORAN 1.0 had it). Composable SQL with good PostGIS escape hatches. One pool. |
 | Search | **Postgres full-text search + PostGIS** | Meilisearch, Typesense, Elasticsearch | Pilot scale is under 5k listings. One datastore. Revisit above about 100k listings, with measurements. |
-| Auth | **Clerk** for optional user accounts and privileged participants | Supabase Auth; Auth.js | Provider direction retained; implementation not yet present. Anonymous discovery remains available. |
+| Auth | **Clerk** for optional user accounts and privileged participants | Supabase Auth; Auth.js | Hosted adapter is wired; no hosted instance is provisioned. Isolated loopback development identities support credential-free onboarding. Anonymous discovery remains available. |
 | Background jobs | **GitHub Actions scheduled workflows invoking job entry points** (`jobs/*`) against the database; Sentry cron monitors | Vercel Cron; Inngest/Trigger.dev; pg_cron | No serverless timeouts for imports; logs and secrets in one place; no new vendor. Trade-off: Actions schedules can be delayed by minutes, which is acceptable for daily or hourly jobs. **One scheduler only.** |
-| Email | **Resend** (attestation and operator notifications) | Postmark, SES | Already in use; simple |
+| Email | **Resend**, proposed for attestation and operator notifications | Postmark, SES | Portfolio familiarity; not configured in this ORAN bootstrap, subject to D6 |
 | SMS | Deferred | Twilio | Evidence trigger (§8.2) |
 | Import geocoding | **US Census Geocoder (batch)**, with operator correction | Nominatim, Mapbox, Google | Free and US-authoritative. Avoids the Nominatim bulk-use policy and Mapbox storage terms. |
 | Seeker location | **Bundled gazetteer** (ZIP and place centroids, county polygons from Census) + coarsened device location | Third-party geocoder | Seeker input never leaves ORAN; no cost; works offline-ish |
-| Maps (later) | **MapLibre GL + self-hosted Protomaps PMTiles**, or a paid tile provider | OSM public tiles; Mapbox | No tile requests leak seeker location to third parties; no OSM tile-policy risk |
+| Foundational map (ADR-0004) | Evaluate **MapLibre GL + self-hosted Protomaps PMTiles** or a permitted tile provider | Other accessible web-map approaches | Vendor/hosting choice remains open under D6; evaluate viewport/IP disclosure, attribution, caching rights and load cost. Do not promise third-party location privacy without verifying the actual delivery path. |
 | UI | **Tailwind CSS + Radix primitives wrapped as owned components**; lucide icons | Component libraries (MUI, Chakra); shadcn as-is | Small, accessible primitives; tokens enforced; no runtime CSS-in-JS |
 | i18n | Message catalogs from day one (e.g., `next-intl`) | Ad hoc strings | Spanish at launch; no hardcoded seeker strings |
 | Testing | Vitest (unit); Vitest against real Postgres+PostGIS (integration); Playwright + axe (e2e/a11y) | Jest; Cypress | Real-database testing is mandatory (audit ORAN-029) |
 | Monitoring | **Sentry** (errors, cron monitors) + **one external uptime monitor** + health-driven status page | Datadog; Better Stack all-in-one | Minimal; the founder gets phone alerts |
 | Analytics | **Aggregate server-side counters in Postgres** (no third-party analytics in the MVP) | Plausible; Vercel Analytics; PostHog | Privacy; MHMDA; enough for pilot questions |
-| Runtime and package manager | **Node.js 24 LTS baseline, pnpm 10.x**; choose and pin exact versions when scaffolded | npm | Native Windows ARM64, Cursor and PowerShell contract in AGENTS.md; verify installed tools rather than assuming historical patch versions. |
+| Runtime and package manager | **Node 24.22.2 ARM64 and pnpm 10.34.9**, pinned for the development bootstrap | npm | Native Windows ARM64, Cursor and PowerShell contract in AGENTS.md; isolated project-local tools preserve the founder's global installations. |
 
 **Estimated monthly software cost (list prices, not verified charges):** Vercel Pro $20, Supabase Pro $25+, Sentry Team $26, uptime monitor $0–20, Resend $0–20, Clerk $0. Total: about **$75–$115 per month**.
 
@@ -721,7 +847,7 @@ The current operating contract (`AGENTS.md`) locks the provider direction to Ver
 
 ### 11.3 Modules
 
-The four domains share these services. Add conceptual `profiles` (private consented circumstances and saved resources), `organizations` (claims and staff ownership), `community` (approval-scoped contribution assignments) and `matching` (structured constraints, evidence and model adapter) boundaries. They depend on public catalog/identity/platform interfaces as needed; catalog never depends on private profiles or AI. Validate dependency direction and exact entity ownership before Gate 2; this is not a schema freeze.
+The four domains share these services. Add conceptual `profiles` (private consented circumstances and saved resources), `organizations` (claims and staff ownership), `community` (approval-scoped assignments), `matching` (constraints and reproducible match evidence) and `assistance` (resource-focused conversation and provider adapters) boundaries. Assistance orchestrates public catalog/discovery, matching, consent-filtered profiles and source/assertion interfaces; it cannot write HSDS directly. Catalog never depends on private profiles or AI. Validate dependency direction and exact entity ownership before Gate 2; this is not a schema freeze. Proposed tool and failure contracts are in ARCHITECTURE.md.
 
 | Module | Responsibility | Owns (conceptual entities) | Depends on |
 | --- | --- | --- | --- |
@@ -782,7 +908,7 @@ oran/
 2. **Plain language.** Target a grade 6–8 reading level. Avoid agency jargon. Use verbs such as "Call", "Get directions", "What to bring".
 3. **Truthful status.** Use the verification vocabulary (§12.4) for evidence state. Present matching factors and unknowns separately; any relevance score must meet §2.1.1 and cannot imply qualification or verification.
 4. **Fast on bad networks.** Seeker pages are server-rendered and usable without client JavaScript for the core search and detail flow (progressive enhancement).
-5. **Calm and safe.** Use neutral visuals, a quick exit, crisis access, and no alarming animation.
+5. **Calm personal guide.** Use inviting plain language, generous space, restrained visuals, a quick exit and crisis access. Warm off-white surfaces, deep teal accents and readable system type are proposed, subject to contrast and design review. No alarming animation, fake typing urgency or pressure to complete a profile.
 6. **Consistent.** Build screens only from approved layouts and components. Add a new component only through the design-system process.
 
 ### 12.2 Foundations (tokens)
@@ -818,6 +944,7 @@ oran/
 | Disputed | "Being reviewed" | "Someone reported a problem; call ahead" |
 | Temporarily Closed | "Temporarily closed" | reopening info if known |
 | Unreviewed (Tier C only) | "Not yet reviewed" | "From {Source}" |
+| Web discovery (separate from catalog verification; policy-gated) | "Found on provider website" / "Found on the web" | "Retrieved {date}; not independently checked" plus supporting links and unknown facts |
 
 ### 12.5 Required states for every screen
 
@@ -831,6 +958,14 @@ Every screen must design each of these states: loading, empty (no input), zero r
 | Largest Contentful Paint | ≤ 2.5 s on a mid-range Android over a throttled 4G profile |
 | Accessibility | WCAG 2.2 AA. Axe shows zero serious or critical issues on every layout in CI. A manual screen-reader pass (VoiceOver and TalkBack) on seeker flows each release. |
 | Language | All seeker strings come from message catalogs. Spanish is reviewed by a native speaker before launch. |
+
+### 12.7 Design work required for the conversational model
+
+Extend the approved component inventory with a labeled SeekerTabBar, ChatComposer, QuestionChoices, EditableContext, SourceReference, DiscoveryCard, MatchExplanation and accessible MapResults/PinDrawer. Reuse ResourceCard identity, evidence, contact actions and detail layout across all views. Components are proposed until reviewed; documenting them does not create approval under C18.
+
+Prototype first-visit and returning journeys, anonymous and signed-in behavior, helping another person, incomplete profiles, conflicting/missing evidence, no results, no model/web/catalog, interrupted persistence, discovery-to-verification, and workspace switching. Test keyboard/screen-reader use, long translated text, small phones, bottom-nav/composer overlap, coarse location, confidential locations and map-free access. Stream readable answers without repeatedly stealing focus or announcing every token; provide stop/retry controls and clear completion/error states.
+
+Measure time to a supported next action, successful contact/navigation tasks, question burden, explanation comprehension and discovery/evidence errors. Engagement time, chat length and profile completion are not success measures by themselves. Use consented research and scrubbed aggregates; clicks do not prove that someone received assistance. Approve visual tokens, page layouts and required states before implementing the corresponding screens.
 
 ---
 
@@ -928,6 +1063,12 @@ flowchart LR
 
 **Gate discipline:** follow the scoped bootstrap authorization in ADR-0003. Development does not establish pilot evidence or authorize production release.
 
+### 14.1 Delivery of the conversational resource model
+
+ADR-0004 makes the four seeker experiences foundational; it does not require a single large rewrite or declare the pilot gates complete. The proposed development sequence in ARCHITECTURE is: shared shell/resource design → direct discovery and progressive profiles → catalog-grounded chat → shared-result map → permitted web discovery and durable proposals → evaluated low-risk acceptance automation. Map work may proceed alongside chat. Gate 2 covers canonical identity, authorization and source/proposal contracts; Gate 3 additionally requires evaluated assistance, discovery/source policies and the operational capacity to maintain what is published.
+
+For each slice, demonstrate the seeker action and its corresponding data/permission outcome, including failure states, in the native development environment. Approve affected layouts (C18), update the concrete contracts (C13), run appropriate quality checks and review the PR. D21 governs discovery display/acceptance settings; D22 governs provider/privacy/budget and measurable release settings. Their unresolved details gate dependent integrations, not continued documentation/design or existing credential-free resource workflows.
+
 ---
 
 ## 15. The ORAN 2.0 Constitution (binding rules for all agents)
@@ -1006,7 +1147,7 @@ flowchart LR
 | Exit criterion "≥ 1,000 services" | **Target derived from the Phase 0 baseline** for the chosen county and categories | A fixed number may be wrong for the county; accuracy matters more than count |
 | Keep or retarget ORAN 1.0's Vercel auto-deploy | **Disable auto-deploy; use a migrate → deploy → smoke → promote pipeline** | Prevents code shipping ahead of the schema |
 | "Ops console" with merge, restore, etc. | Same, but **queue-first**; restore via assertion history | Simpler than a separate history feature |
-| Map in Horizon 2 | **Map excluded until evidence; directions handoff instead** | Cheaper, more private, likely sufficient for navigators |
+| Map in Horizon 2 | **Foundational Map alongside Seek / Chat / Profile**, per ADR-0004 | Founder direction makes spatial exploration part of the product; accessible list/directions and privacy requirements remain |
 | Possibly retain the shared Postgres rate limiter | **Edge-first limiter; reads fail open** | Availability during database incidents |
 | Score per listing removed from UI | **No opaque verification score.** Evidence events/states remain distinct from explained personalized relevance (§2.1.1). | Grounded matching must not masquerade as eligibility or verification |
 
@@ -1031,12 +1172,15 @@ flowchart LR
 | Funding path for verification labor | Evidence | Gate 3 | Grant and contract pipeline |
 | Profile purpose, consent, retention/deletion and AI sharing | Design + review | Before collection/integration | Validate field benefit, permissions, payload minimization and deletion, including backups |
 | Grounded matching and provider/model choice | Decision + evaluation | Before AI release | Relevance, evidence support, unknown eligibility, location constraints, misleading guarantees, outages and deterministic fallback |
+| Conversational product layouts (D20) | Design + usability evidence | Before the affected screen is implemented | Four-tab continuity, progressive onboarding, common resource identity, role boundaries, required states and accessible map alternative |
+| Discovery visibility and automated acceptance (D21) | Policy + evidence | Before live discovery display or automatic acceptance | Source permission/authority, field/risk allowlist, suppression/withdrawal, error thresholds, review capacity, kill switch and rollback |
+| Assistant operating contract (D22) | Decision + evaluation | Before model/search integration | Provider/privacy terms, consent/minimization, history deletion, per-turn/abuse/cost limits, factual-support and latency thresholds |
 
 ---
 
 ## 19. Prioritized founder decisions required before Phase 1
 
-Decisions are ordered by how much depends on them. **Unresolved D0–D8 details block Phase 0 work. Unresolved D9–D16 details block Phase 1. D17/D18 record approved founder direction; they do not approve D0 or close unrelated decisions.**
+DECISIONS.md is the current status register. ADR-0003 amended D0 to authorize the development bootstrap while pilot/public-release decisions remain open. ADR-0004/D20 add conversational product direction; D21/D22 gate their dependent integrations and policies. Earlier evidence-phase sequencing does not revoke this scoped development authorization or close unrelated launch decisions.
 
 | # | Decision | Recommendation | Why it matters |
 | --- | --- | --- | --- |
@@ -1047,18 +1191,22 @@ Decisions are ordered by how much depends on them. **Unresolved D0–D8 details 
 | **D4** | Verification labor: who does test calls and attestations (founder, part-time verifier, volunteers, university partner) and the budget | About 0.5 FTE funded or committed for the pilot | The dominant cost; without it the product fails |
 | **D5** | Primary pilot user: navigators first (recommended) or self-navigating seekers first | Navigators first, seekers served by the same app | Shapes recruitment, design, metrics |
 | **D6** | Keep the locked stack (Vercel + Supabase + Clerk), plus the additions: GitHub Actions jobs, Kysely, Supabase CLI migrations, Resend, Census geocoder, an uptime monitor, pnpm | Keep and approve the additions | Agents need a fixed stack |
-| **D7** | Repository: a new repository (recommended) vs a `v2/` folder; repository name; when to archive ORAN 1.0 | New repo; archive 1.0 after Gate 3. **Founder created AutomatedEmpires/ORAN on 2026-11-02; archive timing remains open.** Until Gate 1 it holds only the Constitution and core docs: no application code. | Prevents drift into 1.0 patterns |
+| **D7** | New repository and eventual archive timing for ORAN 1.0 | **Founder created AutomatedEmpires/ORAN on 2026-11-02; ADR-0003 authorized the development app.** Archive timing remains open. | Preserves ORAN 1.0 and prevents drift into its patterns |
 | **D8** | Optional accounts and voluntary purpose-specific profiles | Founder direction recorded; anonymous discovery retained; privacy controls before storage | Enables personalized matching without mandatory disclosure |
-| **D9** | Scope and matching | AI-assisted grounded matching is foundational and staged after deterministic rules; retain exclusion of final eligibility decisions and case management | Detailed release sequence remains open |
+| **D9** | Scope and matching | Deterministic constraints plus bounded catalog/web guidance and structured acquisition under D20; final eligibility decisions and case management remain excluded | Detailed release settings remain open |
 | **D10** | Launch languages: English + Spanish | Confirm; review after the county is chosen | Translation budget |
 | **D11** | ORAN 1.0 production: keep in an honest maintenance mode (recommended) vs restore and maintain during Phase 0–2 | Maintenance mode with crisis numbers and a WA211 link | Avoids maintaining two products; ends the misleading outage |
 | **D12** | Open-data stance and licence for ORAN-originated data (CC BY 4.0 recommended), subject to source permissions | CC BY 4.0 for ORAN-originated data | Partnership value; interoperability |
 | **D13** | Visibility of unreviewed Tier C (registry-backed) listings | Visible with "Not yet reviewed", only if baseline accuracy ≥ 80% | Coverage vs trust trade-off |
 | **D14** | Infrastructure and tooling budget ceiling (suggested: $150/month software; legal and translation separate) | Approve a ceiling | Prevents vendor sprawl |
 | **D15** | Agent governance: who approves ADRs and gates; whether an independent review agent audits each phase; PR size limit | Founder approves; independent review at Gates 2–4; ~400-line limit | Prevents architectural drift |
-| **D16** | Code licence for the public repository | Open; see DECISIONS.md before the first code lands | Not selected by this amendment |
+| **D16** | Code licence for the public repository | Open; development authorized by ADR-0003, selection required before public release | Not selected by this amendment |
 | **D17** | Four-domain product vision | Approved founder direction; see ADR-0002 | User, organization, approved community and admin are foundational |
 | **D18** | Native environment contract | Approved founder direction; see AGENTS.md | Windows 11 ARM64, Cursor, PowerShell, Node/pnpm; no mandatory WSL/Docker |
+| **D19** | Admin entry and native bootstrap | Approved; see ADR-0003 | Direct admin creation shares acceptance and verification rules |
+| **D20** | Calm personal guide and Seek / Chat / Map / Profile | Approved product direction; see ADR-0004 and §2.3–§2.6 | Catalog/web guidance and structured discovery are foundational; detailed designs remain proposals |
+| **D21** | Discovery visibility and acceptance automation | Open; see §5.8 | Prevents unchecked source reuse, publication, overwrites or verification claims |
+| **D22** | Assistant provider/privacy/operating limits | Open; see ARCHITECTURE | Explicit provider choice, consent/history policy, budget and measured release settings |
 
 ---
 
