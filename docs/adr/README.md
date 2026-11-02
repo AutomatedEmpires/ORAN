@@ -45,3 +45,4 @@ What becomes easier or harder. Which follow-up work, rules, or checks are needed
 | [0001](0001-adopt-foundation-blueprint.md) | Adopt the ORAN 2.0 foundation blueprint and Constitution | Proposed |
 | [0002](0002-founder-vision-and-native-environment.md) | Record founder vision and native environment amendment | Accepted for direction; D0 open |
 | [0003](0003-authorize-development-bootstrap.md) | Native development bootstrap and direct admin entry | Accepted for development scope |
+| [0004](0004-conversational-resource-guide.md) | Calm personal guide, four seeker views and structured web discovery | Accepted for product direction; detailed implementation policies open |

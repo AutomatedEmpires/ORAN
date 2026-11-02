@@ -4,6 +4,14 @@
 
 This is the ORAN 2.0 development bootstrap. The [original repository](https://github.com/AutomatedEmpires/Open-Resource-Access-Network) is preserved as reference. The founder vision and development authorization are recorded in [ADR-0002](docs/adr/0002-founder-vision-and-native-environment.md) and [ADR-0003](docs/adr/0003-authorize-development-bootstrap.md).
 
+## Product direction: a calm personal guide
+
+The founder's expanded model has four pinned seeker experiences: **Seek** for direct search/filtering and optional matching; **Chat** for guided, resource-focused assistance using catalog and permitted web evidence; **Map** for locations, coverage and services; **Profile** for voluntary personalization and saved support. They share resource identities, evidence and session context. Organization, approved-community and admin workspaces maintain the same catalog.
+
+Chat discoveries should improve the catalog through structured, source-backed proposals. Collecting a candidate, accepting facts, publishing a listing and independently verifying it remain distinct operations; source permissions and explicit automation/display policies apply. The target is explained in [Blueprint §2.3–§2.6](docs/BLUEPRINT.md#23-the-seeker-product-a-calm-personal-guide) and [§5.8](docs/BLUEPRINT.md#58-chat-assisted-acquisition-and-catalog-improvement), with the direction recorded in [ADR-0004](docs/adr/0004-conversational-resource-guide.md). Delivery slices and evaluation are in [Architecture](docs/ARCHITECTURE.md#proposed-delivery-slices-and-release-evidence).
+
+**This is target design.** Chat, web discovery/acquisition, interactive maps, expanded profiles and saved resources are not implemented in the current bootstrap. The native first-run workflow below remains credential-free.
+
 ## Pull and open in Cursor
 
 From your intended projects folder, use native PowerShell:
@@ -48,7 +56,7 @@ CI checks Windows and Linux, standard PostgreSQL 17/PostGIS 3.6 integration and 
 
 Implemented: direct admin/organization/community resource entry; organization-scoped edits; approved ZIP/category verification assignments; evidence and due dates; public checked-resource discovery; consented minimal matching preferences and deletion; deterministic explained matching; English/Spanish catalogs.
 
-Still to build: richer profiles and saved resources; evaluated AI/model integration; real organization registration/claims and staff invitations; contributor application/revocation UI; reminders and full risk tiers; licensed external imports; production runtime roles, operations and deployment. No live model calls or institutional agreement are required for this bootstrap. Spanish requires native-speaker review before public release.
+Still to build: the Seek/Chat/Map/Profile experience; richer profiles and saved resources; evaluated resource-focused model integration and permission-aware web discovery/proposals; real organization registration/claims and staff invitations; contributor application/revocation UI; reminders and full risk tiers; licensed external imports; production runtime roles, operations and deployment. No live model calls or institutional agreement are required for this bootstrap. Spanish requires native-speaker review before public release.
 
 For dedicated remote development, copy .env.example to .env.local, configure an isolated non-production database and Clerk development instance, then use dev:remote. The db:migrate and admin:grant commands refuse production stage. Production readiness and unresolved founder decisions remain separate from this development handoff.
 

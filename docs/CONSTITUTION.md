@@ -4,7 +4,7 @@
 
 **Authority:** These rules bind every contributor, human or AI agent. They are synchronized with §15 of [BLUEPRINT.md](BLUEPRINT.md), as amended by [ADR-0002](adr/0002-founder-vision-and-native-environment.md), and section references (§) point to that document. Changing a rule requires a founder-approved ADR in [adr/](adr/).
 
-**On conflict:** follow C21. The explicit founder amendment in ADR-0002 supersedes earlier contradictory assumptions; unrelated decisions remain open.
+**On conflict:** follow C21. The explicit founder amendments in ADR-0002 and [ADR-0004](adr/0004-conversational-resource-guide.md) supersede earlier contradictory product assumptions; unrelated decisions and detailed implementation policies remain open. ADR-0004 preserves the rules below, including source permissions, privacy and the single catalog write path.
 
 **Purpose and scope**
 
