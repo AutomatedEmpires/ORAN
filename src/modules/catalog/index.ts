@@ -25,6 +25,8 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
    organizationId = randomUUID();
    await trx.insertInto('organization').values({id:organizationId,name:input.organization_name}).execute();
   }
+  const owner = await trx.selectFrom('organization').select('name').where('id','=',organizationId).executeTakeFirstOrThrow();
+  if (owner.name !== input.organization_name) throw new Error('Organization name changes require a separate organization update');
   const id = existing?.id ?? randomUUID();
   const values = {organization_id:organizationId,name:input.name,description:input.description,url:input.url || null,eligibility_description:input.eligibility_description,application_process:input.application_process};
   if (existing) await trx.updateTable('service').set(values).where('id','=',id).execute();
@@ -72,3 +74,5 @@ export async function verifyResource(userId:string, serviceId:string, raw:unknow
   await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:userId,action:'resource.verified',subject:serviceId,detail:JSON.stringify({method:input.method,fields:input.fields_checked})}).execute();
  });
 }
+
+export async function organizationFor(userId:string) { const actor=await actorFor(userId);if(!actor.organization_id) throw new Error('Access denied');return database().selectFrom('organization').select(['id','name']).where('id','=',actor.organization_id).executeTakeFirstOrThrow(); }
