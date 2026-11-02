@@ -1,2 +1,8 @@
+import { publicResources } from '@/modules/catalog';
 import { messages } from '@/server/language';
-export default async function Home() { const {text:t}=await messages(); return <section className="hero"><p className="eyebrow">{t.eyebrow}</p><h1>{t.headline}</h1><p className="lede">{t.lede}</p><div className="notice">{t.scaffold}</div></section>; }
+import { ResourceCards } from '@/ui/resources';
+export default async function Home(){
+ const {text:t}=await messages();let resources:Awaited<ReturnType<typeof publicResources>>=[],available=true;
+ try{resources=await publicResources();}catch{available=false;}
+ return <section><div className="hero"><p className="eyebrow">{t.eyebrow}</p><h1>{t.headline}</h1><p className="lede">{t.lede}</p></div>{!available?<p className="notice" role="status">{t.unavailable}</p>:resources.length?<ResourceCards resources={resources}/>:<p className="notice">{t.empty}</p>}</section>;
+}

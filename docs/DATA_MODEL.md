@@ -28,6 +28,9 @@ The local store is .local/postgres and contains development identities only by d
 | ORAN_DATABASE_HOST | Required hostname match for explicitly configured database environments |
 | ORAN_APP_ORIGIN | Exact origin for state-changing HTTP endpoints |
 | ORAN_LOCAL_DEV, ORAN_SESSION_SECRET | Local-launcher-only identity mode and random process secret; never configure on a hosted environment |
+| ORAN_TEST_RUN | Test-launcher-only separate build output; it grants no permissions |
 | NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY | Separate Clerk development instance for remote authenticated work; no secret is public |
 
 pnpm db:migrate and pnpm admin:grant refuse production stage. Code generation uses the migrated schema; db.generated.ts is generated, never edited by hand. The standard PostgreSQL/PostGIS CI job must pass in addition to native embedded tests.
+
+Acceptance, verification and contributor-scope changes serialize through one transaction advisory lock in this bootstrap, then lock resource rows consistently. This keeps assignments valid when scope and catalog edits race, including new resources created during an approval change. Reads remain concurrent; partitioning the write lock is a later measured optimization.

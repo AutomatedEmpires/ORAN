@@ -64,8 +64,8 @@ Get-Command node,pnpm,git,cursor -ErrorAction SilentlyContinue
 $projects = Join-Path $env:USERPROFILE 'AutomatedEmpires\Projects'
 ```
 
-If pnpm is unavailable, install the pinned version using a supported native method (Corepack only where supported) before dependencies. Resolve a runtime mismatch explicitly; do not assume the historical inventory is current. No tool installation is part of this documentation change.
+If Node or pnpm is missing or mismatched, use scripts/run.ps1 to prepare the exact pins inside the ignored project-local toolchain. Preserve global tools used by other projects. Corepack is optional; do not assume the historical inventory is current.
 
-**Current repository:** Next.js development scaffold with pinned Node 24.22.2 and pnpm 10.34.9. Run `pnpm install --frozen-lockfile`, `pnpm dev`, `pnpm typecheck`, `pnpm lint` and `pnpm build` from Cursor PowerShell. The initial shell needs no credentials; database-backed workflows follow in the next reviewed slice. See README and docs/ARCHITECTURE.md for actual status and dependency contracts.
+**Current repository:** Native development app with pinned Node 24.22.2 and pnpm 10.34.9. From Cursor PowerShell, `scripts/run.ps1 install --frozen-lockfile` and `scripts/run.ps1 dev` prepare isolated tools and PostgreSQL/PostGIS without WSL, Docker or cloud credentials. Admin, organization, approved-community and minimal profile/matching flows are implemented. Run typecheck, lint, test, build and test:e2e through the same helper or pinned pnpm. README lists actual scope and remaining work; ARCHITECTURE.md/DATA_MODEL.md define the contracts.
 
 Before handoff, record the exact pinned runtime/package-manager versions, PowerShell first run, environment-variable and database-isolation contracts, external dependencies, actual CI/branch-protection status and Windows ARM64 checks exercised. Identify untested behavior and open decisions honestly.

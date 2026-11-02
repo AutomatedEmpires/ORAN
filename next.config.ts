@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 const config: NextConfig = {
   agentRules: false,
+  distDir: process.env.ORAN_TEST_RUN === '1' ? '.next-test' : '.next',
   poweredByHeader: false,
   serverExternalPackages: ['pg'],
   async headers() {
