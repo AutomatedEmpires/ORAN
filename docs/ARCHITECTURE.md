@@ -25,3 +25,11 @@ Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10
 The initial shell exposes public / and honest loading/error/not-found states. Navigation identifies the four target experiences; resource and identity routes follow in the next reviewed slice. No fake resources, scores or verification badges are shipped.
 
 Native Windows ARM64 typecheck, lint and production build passed on Node 24.22.2. Database, auth and browser flow checks are recorded when those workflows are implemented. No branch protection or deployment configuration is asserted merely because a workflow is described.
+
+## Identity and route contract
+
+Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. An unknown verified Clerk user gets only the user role. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+
+The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
+
+Framework agent-file generation is disabled to preserve AGENTS.md. next-env.d.ts and .next are generated/ignored; typecheck runs next typegen before TypeScript so it also works immediately after a fresh clone.

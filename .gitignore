@@ -10,3 +10,4 @@ playwright-report/
 *.tsbuildinfo
 *.log
 supabase/.temp/
+next-env.d.ts
