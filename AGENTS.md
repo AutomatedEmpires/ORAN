@@ -12,10 +12,12 @@ Read this file first. It applies to every contributor, human or AI agent.
 
 ## 2. Current phase
 
-**Gate 0: the foundation is under review.** Until the founder approves D0 and Gate 1 is passed (BLUEPRINT §14):
+**Development bootstrap authorized (2026-11-02).** The founder explicitly requested admin resource creation and directed us to execute the next steps and prepare the app for local Cursor work. [ADR-0003](docs/adr/0003-authorize-development-bootstrap.md) records the scope.
 
-- Do **not** add application code, schemas, migrations, dependencies, CI workflows, or infrastructure.
-- Changes are limited to the foundation documents and ADRs, by pull request.
+- Implement and test the development scaffold and small four-domain resource workflows through reviewed PRs.
+- Admins can directly create resources, with the same acceptance, provenance, history and verification rules as other channels.
+- Pilot evidence, funding, legal form, launch languages, data licensing and production readiness remain open. Do not mark those gates complete without evidence.
+- No production deployment or paid cloud provisioning is part of this bootstrap.
 
 ## 3. Fixed platform direction
 
@@ -23,7 +25,7 @@ Hosting is Vercel, the database is Supabase Postgres + PostGIS, and identity is 
 
 ## 4. Working rules
 
-- **Work by pull request only.** Never push to `main`. Keep each PR to about 400 changed lines or fewer, excluding tests and fixtures (C17).
+- **Work by pull request only.** Never push to `main`. Target about 400 authored lines per PR, excluding tests, fixtures and generated lock/type outputs reviewed separately (C17). ADR-0003 records the existing foundation bootstrap exception.
 - **Reference repository.** ORAN 1.0 (`AutomatedEmpires/Open-Resource-Access-Network`) is read-only reference material. Port from it only by re-implementing with tests, citing the source path and commit `e0c9afd` (C23). Do not copy its documents into this repository.
 - **No speculative documentation.** No new documents beyond the core set and ADRs (C22).
 - **Honest status.** Never report work as done unless it runs end to end (C2, §13.3).
@@ -34,7 +36,7 @@ Hosting is Vercel, the database is Supabase Postgres + PostGIS, and identity is 
 - Users can browse anonymously or opt into voluntary purpose-specific profiles and personalized matching. Use deterministic eligibility/coverage rules plus staged AI-assisted interpretation and catalog-grounded explanations; expose unknowns and never guarantee qualification or capacity.
 - Organizations own and maintain one or many resources through scoped staff memberships and approved claims. All channels use the acceptance service; ownership does not establish independent verification.
 - Community contributors require admin approval and geographic/category-scoped assignments. They discover, propose, verify and periodically reverify resources with evidence. They do not gain access to seeker profiles or unrestricted edits to claimed listings.
-- Admin governs approvals, claims, disputes, publication, verification schedules, privacy and operations. Organization/community acquisition must work without a 211 or other institutional agreement; integrations are complementary.
+- Admin directly adds resources and governs approvals, claims, disputes, publication, verification schedules, privacy and operations. Organization/community acquisition must work without a 211 or other institutional agreement; integrations are complementary.
 
 ## 6. Native development environment contract
 

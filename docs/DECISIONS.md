@@ -2,8 +2,8 @@
 
 These decisions come from BLUEPRINT §19, with the founder amendment recorded in ADR-0002. The 2026-11-02 continuation explicitly authorizes recording the four-domain vision and native environment; it does not approve the whole blueprint, implementation, infrastructure or unrelated recommendations.
 
-- Unresolved **D0–D8** details block Phase 0.
-- Unresolved **D9–D16** details block Phase 1; D17/D18 record approved direction.
+- ADR-0003 authorizes the development bootstrap while unresolved pilot decisions remain open.
+- Unresolved launch, licensing and operational decisions still gate public release; D17–D19 record founder direction.
 
 Only explicit founder direction changes a decision's status; contributors may record it with its source. Record each change with its date and a one-line rationale.
 
@@ -11,7 +11,7 @@ Only explicit founder direction changes a decision's status; contributors may re
 
 | # | Decision | Recommendation | Status | Date | Notes |
 | --- | --- | --- | --- | --- | --- |
-| D0 | Approve the blueprint and Constitution | Approve with amendments | Open | — | — |
+| D0 | Adopt the foundation with scoped bootstrap amendments | Develop the Cursor-ready app under ADR-0003 | **Amended** | 2026-11-02 | Founder directed execution of the next steps. This authorizes development, not a completed evidence phase or public launch. |
 | D1 | Pilot region | Washington; choose the county in Phase 0 using the §4.2 criteria | Open | — | — |
 | D2 | Independent acquisition | Organization/community first; partners complementary | **Amended** | 2026-11-02 | Founder direction: a functioning pilot cannot depend on a 211 agreement. Outreach owner/timing remains open. |
 | D3 | Organizational form | Nonprofit or fiscal sponsor | Open | — | — |
@@ -27,6 +27,7 @@ Only explicit founder direction changes a decision's status; contributors may re
 | D13 | Showing unreviewed Tier C listings | Show only if baseline accuracy is at least 80% | Open | — | — |
 | D14 | Software budget ceiling | $150 per month | Open | — | — |
 | D15 | Agent governance | Founder approves ADRs and gates; independent review at Gates 2–4; PRs of about 400 lines or fewer | Open | — | — |
-| D16 | **Code licence for this public repository** (new; not in BLUEPRINT §19) | Choose before the first code lands. Options: Apache-2.0 (permissive, patent grant), AGPL-3.0 (network copyleft), or MIT. | Open | — | This repository is public. Without a licence, others have no right to reuse the code. |
+| D16 | **Code licence for this public repository** (new; not in BLUEPRINT §19) | Choose before public release; development scaffold authorized by ADR-0003. Options: Apache-2.0 (permissive, patent grant), AGPL-3.0 (network copyleft), or MIT. | Open | — | This repository is public. Without a licence, others have no right to reuse the code. |
 | D17 | Four foundational domains | User, organization, approved community, admin in one app | **Approved** | 2026-11-02 | Explicit founder direction: organization ownership; admin-approved scoped community verification and reverification; one shared resource system. |
 | D18 | Native environment contract | Windows 11 ARM64, Cursor, PowerShell, Node/pnpm; no mandatory WSL/Docker | **Approved** | 2026-11-02 | Explicit continuation request and referenced setup. AGENTS.md records target and version-verification requirements, not an audited installation inventory. |
+| D19 | Admin resource creation and app bootstrap | Admins directly add resources through the shared catalog acceptance path; prepare native local app | **Approved** | 2026-11-02 | Explicit founder request; production launch and unresolved business decisions are not implied. |

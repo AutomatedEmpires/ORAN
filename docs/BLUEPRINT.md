@@ -1,8 +1,9 @@
 # ORAN 2.0: Strategic Foundation Blueprint
 
-**Status:** Draft for founder approval (Gate 0). This is a planning document; nothing in it is implemented.
+**Status:** Development bootstrap authorized by [ADR-0003](adr/0003-authorize-development-bootstrap.md). This blueprint describes the target; implementation status is recorded in README. Pilot evidence and public release gates remain open.
 **Date:** 2026-11-02
-**Founder amendment:** [ADR-0002](adr/0002-founder-vision-and-native-environment.md) records the authoritative four-domain vision and native Windows environment contract. It supersedes the earlier partner-first, anonymous-only, no-AI assumptions. D0 remains open; this amendment does not approve implementation or the full blueprint.
+**Bootstrap amendment:** ADR-0003 authorizes the local app and direct admin entry before completion of pilot evidence; it does not declare any evidence gate passed.
+**Founder amendment:** [ADR-0002](adr/0002-founder-vision-and-native-environment.md) records the authoritative four-domain vision and native Windows environment contract. It supersedes the earlier partner-first, anonymous-only, no-AI assumptions. This product-direction amendment did not itself authorize implementation; the later scoped authorization is recorded in ADR-0003.
 **Evidence base** (in the ORAN 1.0 reference repository `AutomatedEmpires/Open-Resource-Access-Network`, PR #140 until merged): [ORAN Comprehensive Platform Audit (2026-11-02)](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_COMPREHENSIVE_PLATFORM_AUDIT_2026-11-02.md) and its [findings register](https://github.com/AutomatedEmpires/Open-Resource-Access-Network/blob/main/docs/audit/ORAN_AUDIT_FINDINGS_REGISTER_2026-11-02.md). The audit is treated as evidence, not as a specification. §17 lists where this blueprint departs from the audit's recommendations, and why.
 **Scope rules for this document:** It contains no code, no schemas or DDL, no migrations, and no new repository. Entity descriptions in §6 are conceptual. They become schemas in Phase 1 (after Gate 1), through a founder-approved schema ADR, and the schema is frozen at Gate 2.
 
@@ -95,7 +96,7 @@ These are four experiences over shared domain services in one app, not four appl
 | User | Explore anonymously or create an account; maintain a voluntary profile; express needs; receive explained matches; save resources; report errors and suggest missing resources | Own profile and saved resources only; suggestions enter review |
 | Organization | Register or claim an organization; authorized staff create and maintain one or many services and locations, eligibility, intake, hours and contact details | Membership-scoped ownership; claims approved by admin; routine edits use the acceptance policy and audit trail |
 | Approved community | Apply for admin approval; discover and propose resources, including unclaimed listings; conduct assigned verification and scheduled reverification by geography and category | Approval plus assignment/scope required; corrections to claimed resources enter review; no ownership transfer or access to seeker profiles |
-| Admin | Approve community members and organization claims; resolve disputes; govern sources, publication, verification schedules, matching quality, privacy and operations | Explicit least-privilege grants and audited actions |
+| Admin | Directly create resources through the shared acceptance path; approve community members and organization claims; resolve disputes; govern sources, publication, verification schedules, matching quality, privacy and operations | Explicit least-privilege grants and audited actions |
 
 Ownership, independent verification and actual intake availability are distinct facts. Organization self-attestation must not be labeled independent community verification. Community evidence may challenge an owner's assertion; an admin resolves disputes with history preserved.
 
@@ -925,7 +926,7 @@ flowchart LR
 | **Phase 2: Pilot data operations** | Reach a trustworthy pilot catalog | Organization/community-maintained pilot catalog without a required partner feed; attestation flow; geographically scoped reverification scheduler; evaluated AI-assisted grounded matching with deterministic fallback; reports; merge; HSDS export + optional authorized corrections feed; full design system for MVP screens; Spanish; trust page; privacy and security review | **Gate 3:** target listing count from the Phase 0 baseline; **test-call accuracy ≥ 85%** for two consecutive months; Tier A reverification compliance ≥ 90%; zero P0/P1 open security findings; counsel sign-off on the privacy policy; 30 days of monitored uptime ≥ 99.5% in production with soft-launch users; navigator usability task success ≥ 80% | Founder |
 | **Phase 3: Public pilot** | Measure real value | Launch with 3+ navigator organizations; monthly accuracy publication; organization and community participation measured; partner corrections delivered where an agreement exists | **Gate 4:** navigator weekly active use sustained for 8 weeks; users, organizations and approved contributors demonstrate value; partner feedback is supplementary; verification cost per listing within budget; a funding path identified. Decide: continue, expand to a second county, or stop. | Founder |
 
-**Gate discipline for agents:** no work item may begin that belongs to a later phase. A request that requires a later-phase capability is logged as an evidence item, not built.
+**Gate discipline:** follow the scoped bootstrap authorization in ADR-0003. Development does not establish pilot evidence or authorize production release.
 
 ---
 
@@ -960,7 +961,7 @@ flowchart LR
 - **C14.** The Definition of Done (§13.3) applies to every change.
 - **C15.** Integration tests that touch data or authorization run against real Postgres+PostGIS. Mocking the database or the auth policy in those tests is forbidden.
 - **C16.** Never skip, disable, or weaken a test or check to get green.
-- **C17.** Every PR is ≤ ~400 changed lines excluding tests and fixtures. Split larger work.
+- **C17.** Target about 400 authored changed lines per PR, excluding tests, fixtures and generated lock/type outputs reviewed separately. Split unrelated changes. ADR-0003 records the one-time existing foundation bootstrap exception.
 
 **Design**
 
@@ -1061,4 +1062,4 @@ Decisions are ordered by how much depends on them. **Unresolved D0–D8 details 
 
 ---
 
-*End of blueprint. Nothing in this document is implemented. Implementation begins only after Gate 1.*
+*End of target blueprint. ADR-0003 authorizes a development scaffold; pilot and production gates require actual evidence. README distinguishes implemented workflows from planned capabilities.*
