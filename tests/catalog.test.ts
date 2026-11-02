@@ -11,6 +11,7 @@ import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/in
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
 const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',category:'food',postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_note:'Synthetic test fixture, permitted for tests only'};
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
+async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 beforeAll(async()=>{
  if (process.env.DATABASE_URL) {
   if(process.env.ORAN_ENV!=='test'||process.env.ORAN_DATABASE_HOST!==new URL(process.env.DATABASE_URL).hostname) throw new Error('Integration database must explicitly identify as test');
@@ -46,28 +47,47 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await database().insertInto('organization').values({id:org,name:'Other organization'}).execute();
   await database().insertInto('membership').values({user_id:'other-org',role:'organization',display_name:'Other staff',organization_id:org,approved:true}).execute();
   await expect(acceptResource('other-org',input,id)).rejects.toThrow('Access denied');
-  await expect(verifyResource('dev-org',id,check)).rejects.toThrow('Access denied');
+  await expect(verify('dev-org',id,check)).rejects.toThrow('Access denied');
  });
  it('approval assigns scoped work, verification publishes, edits invalidate and reverification is due',async()=>{
   const id=await acceptResource('dev-admin',input);
-  await expect(verifyResource('dev-community',id,check)).rejects.toThrow('Access denied');
-  await approveContributor('dev-admin','dev-community','98101');
+  await expect(verify('dev-community',id,check)).rejects.toThrow('Access denied');
+  await approveContributor('dev-admin','dev-community','98101',['food']);
   expect((await verificationQueue('dev-community')).some(r=>r.id===id)).toBe(true);
-  await verifyResource('dev-community',id,check);
+  await verify('dev-community',id,check);
   expect((await publicResources()).some(r=>r.id===id)).toBe(true);
   expect((await verificationQueue('dev-community')).some(r=>r.id===id)).toBe(false);
   await acceptResource('dev-admin',{...input,description:'Changed synthetic description requires another verification.'},id);
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
-  await verifyResource('dev-community',id,check);
+  await verify('dev-community',id,check);
   const past=new Date(Date.now()-1000);
   await database().updateTable('listing_state').set({next_review_due:past}).where('service_id','=',id).execute();
   await database().updateTable('work_item').set({due_at:past}).where('service_id','=',id).execute();
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
   expect((await verificationQueue('dev-community')).some(r=>r.id===id)).toBe(true);
  });
+ it('enforces category scope, releases old work and rejects stale verification versions',async()=>{
+  await approveContributor('dev-admin','dev-community','98101',['food']);
+  const id=await acceptResource('dev-admin',{...input,category:'health'});
+  await expect(verify('dev-community',id)).rejects.toThrow('Access denied');
+  const food=await acceptResource('dev-admin',input);
+  const old=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',food).executeTakeFirstOrThrow();
+  await acceptResource('dev-admin',input,food);
+  await expect(verifyResource('dev-community',food,{...check,revision_id:old.revision_id})).rejects.toThrow('resource changed');
+  await approveContributor('dev-admin','dev-community','98102',['food']);
+  expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',food).executeTakeFirstOrThrow()).assigned_to).toBeNull();
+  await approveContributor('dev-admin','dev-community','98101',['food']);
+ });
+ it('does not reassign a community-created listing to its original creator after admin edits',async()=>{
+  await database().insertInto('membership').values({user_id:'second-community',role:'community',display_name:'Second contributor',approved:true,postal_code:'98101',category_scope:['food']}).execute();
+  const id=await acceptResource('dev-community',input);
+  await acceptResource('dev-admin',input,id);
+  expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to).toBe('second-community');
+  await verify('second-community',id);
+ });
  it('rechecks approval and geography at mutation time',async()=>{
   const id=await acceptResource('dev-admin',{...input,postal_code:'98102'});
-  await expect(verifyResource('dev-community',id,check)).rejects.toThrow('Access denied');
+  await expect(verify('dev-community',id,check)).rejects.toThrow('Access denied');
   await database().updateTable('membership').set({approved:false}).where('user_id','=','dev-community').execute();
   await expect(verificationQueue('dev-community')).rejects.toThrow('Access denied');
  });

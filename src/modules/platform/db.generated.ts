@@ -49,12 +49,14 @@ export interface ListingState {
   checked_at: Timestamp | null;
   created_by: string;
   next_review_due: Timestamp | null;
+  revision_id: string;
   service_id: string;
   state: Generated<string>;
 }
 
 export interface Membership {
   approved: Generated<boolean>;
+  category_scope: Generated<string[]>;
   display_name: string;
   organization_id: string | null;
   postal_code: string | null;

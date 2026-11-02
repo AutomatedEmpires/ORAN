@@ -9,9 +9,9 @@ All tables live in the private oran schema. The Supabase Data API is not used. R
 | Tables | Contract |
 | --- | --- |
 | organization, service, service_area | One canonical resource model; the catalog acceptance service is the sole application writer |
-| membership | Server-trusted role, organization scope, community approval and ZIP scope; never trust a role submitted by the browser |
+| membership | Server-trusted role, organization scope, community approval, ZIP and explicit category grants; never trust a role submitted by the browser |
 | field_assertion, audit_event | Accepted resource input, prior service snapshot, actor/origin and privileged action history, committed atomically |
-| listing_state, verification_event, work_item | Unreviewed until evidence is recorded; methods/fields/evidence, 30-day review due date and scoped assignment; edits invalidate verification |
+| listing_state, verification_event, work_item | Unreviewed until evidence is recorded; current accepted revision, methods/fields/evidence, 30-day review due date and scoped assignment; edits invalidate verification and stale verification submissions are rejected |
 | personal_profile | Own-user ZIP and selected needs only, explicit consent timestamp, update and deletion; no sensitive expanded fields yet |
 | oran_meta.migration | Migration name and SHA-256; reject edits to already-applied migrations |
 
