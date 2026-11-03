@@ -1,0 +1,16 @@
+CREATE TABLE oran.account (user_id text PRIMARY KEY, display_name text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO oran.account(user_id, display_name) SELECT user_id, display_name FROM oran.membership;
+ALTER TABLE oran.field_assertion DROP CONSTRAINT field_assertion_actor_id_fkey, ADD CONSTRAINT field_assertion_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES oran.account(user_id);
+ALTER TABLE oran.listing_state DROP CONSTRAINT listing_state_created_by_fkey, ADD CONSTRAINT listing_state_created_by_fkey FOREIGN KEY (created_by) REFERENCES oran.account(user_id);
+ALTER TABLE oran.verification_event DROP CONSTRAINT verification_event_actor_id_fkey, ADD CONSTRAINT verification_event_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES oran.account(user_id);
+ALTER TABLE oran.work_item DROP CONSTRAINT work_item_assigned_to_fkey, ADD CONSTRAINT work_item_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES oran.account(user_id);
+ALTER TABLE oran.audit_event DROP CONSTRAINT audit_event_actor_id_fkey, ADD CONSTRAINT audit_event_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES oran.account(user_id);
+ALTER TABLE oran.personal_profile DROP CONSTRAINT personal_profile_user_id_fkey, ADD CONSTRAINT personal_profile_user_id_fkey FOREIGN KEY (user_id) REFERENCES oran.account(user_id);
+DELETE FROM oran.membership WHERE role = 'user';
+ALTER TABLE oran.membership DROP CONSTRAINT membership_pkey;
+ALTER TABLE oran.membership ADD COLUMN id uuid NOT NULL DEFAULT gen_random_uuid(), ADD PRIMARY KEY (id);
+ALTER TABLE oran.membership ADD CONSTRAINT membership_user_id_fkey FOREIGN KEY (user_id) REFERENCES oran.account(user_id);
+ALTER TABLE oran.membership ADD CONSTRAINT membership_role_not_user CHECK (role <> 'user');
+ALTER TABLE oran.membership ADD CONSTRAINT membership_unique_scope UNIQUE NULLS NOT DISTINCT (user_id, role, organization_id);
+ALTER TABLE oran.membership DROP COLUMN display_name;
+ALTER TABLE oran.account ENABLE ROW LEVEL SECURITY;

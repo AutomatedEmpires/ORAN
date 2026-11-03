@@ -25,6 +25,12 @@ export type MemberRole = "admin" | "community" | "organization" | "user";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface Account {
+  created_at: Generated<Timestamp>;
+  display_name: string;
+  user_id: string;
+}
+
 export interface Attribute {
   id: string;
   label: string | null;
@@ -73,7 +79,7 @@ export interface ListingState {
 export interface Membership {
   approved: Generated<boolean>;
   category_scope: Generated<string[]>;
-  display_name: string;
+  id: Generated<string>;
   organization_id: string | null;
   postal_code: string | null;
   role: MemberRole;
@@ -149,6 +155,7 @@ export interface WorkItem {
 }
 
 export interface DB {
+  account: Account;
   attribute: Attribute;
   audit_event: AuditEvent;
   category_display: CategoryDisplay;

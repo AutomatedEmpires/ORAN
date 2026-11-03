@@ -25,7 +25,7 @@ beforeAll(async()=>{
  if(!local){baseUrl=process.env.DATABASE_URL!;await sql`CREATE DATABASE ${sql.id(databaseName)}`.execute(database());createdDatabase=true;await closeDatabase();const isolated=new URL(baseUrl);isolated.pathname='/'+databaseName;process.env.DATABASE_URL=isolated.toString();}
  await migrate(process.env.DATABASE_URL!);await migrate(process.env.DATABASE_URL!);ready=true;
  await database().insertInto('organization').values({id:fixtureOrg,name:input.organization_name}).execute();
- for(const role of ['admin','organization','community','user'] as const){const id=role==='admin'?user.admin:role==='organization'?user.org:role==='community'?user.community:user.seeker;await database().insertInto('membership').values({user_id:id,role,display_name:'Synthetic '+role,organization_id:role==='organization'?fixtureOrg:null,approved:role!=='community',postal_code:role==='community'?'98101':null}).execute();}
+ for(const role of ['admin','organization','community','user'] as const){const id=role==='admin'?user.admin:role==='organization'?user.org:role==='community'?user.community:user.seeker;await database().insertInto('account').values({user_id:id,display_name:'Synthetic '+role}).execute();if(role==='user')continue;await database().insertInto('membership').values({user_id:id,role,organization_id:role==='organization'?fixtureOrg:null,approved:role!=='community',postal_code:role==='community'?'98101':null}).execute();}
 });
 afterAll(async()=>{
  try {if(ready&&roleCreated)await sql`DROP ROLE IF EXISTS ${sql.id(deniedRole)}`.execute(database());}
@@ -59,7 +59,8 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   const id=await acceptResource(user.org,input);
   const org=randomUUID();
   await database().insertInto('organization').values({id:org,name:'Other organization'}).execute();
-  await database().insertInto('membership').values({user_id:user.other,role:'organization',display_name:'Other staff',organization_id:org,approved:true}).execute();
+  await database().insertInto('account').values({user_id:user.other,display_name:'Other staff'}).execute();
+  await database().insertInto('membership').values({user_id:user.other,role:'organization',organization_id:org,approved:true}).execute();
   await expect(acceptResource(user.other,input,id)).rejects.toThrow('Access denied');
   await expect(verify(user.org,id,check)).rejects.toThrow('Access denied');
  });
@@ -93,7 +94,8 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await approveContributor(user.admin,user.community,'98101',['food']);
  });
  it('does not reassign a community-created listing to its original creator after admin edits',async()=>{
-  await database().insertInto('membership').values({user_id:user.second,role:'community',display_name:'Second contributor',approved:true,postal_code:'98101',category_scope:['food']}).execute();
+  await database().insertInto('account').values({user_id:user.second,display_name:'Second contributor'}).execute();
+  await database().insertInto('membership').values({user_id:user.second,role:'community',approved:true,postal_code:'98101',category_scope:['food']}).execute();
   const id=await acceptResource(user.community,input);
   await acceptResource(user.admin,input,id);
   expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to).toBe(user.second);
