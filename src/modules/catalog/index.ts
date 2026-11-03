@@ -14,17 +14,35 @@ export async function assertCategoryCodes(codes:readonly string[], db:Kysely<DB>
  if (found.length !== unique.length) throw new Error('Unknown category');
  return unique;
 }
+const categoryTaxonomyId='7f3c2a10-0c5e-4d8e-9a51-0a0000000001';
+const categoryInput=z.object({code:z.string().regex(/^[a-z][a-z0-9_]{1,39}$/,'Use lower-case letters, digits and underscores'),label_en:z.string().trim().min(2).max(60),label_es:z.string().trim().min(2).max(60)}).strict();
+export async function addCategory(adminId:string, raw:unknown):Promise<string> {
+ const input = categoryInput.parse(raw);
+ return database().transaction().execute(async trx=>{
+  await lockCatalog(trx);
+  if ((await actorFor(adminId,trx)).role !== 'admin') throw new Error('Access denied');
+  if (await trx.selectFrom('taxonomy_term').select('id').where('taxonomy_id','=',categoryTaxonomyId).where('code','=',input.code).executeTakeFirst()) throw new Error('Category already exists');
+  const id = randomUUID();
+  const last = await trx.selectFrom('category_display').select(sql<number>`COALESCE(MAX(sort_order),0)`.as('max')).executeTakeFirstOrThrow();
+  await trx.insertInto('taxonomy_term').values({id,taxonomy_id:categoryTaxonomyId,code:input.code,name:input.label_en}).execute();
+  await trx.insertInto('category_display').values({term_id:id,sort_order:Number(last.max)+1,label_en:input.label_en,label_es:input.label_es}).execute();
+  await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:adminId,action:'category.added',subject:input.code,detail:JSON.stringify({label_en:input.label_en,label_es:input.label_es})}).execute();
+  return input.code;
+ });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBuilder = ExpressionBuilder<any,any>;
 // A service has at least one category attribute whose code is in `codes`.
-function categoryAttributes(eb:ExpressionBuilder<any,any>, codes:readonly string[]) {
+function categoryAttributes(eb:AnyBuilder, codes:readonly string[]) {
  return eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').where('at.link_entity','=','service').where('at.link_type','=','category').where('tt.code','in',codes.length?codes:['__none__']);
 }
-function hasCategory(eb:ExpressionBuilder<any,any>, serviceRef:string, codes:readonly string[]) {
+function hasCategory(eb:AnyBuilder, serviceRef:string, codes:readonly string[]) {
  return eb.exists(categoryAttributes(eb,codes).select('at.id').whereRef('at.link_id','=',serviceRef));
 }
 export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:readonly string[]) {
  return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
 }
-const categoryCodes = (eb:ExpressionBuilder<any,any>) => eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category').as('categories');
+const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
 const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),

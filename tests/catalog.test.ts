@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
-import { listCategories,acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
@@ -168,5 +168,26 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(true);
   await verify(user.community,id);
   await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+});
+
+describe('adding categories',()=>{
+ const immigration={code:'immigration',label_en:'Immigration',label_es:'Inmigración'};
+ it('admins add a category that becomes selectable in both languages',async()=>{
+  await addCategory(user.admin,immigration);
+  const es=await listCategories('es');
+  expect(es[es.length-1]).toEqual({code:'immigration',label:'Inmigración'});
+  await expect(acceptResource(user.admin,{...input,categories:['immigration']})).resolves.toBeTruthy();
+  expect((await database().selectFrom('audit_event').select('id').where('action','=','category.added').where('subject','=','immigration').execute()).length).toBe(1);
+ });
+ it('rejects duplicate and malformed category codes',async()=>{
+  const before=(await listCategories('en')).length;
+  await expect(addCategory(user.admin,immigration)).rejects.toThrow('Category already exists');
+  await expect(addCategory(user.admin,{...immigration,code:'Bad Code'})).rejects.toThrow();
+  await expect(addCategory(user.admin,{code:'tiny_label',label_en:'X',label_es:'Y'})).rejects.toThrow();
+  expect((await listCategories('en')).length).toBe(before);
+ });
+ it('only admins add categories',async()=>{
+  await expect(addCategory(user.org,{...immigration,code:'org_attempt'})).rejects.toThrow('Access denied');
  });
 });
