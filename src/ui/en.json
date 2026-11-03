@@ -93,5 +93,6 @@
   "categoryAdded": "Category added.",
   "categoryExists": "That category code already exists.",
   "categoryCodeHint": "Lower-case letters, numbers and underscores, for example immigration.",
-  "chooseAtLeastOne": "Choose at least one."
+  "chooseAtLeastOne": "Choose at least one.",
+  "chooseOrganization": "Organization"
 }
