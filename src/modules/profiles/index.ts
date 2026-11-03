@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { database } from '@/modules/platform';
 import { actorFor } from '@/modules/identity';
-import { assertCategoryCodes } from '@/modules/catalog';
-const input = z.object({postal_code:z.string().regex(/^[0-9]{5}$/),needs:z.array(z.string()).min(1).max(10),consent:z.literal(true)});
+import { assertCategoryCodes,categoryCodeList } from '@/modules/catalog';
+const input = z.object({postal_code:z.string().regex(/^[0-9]{5}$/),needs:categoryCodeList,consent:z.literal(true)});
 export async function saveProfile(userId:string, raw:unknown) {
  await actorFor(userId);
  const data = input.parse(raw);

@@ -16,7 +16,7 @@ export async function resourceAction(_:ActionState,form:FormData):Promise<Action
 export async function addCategoryAction(_:ActionState,form:FormData):Promise<ActionState>{
  const actor=await requireActor(),{text:t}=await messages();
  try {await addCategory(actor.user_id,values(form,['code','label_en','label_es']));refresh();return {message:t.categoryAdded,ok:true};}
- catch{return {message:t.invalid};}
+ catch(error){return {message:error instanceof Error&&error.message==='Category already exists'?t.categoryExists:t.invalid};}
 }
 export async function verificationAction(_:ActionState,form:FormData):Promise<ActionState>{
  const actor=await requireActor(),{text:t}=await messages();

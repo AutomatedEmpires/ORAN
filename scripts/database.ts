@@ -7,11 +7,13 @@ export async function migrate(url: string, options: { until?: string } = {}) {
  const client = new Client({ connectionString: parsed.toString(), ssl: local ? false : {rejectUnauthorized:true} });
  await client.connect();
  try {
+  const files = (await readdir('supabase/migrations')).filter(n => n.endsWith('.sql')).sort();
+  if (options.until && !files.includes(options.until)) throw new Error('Unknown migration: ' + options.until);
   await client.query('CREATE SCHEMA IF NOT EXISTS oran_meta');
   await client.query('CREATE TABLE IF NOT EXISTS oran_meta.migration (name text PRIMARY KEY, hash text NOT NULL)');
   await client.query('BEGIN');
   await client.query("SELECT pg_advisory_xact_lock(729194)");
-  for (const name of (await readdir('supabase/migrations')).filter(n => n.endsWith('.sql')).sort()) {
+  for (const name of files) {
    const text = await readFile('supabase/migrations/' + name, 'utf8');
    const hash = createHash('sha256').update(text).digest('hex');
    const row = await client.query<{hash: string}>('SELECT hash FROM oran_meta.migration WHERE name=$1',[name]);

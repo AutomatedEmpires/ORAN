@@ -2,7 +2,10 @@
 
 The initial evolving subset uses HSDS 3.3.1 organization, service and service_area names and field semantics. Checked against tagged schemas before implementation:
 [service](https://github.com/openreferral/specification/blob/3.3.1/schema/service.json),
-[service_area](https://github.com/openreferral/specification/blob/3.3.1/schema/service_area.json).
+[service_area](https://github.com/openreferral/specification/blob/3.3.1/schema/service_area.json),
+[taxonomy](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy.json),
+[taxonomy_term](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy_term.json),
+[attribute](https://github.com/openreferral/specification/blob/3.3.1/schema/attribute.json).
 
 All tables live in the private oran schema. The Supabase Data API is not used. RLS is enabled and no browser grants are made. The bootstrap uses an isolated owner connection for development/tests; a least-privilege runtime role, release migrations and deployment review are required before production.
 

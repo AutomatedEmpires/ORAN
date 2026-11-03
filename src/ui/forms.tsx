@@ -9,9 +9,10 @@ export function ActionForm({action,children,label}:{action:Action;children:React
  return <form action={submit}>{children}<button disabled={pending}>{pending?t.pending:label}</button>{state.message?<p role="status" className={state.ok?'':'error'}>{state.message}</p>:null}</form>;
 }
 type Resource={id?:string;name?:string;description?:string;organization_name?:string;categories?:string[];postal_code?:string;eligibility_description?:string;application_process?:string;url?:string|null};
-export function CategoryChecks({categories,name,selected=[]}:{categories:Category[];name:string;selected?:readonly string[]}){
+export function CategoryChecks({categories,name,selected=[],required=false}:{categories:Category[];name:string;selected?:readonly string[];required?:boolean}){
  const t=useMessages();
- return <fieldset><legend>{t.categories}</legend>{categories.map(c=><label key={c.code}><input type="checkbox" name={name} value={c.code} defaultChecked={selected.includes(c.code)}/>{c.label}</label>)}</fieldset>;
+ const hint=useId();
+ return <fieldset aria-describedby={required?hint:undefined}><legend>{t.categories}</legend>{required?<p id={hint}>{t.chooseAtLeastOne}</p>:null}{categories.map(c=><label key={c.code}><input type="checkbox" name={name} value={c.code} defaultChecked={selected.includes(c.code)}/>{c.label}</label>)}</fieldset>;
 }
 export function ResourceForm({resource={},lockOrganizationName=false,categories}:{resource?:Resource;lockOrganizationName?:boolean;categories:Category[]}){
  const t=useMessages(),prefix=useId();
@@ -19,18 +20,18 @@ export function ResourceForm({resource={},lockOrganizationName=false,categories}
  return <ActionForm action={resourceAction} label={resource.id?t.save:t.create}>
   <input type="hidden" name="id" value={resource.id??''}/>
   {fields.map(([name,label,min,max])=><div key={name}><label htmlFor={prefix+name}>{label}</label><input id={prefix+name} name={name} defaultValue={resource[name]??''} readOnly={name==='organization_name'&&(lockOrganizationName||Boolean(resource.id))} required={name!=='url'} type={name==='url'?'url':'text'} minLength={min} maxLength={max} pattern={name==='postal_code'?'[0-9]{5}':undefined}/></div>)}
-  <CategoryChecks categories={categories} name="categories" selected={resource.categories}/>
+  <CategoryChecks categories={categories} name="categories" selected={resource.categories} required/>
   {([['description',t.description,10,3000],['eligibility_description',t.eligibility,3,2000],['application_process',t.intake,3,2000],['source_note',t.source,10,2000]] as const).map(([name,label,min,max])=><div key={name}><label htmlFor={prefix+name}>{label}</label><textarea id={prefix+name} name={name} required minLength={min} maxLength={max} defaultValue={name==='source_note'?'':resource[name]??''}/></div>)}
  </ActionForm>;
 }
 export function ProfileForm({profile,categories}:{profile?:{postal_code:string;needs:string[]};categories:Category[]}){
  const t=useMessages();
  return <ActionForm action={profileAction} label={t.save}><label htmlFor="profile-zip">{t.zip}</label><input id="profile-zip" name="postal_code" required pattern="[0-9]{5}" defaultValue={profile?.postal_code??''}/>
-  <CategoryChecks categories={categories} name="needs" selected={profile?.needs}/>
+  <CategoryChecks categories={categories} name="needs" selected={profile?.needs} required/>
   <label><input type="checkbox" name="consent" required/>{t.consent}</label>
  </ActionForm>;
 }
 export function AddCategoryForm(){
- const t=useMessages(),prefix=useId();
- return <ActionForm action={addCategoryAction} label={t.addCategory}>{([['code',t.categoryCode,2,40],['label_en',t.labelEnglish,2,60],['label_es',t.labelSpanish,2,60]] as const).map(([name,label,min,max])=><div key={name}><label htmlFor={prefix+name}>{label}</label><input id={prefix+name} name={name} required minLength={min} maxLength={max} pattern={name==='code'?'[a-z][a-z0-9_]{1,39}':undefined}/></div>)}</ActionForm>;
+ const t=useMessages(),prefix=useId(),hint=prefix+'hint';
+ return <ActionForm action={addCategoryAction} label={t.addCategory}>{([['code',t.categoryCode,2,40],['label_en',t.labelEnglish,2,60],['label_es',t.labelSpanish,2,60]] as const).map(([name,label,min,max])=><div key={name}><label htmlFor={prefix+name}>{label}</label><input id={prefix+name} name={name} required minLength={min} maxLength={max} pattern={name==='code'?'[a-z][a-z0-9_]{1,39}':undefined} aria-describedby={name==='code'?hint:undefined}/>{name==='code'?<p id={hint}>{t.categoryCodeHint}</p>:null}</div>)}</ActionForm>;
 }

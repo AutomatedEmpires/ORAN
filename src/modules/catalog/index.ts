@@ -15,6 +15,7 @@ export async function assertCategoryCodes(codes:readonly string[], db:Kysely<DB>
  return unique;
 }
 const categoryTaxonomyId='7f3c2a10-0c5e-4d8e-9a51-0a0000000001';
+export const categoryCodeList=z.array(z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)).min(1).max(50);
 const categoryInput=z.object({code:z.string().regex(/^[a-z][a-z0-9_]{1,39}$/,'Use lower-case letters, digits and underscores'),label_en:z.string().trim().min(2).max(60),label_es:z.string().trim().min(2).max(60)}).strict();
 export async function addCategory(adminId:string, raw:unknown):Promise<string> {
  const input = categoryInput.parse(raw);
@@ -46,7 +47,7 @@ const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute
 const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
- organization_name:z.string().trim().min(2).max(150), categories:z.array(z.string()).min(1).max(10),
+ organization_name:z.string().trim().min(2).max(150), categories:categoryCodeList,
  postal_code:z.string().regex(/^[0-9]{5}$/, 'Use a five-digit ZIP code'),
  eligibility_description:z.string().trim().min(3).max(2000), application_process:z.string().trim().min(3).max(2000),
  url:optionalUrl, source_note:z.string().trim().min(10).max(2000),

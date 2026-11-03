@@ -39,6 +39,26 @@ describe('taxonomy migration',()=>{
    expect((await client.query('SELECT needs FROM oran.personal_profile WHERE user_id=$1',[seeker])).rows[0].needs).toEqual(['food']);
   });
  },120000);
+ it('copies categories written after the first migration before dropping the column',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103090000_taxonomy_categories.sql'});
+   const org=randomUUID(),s=randomUUID(),a=randomUUID(),admin='late-admin';
+   await client.query("INSERT INTO oran.membership(user_id,display_name,role,approved) VALUES ($1,$1,'admin',true)",[admin]);
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Late org')",[org]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$2,'Late service','Synthetic')",[s,org]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'Area','98101')",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status) VALUES ($1,$2,$3,'admin','{}','accepted')",[a,s,admin]);
+   await client.query("INSERT INTO oran.listing_state(service_id,category,created_by,revision_id) VALUES ($1,'health',$2,$3)",[s,admin,a]);
+   await migrate(url);
+   const r=await client.query('SELECT t.code FROM oran.attribute a JOIN oran.taxonomy_term t ON t.id=a.taxonomy_term_id WHERE a.link_id=$1',[s]);
+   expect(r.rows.map(x=>x.code)).toEqual(['health']);
+  });
+ },120000);
+ it('rejects an unknown migration target',async()=>{
+  await withDatabase(async(_,url)=>{
+   await expect(migrate(url,{until:'no_such_migration.sql'})).rejects.toThrow('Unknown migration: no_such_migration.sql');
+  });
+ },120000);
  it('enables row-level security on every oran table',async()=>{
   await withDatabase(async(client,url)=>{
    await migrate(url);
