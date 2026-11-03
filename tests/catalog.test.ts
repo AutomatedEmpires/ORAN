@@ -12,7 +12,7 @@ const input={name:'Synthetic food program',description:'Synthetic test record, n
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 const run=randomUUID().replaceAll('-','');
-const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual'};
+const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual',admin2:'test-'+run+'-admin2'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
 const original={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
 function restoreEnvironment(){for(const [key,value] of Object.entries(original)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
@@ -104,7 +104,7 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  it('keeps assignments within current scope when approval and edits race',async()=>{
   const id=await acceptResource(user.admin,input);
   await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,postal_code:'98102'},id)]);
-  const item=await database().selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('membership as m','m.user_id','w.assigned_to').select(['m.postal_code','a.extent','m.category_scope']).where('w.service_id','=',id).executeTakeFirstOrThrow();
+  const item=await database().selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('membership as m','m.user_id','w.assigned_to').select(['m.postal_code','a.extent','m.category_scope']).where('m.role','=','community').where('w.service_id','=',id).executeTakeFirstOrThrow();
   expect(item.postal_code).toBe(item.extent);expect(item.category_scope).toContain('food');
   await approveContributor(user.admin,user.community,'98101',['food']);
  });
@@ -210,6 +210,7 @@ describe('accounts with several memberships',()=>{
   expect(await assignee(id)).toBe(user.dual);
   expect((await verificationQueue(user.dual)).some(r=>r.id===id)).toBe(true);
   await verify(user.dual,id);
+  expect((await database().selectFrom('audit_event').select('detail').where('subject','=',id).where('action','=','resource.verified').executeTakeFirstOrThrow()).detail).toMatchObject({capacity:'community'});
   await approveContributor(user.admin,user.community,'98101',['food']);
  });
  it('staff never verify their own organization\'s listings',async()=>{
@@ -250,5 +251,39 @@ describe('accounts with several memberships',()=>{
    const matched=await acceptResource(user.admin,input);
    expect((await database().selectFrom('service').select('organization_id').where('id','=',matched).executeTakeFirstOrThrow()).organization_id).toBe(fixtureOrg);
   } finally {await database().deleteFrom('membership').where('id','=',membership).execute();}
+ });
+ it('admins who are also staff never verify their own organization\'s listings',async()=>{
+  const added:string[]=[];
+  try {
+   added.push((await database().insertInto('membership').values({user_id:user.admin,role:'organization',organization_id:fixtureOrg,approved:true}).returning('id').executeTakeFirstOrThrow()).id);
+   await database().insertInto('account').values({user_id:user.admin2,display_name:'Synthetic unaffiliated admin'}).execute();
+   added.push((await database().insertInto('membership').values({user_id:user.admin2,role:'admin',approved:true}).returning('id').executeTakeFirstOrThrow()).id);
+   const id=await acceptResource(user.admin,{...input,organization_id:fixtureOrg});
+   expect((await verificationQueue(user.admin)).some(r=>r.id===id)).toBe(false);
+   await expect(verify(user.admin,id)).rejects.toThrow('Access denied');
+   expect((await verificationQueue(user.admin2)).some(r=>r.id===id)).toBe(true);
+   await verify(user.admin2,id);
+   // Filing for their own organization is an organization assertion, even for an admin.
+   expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('organization');
+   expect((await database().selectFrom('audit_event').select('detail').where('subject','=',id).where('action','=','resource.created').executeTakeFirstOrThrow()).detail).toEqual({asserted_by:'organization'});
+   expect((await database().selectFrom('audit_event').select('detail').where('subject','=',id).where('action','=','resource.verified').executeTakeFirstOrThrow()).detail).toMatchObject({capacity:'admin'});
+  } finally {if(added.length)await database().deleteFrom('membership').where('id','in',added).execute();}
+ });
+ it('pending staff memberships also block assignment and verification',async()=>{
+  let pending:string|undefined,id:string|undefined;
+  try {
+   pending=(await database().insertInto('membership').values({user_id:user.community,role:'organization',organization_id:fixtureOrg,approved:false}).returning('id').executeTakeFirstOrThrow()).id;
+   id=await acceptResource(user.org,input);
+   expect(await assignee(id)).not.toBe(user.community);
+   // An assignment made before the membership request stays blocked, and re-approval releases it.
+   await database().updateTable('work_item').set({assigned_to:user.community}).where('service_id','=',id).execute();
+   expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(false);
+   await expect(verify(user.community,id)).rejects.toThrow('Access denied');
+   await approveContributor(user.admin,user.community,'98101',['food']);
+   expect(await assignee(id)).not.toBe(user.community);
+  } finally {
+   if(id)await database().updateTable('work_item').set({assigned_to:null}).where('service_id','=',id).where('assigned_to','=',user.community).execute();
+   if(pending)await database().deleteFrom('membership').where('id','=',pending).execute();
+  }
  });
 });

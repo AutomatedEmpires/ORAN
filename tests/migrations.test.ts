@@ -86,4 +86,13 @@ describe('taxonomy migration',()=>{
    await expect(client.query("INSERT INTO oran.taxonomy_term(id,taxonomy_id,code,name) VALUES ($1,$2,'Bad Code','Bad')",[randomUUID(),tax])).rejects.toThrow();
   });
  },120000);
+ it('rejects a community membership scoped to an organization',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url);
+   const org=randomUUID();
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Scoped org')",[org]);
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('c1','c1')");
+   await expect(client.query("INSERT INTO oran.membership(user_id,role,organization_id) VALUES ('c1','community',$1)",[org])).rejects.toThrow('membership_organization_scope');
+  });
+ },120000);
 });

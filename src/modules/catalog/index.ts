@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql,type Kysely,type ExpressionBuilder } from 'kysely';
 import { z } from 'zod';
 import { database, lockCatalog, type DB } from '@/modules/platform';
-import { actorFor, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
+import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
 export type Category = { code: string; label: string };
 export async function listCategories(locale:'en'|'es', db:Kysely<DB> = database()):Promise<Category[]> {
  const rows = await db.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select(['t.code','d.label_en','d.label_es']).orderBy('d.sort_order').execute();
@@ -71,8 +71,8 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
    if (orgs.length === 1 && matches.length === 1) organizationId = matches[0];
    else if (matches.length || !(admin || inScope)) throw new Error(orgs.length === 1 ? 'Organization name changes require a separate organization update' : 'Choose an organization');
   }
-  // The capacity used; with no organization, a verifier files only inside their area and categories.
-  const capacity = admin ? 'admin' : organizationId ? 'organization' : 'community';
+  // The capacity used: staff filing for their own organization act for it, even when also admins; with no organization, a verifier files only inside their area and categories.
+  const capacity = organizationId && orgs.includes(organizationId) ? 'organization' : admin ? 'admin' : 'community';
   if (capacity === 'community' && !inScope) throw new Error('Access denied');
   const previousState = existing ? await trx.selectFrom('listing_state').select('created_by').where('service_id','=',existing.id).executeTakeFirstOrThrow() : null;
   if (!organizationId) {
@@ -93,9 +93,9 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   await trx.deleteFrom('attribute').where('link_id','=',id).where('link_entity','=','service').where('link_type','=','category').where('taxonomy_term_id','not in',terms.map(t=>t.id)).execute();
   await trx.insertInto('attribute').values(terms.map(t=>({id:randomUUID(),link_id:id,link_entity:'service',link_type:'category',taxonomy_term_id:t.id}))).onConflict(o=>o.columns(['link_id','taxonomy_term_id']).doNothing()).execute();
   await trx.insertInto('listing_state').values({service_id:id,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
-  // Ownership is never independent verification: skip candidates who are approved staff of this organization.
+  // Ownership is never independent verification: skip candidates affiliated with this organization, approved or pending.
   const verifier = await trx.selectFrom('membership as m').select('m.user_id').where('m.role','=','community').where('m.approved','=',true).where('m.postal_code','=',input.postal_code).where(sql<boolean>`m.category_scope && ${codes}::text[]`).where('m.user_id','!=',actor.user_id).where('m.user_id','!=',previousState?.created_by ?? actor.user_id)
-   .where(eb=>eb.not(eb.exists(eb.selectFrom('membership as staff').select('staff.id').whereRef('staff.user_id','=','m.user_id').where('staff.role','=','organization').where('staff.approved','=',true).where('staff.organization_id','=',organizationId)))).orderBy('m.user_id').executeTakeFirst();
+   .where(eb=>eb.not(eb.exists(eb.selectFrom('membership as staff').select('staff.id').whereRef('staff.user_id','=','m.user_id').where('staff.role','=','organization').where('staff.organization_id','=',organizationId)))).orderBy('m.user_id').executeTakeFirst();
   await trx.insertInto('work_item').values({service_id:id,assigned_to:verifier?.user_id ?? null}).onConflict(o=>o.column('service_id').doUpdateSet({assigned_to:verifier?.user_id ?? null,due_at:new Date()})).execute();
   await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:actor.user_id,action:existing?'resource.updated':'resource.created',subject:id,detail:JSON.stringify({asserted_by:capacity})}).execute();
   return id;
@@ -120,15 +120,15 @@ export async function ownedResources(userId:string,resourceId?:string) {
 }
 export async function ownedResource(userId:string,resourceId:string){return (await ownedResources(userId,resourceId))[0];}
 export async function verificationQueue(userId:string) {
- const actor = await actorFor(userId);
+ const actor = await actorFor(userId), affiliated = affiliatedOrganizationIds(actor);
  let query = database().selectFrom('work_item as w').innerJoin('service as s','s.id','w.service_id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('listing_state as l','l.service_id','s.id').select(['s.id','s.name','s.description','s.eligibility_description','s.application_process','s.url','w.due_at','a.extent as postal_code','l.revision_id']).where('w.due_at','<=',new Date());
  if (!isAdmin(actor)) {
-  const scope = verifierScope(actor), orgs = organizationIds(actor);
+  const scope = verifierScope(actor);
   if (!scope) throw new Error('Access denied');
   query = query.where('w.assigned_to','=',actor.user_id).where('a.extent','=',scope.postal_code).where(eb=>hasCategory(eb,'s.id',scope.category_scope));
-  // Ownership is never independent verification.
-  if (orgs.length) query = query.where('s.organization_id','not in',orgs);
  }
+ // Ownership is never independent verification, for admins too: hide every affiliated organization's work.
+ if (affiliated.length) query = query.where('s.organization_id','not in',affiliated);
  return query.orderBy('w.due_at').limit(100).execute();
 }
 export async function verifyResource(userId:string, serviceId:string, raw:unknown) {
@@ -138,16 +138,16 @@ export async function verifyResource(userId:string, serviceId:string, raw:unknow
   const actor = await actorFor(userId,trx);
   const service = await trx.selectFrom('service').select('organization_id').where('id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
   const item = await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
-  const scope = verifierScope(actor);
-  // A verifier checks only assigned, in-scope work they did not create, for an organization they do not staff.
-  const permitted = isAdmin(actor) || (!!scope && item.assigned_to === actor.user_id && item.extent === scope.postal_code && item.created_by !== actor.user_id && !organizationIds(actor).includes(service.organization_id) && await serviceHasCategory(trx,serviceId,scope.category_scope));
+  const scope = verifierScope(actor), admin = isAdmin(actor);
+  // Nobody, admins included, verifies an organization they are affiliated with; a verifier checks only assigned, in-scope work they did not create.
+  const permitted = !affiliatedOrganizationIds(actor).includes(service.organization_id) && (admin || (!!scope && item.assigned_to === actor.user_id && item.extent === scope.postal_code && item.created_by !== actor.user_id && await serviceHasCategory(trx,serviceId,scope.category_scope)));
   if (!permitted) throw new Error('Access denied');
   if (item.revision_id !== input.revision_id) throw new Error('The resource changed; review the current version');
   const now = new Date(), due = new Date(now.getTime()+30*86400000);
   await trx.insertInto('verification_event').values({id:randomUUID(),service_id:serviceId,actor_id:userId,method:input.method,evidence:input.evidence,fields_checked:input.fields_checked,expires_at:due}).execute();
   await trx.updateTable('listing_state').set({state:'checked',checked_at:now,next_review_due:due}).where('service_id','=',serviceId).execute();
   await trx.updateTable('work_item').set({due_at:due}).where('service_id','=',serviceId).execute();
-  await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:userId,action:'resource.verified',subject:serviceId,detail:JSON.stringify({method:input.method,fields:input.fields_checked,revision_id:input.revision_id})}).execute();
+  await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:userId,action:'resource.verified',subject:serviceId,detail:JSON.stringify({method:input.method,fields:input.fields_checked,revision_id:input.revision_id,capacity:admin?'admin':'community'})}).execute();
  });
 }
 
