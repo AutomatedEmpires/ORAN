@@ -4,16 +4,18 @@ import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
-import { acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
-const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',category:'food',postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_note:'Synthetic test fixture, permitted for tests only'};
+const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_note:'Synthetic test fixture, permitted for tests only'};
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
+const original={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
+function restoreEnvironment(){for(const [key,value] of Object.entries(original)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 let ready=false,baseUrl:string|undefined,createdDatabase=false,roleCreated=false;
 const databaseName='oran_test_'+run;
 beforeAll(async()=>{
@@ -27,7 +29,7 @@ beforeAll(async()=>{
 });
 afterAll(async()=>{
  try {if(ready&&roleCreated)await sql`DROP ROLE IF EXISTS ${sql.id(deniedRole)}`.execute(database());}
- finally {await closeDatabase();if(createdDatabase&&baseUrl){process.env.DATABASE_URL=baseUrl;try{await sql`DROP DATABASE ${sql.id(databaseName)}`.execute(database());}finally{await closeDatabase();}}await local?.close();}
+ finally {await closeDatabase();if(createdDatabase&&baseUrl){process.env.DATABASE_URL=baseUrl;try{await sql`DROP DATABASE ${sql.id(databaseName)}`.execute(database());}finally{await closeDatabase();}}await local?.close();restoreEnvironment();}
 });
 describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  it('has PostGIS and denies a role without schema grants',async()=>{
@@ -80,7 +82,7 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  });
  it('enforces category scope, releases old work and rejects stale verification versions',async()=>{
   await approveContributor(user.admin,user.community,'98101',['food']);
-  const id=await acceptResource(user.admin,{...input,category:'health'});
+  const id=await acceptResource(user.admin,{...input,categories:['health']});
   await expect(verify(user.community,id)).rejects.toThrow('Access denied');
   const food=await acceptResource(user.admin,input);
   const old=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',food).executeTakeFirstOrThrow();
@@ -111,7 +113,7 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await expect(verificationQueue(user.community)).rejects.toThrow('Access denied');
  });
  it('filters matching and authorized editing before the 100-row result cap',async()=>{
-  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,postal_code:'98102',category:'work'});await verify(user.admin,id);}
+  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,postal_code:'98102',categories:['work']});await verify(user.admin,id);}
   const id=await acceptResource(user.org,{...input,name:'ZZZ matching target'});await verify(user.admin,id);
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
   expect((await publicResources({postal_code:'98101',needs:['food']})).some(r=>r.id===id)).toBe(true);
@@ -127,5 +129,65 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   expect(await profileFor(user.admin)).toBeUndefined();
   await deleteProfile(user.seeker);
   expect(await profileFor(user.seeker)).toBeUndefined();
+ });
+
+ it('publishes a multi-category resource under each of its needs',async()=>{
+  const id=await acceptResource(user.admin,{...input,categories:['food','childcare_family']});await verify(user.admin,id);
+  expect((await publicResources({postal_code:'98101',needs:['childcare_family']})).find(r=>r.id===id)?.categories).toEqual(['food','childcare_family']);
+  expect((await publicResources({postal_code:'98101',needs:['legal']})).some(r=>r.id===id)).toBe(false);
+ });
+ it('rejects unknown category codes',async()=>{
+  await expect(acceptResource(user.admin,{...input,categories:['not_a_category']})).rejects.toThrow('Unknown category');
+ });
+ it('rejects profile needs that are not categories',async()=>{
+  await expect(saveProfile(user.seeker,{postal_code:'98101',needs:['other'],consent:true})).rejects.toThrow('Unknown category');
+ });
+ it('community contributors file resources only inside their category grants',async()=>{
+  await approveContributor(user.admin,user.community,'98101',['food']);
+  await expect(acceptResource(user.community,{...input,categories:['food','health']})).rejects.toThrow('Access denied');
+ });
+ it('lists categories in display order for each language',async()=>{
+  const es=await listCategories('es');
+  expect(es).toHaveLength(10);expect(es[0]).toEqual({code:'food',label:'Alimentos'});expect(es[1]).toEqual({code:'housing_shelter',label:'Vivienda y refugio'});
+ });
+
+ it('replaces a resource\'s categories on edit and drops the removed ones',async()=>{
+  const id=await acceptResource(user.admin,{...input,categories:['food','health']});
+  await acceptResource(user.admin,{...input,categories:['food']},id);
+  expect((await ownedResource(user.admin,id))?.categories).toEqual(['food']);
+  await acceptResource(user.admin,{...input,categories:['health','legal']},id);
+  expect((await ownedResource(user.admin,id))?.categories).toEqual(['health','legal']);
+ });
+ it('rejects unknown codes in a contributor grant',async()=>{
+  await expect(approveContributor(user.admin,user.community,'98101',['food','not_a_category'])).rejects.toThrow('Unknown category');
+ });
+ it('routes a multi-category listing to a verifier whose scope overlaps one code',async()=>{
+  await approveContributor(user.admin,user.community,'98101',['health']);
+  const id=await acceptResource(user.admin,{...input,categories:['food','health']});
+  expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to).toBe(user.community);
+  expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(true);
+  await verify(user.community,id);
+  await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+});
+
+describe('adding categories',()=>{
+ const immigration={code:'immigration',label_en:'Immigration',label_es:'Inmigración'};
+ it('admins add a category that becomes selectable in both languages',async()=>{
+  await addCategory(user.admin,immigration);
+  const es=await listCategories('es');
+  expect(es[es.length-1]).toEqual({code:'immigration',label:'Inmigración'});
+  await expect(acceptResource(user.admin,{...input,categories:['immigration']})).resolves.toBeTruthy();
+  expect((await database().selectFrom('audit_event').select('id').where('action','=','category.added').where('subject','=','immigration').execute()).length).toBe(1);
+ });
+ it('rejects duplicate and malformed category codes',async()=>{
+  const before=(await listCategories('en')).length;
+  await expect(addCategory(user.admin,immigration)).rejects.toThrow('Category already exists');
+  await expect(addCategory(user.admin,{...immigration,code:'Bad Code'})).rejects.toThrow();
+  await expect(addCategory(user.admin,{code:'tiny_label',label_en:'X',label_es:'Y'})).rejects.toThrow();
+  expect((await listCategories('en')).length).toBe(before);
+ });
+ it('only admins add categories',async()=>{
+  await expect(addCategory(user.org,{...immigration,code:'org_attempt'})).rejects.toThrow('Access denied');
  });
 });

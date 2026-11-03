@@ -2,7 +2,10 @@
 
 The initial evolving subset uses HSDS 3.3.1 organization, service and service_area names and field semantics. Checked against tagged schemas before implementation:
 [service](https://github.com/openreferral/specification/blob/3.3.1/schema/service.json),
-[service_area](https://github.com/openreferral/specification/blob/3.3.1/schema/service_area.json).
+[service_area](https://github.com/openreferral/specification/blob/3.3.1/schema/service_area.json),
+[taxonomy](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy.json),
+[taxonomy_term](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy_term.json),
+[attribute](https://github.com/openreferral/specification/blob/3.3.1/schema/attribute.json).
 
 All tables live in the private oran schema. The Supabase Data API is not used. RLS is enabled and no browser grants are made. The bootstrap uses an isolated owner connection for development/tests; a least-privilege runtime role, release migrations and deployment review are required before production.
 
@@ -13,6 +16,7 @@ All tables live in the private oran schema. The Supabase Data API is not used. R
 | field_assertion, audit_event | Accepted resource input, prior service snapshot, actor/origin and privileged action history, committed atomically |
 | listing_state, verification_event, work_item | Unreviewed until evidence is recorded; current accepted revision, methods/fields/evidence, 30-day review due date and scoped assignment; edits invalidate verification and stale verification submissions are rejected |
 | personal_profile | Own-user ZIP and selected needs only, explicit consent timestamp, update and deletion; no sensitive expanded fields yet |
+| taxonomy, taxonomy_term, category_display, attribute | HSDS 3.3.1 taxonomy tables hold the ten ORAN categories as data; category_display is the ORAN presentation extension (sort order, English and draft Spanish labels). Service categories are attribute rows; the catalog acceptance service is the sole application writer |
 | oran_meta.migration | Migration name and SHA-256; reject edits to already-applied migrations |
 
 ZIP coverage is a stated text service area, not an inferred polygon or a capacity claim. Public discovery includes only active records with current checks. Expired checks leave public discovery and reappear in the due-date queue. Reminder delivery, full risk tiers, claims, external imports and complete HSDS export validation remain future work.

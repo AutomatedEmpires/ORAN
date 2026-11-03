@@ -76,12 +76,6 @@
   "noMatches": "No currently checked resources match your selected needs and ZIP code.",
   "needReason": "Matches a support need you selected.",
   "zipReason": "Published coverage includes your ZIP code.",
-  "food": "Food",
-  "housing": "Housing",
-  "health": "Health",
-  "work": "Work",
-  "legal": "Legal support",
-  "other": "Other support",
   "applyCommunity": "Apply to contribute",
   "applyOrganization": "Register an organization",
   "applied": "Your community application was submitted.",
@@ -90,5 +84,14 @@
   "organizationIntro": "Create and maintain your organization’s resources.",
   "returnResources": "Return to resources",
   "dataSaved": "Saved.",
-  "languageReview": "Spanish text is a development draft."
+  "languageReview": "Spanish text is a development draft.",
+  "categories": "Support categories",
+  "addCategory": "Add a category",
+  "categoryCode": "Category code",
+  "labelEnglish": "English name",
+  "labelSpanish": "Spanish name",
+  "categoryAdded": "Category added.",
+  "categoryExists": "That category code already exists.",
+  "categoryCodeHint": "Lower-case letters, numbers and underscores, for example immigration.",
+  "chooseAtLeastOne": "Choose at least one."
 }
