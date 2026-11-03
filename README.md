@@ -72,3 +72,7 @@ For dedicated remote development, copy .env.example to .env.local, configure an 
 | [Decisions](docs/DECISIONS.md) | Recorded direction and unresolved founder decisions |
 | [Architecture](docs/ARCHITECTURE.md) | Dependencies, routes, identity and verification status |
 | [Data model](docs/DATA_MODEL.md) | Implemented schema, provenance and environment contracts |
+
+## License
+
+ORAN's code is licensed under the [GNU Affero General Public License v3.0](LICENSE) (decision D16). ORAN-originated data is intended for release under CC BY 4.0 (D12); no data has been released yet.

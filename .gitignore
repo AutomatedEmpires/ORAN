@@ -12,3 +12,4 @@ playwright-report/
 *.log
 supabase/.temp/
 next-env.d.ts
+.claude/worktrees/
