@@ -150,4 +150,23 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   const es=await listCategories('es');
   expect(es).toHaveLength(10);expect(es[0]).toEqual({code:'food',label:'Alimentos'});expect(es[1]).toEqual({code:'housing_shelter',label:'Vivienda y refugio'});
  });
+
+ it('replaces a resource\'s categories on edit and drops the removed ones',async()=>{
+  const id=await acceptResource(user.admin,{...input,categories:['food','health']});
+  await acceptResource(user.admin,{...input,categories:['food']},id);
+  expect((await ownedResource(user.admin,id))?.categories).toEqual(['food']);
+  await acceptResource(user.admin,{...input,categories:['health','legal']},id);
+  expect((await ownedResource(user.admin,id))?.categories).toEqual(['health','legal']);
+ });
+ it('rejects unknown codes in a contributor grant',async()=>{
+  await expect(approveContributor(user.admin,user.community,'98101',['food','not_a_category'])).rejects.toThrow('Unknown category');
+ });
+ it('routes a multi-category listing to a verifier whose scope overlaps one code',async()=>{
+  await approveContributor(user.admin,user.community,'98101',['health']);
+  const id=await acceptResource(user.admin,{...input,categories:['food','health']});
+  expect((await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to).toBe(user.community);
+  expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(true);
+  await verify(user.community,id);
+  await approveContributor(user.admin,user.community,'98101',['food']);
+ });
 });

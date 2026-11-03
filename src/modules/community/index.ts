@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { database,lockCatalog } from '@/modules/platform';
-import { assertCategoryCodes } from '@/modules/catalog';
+import { assertCategoryCodes,serviceHasCategory } from '@/modules/catalog';
 import { actorFor } from '@/modules/identity';
 export async function members(userId:string) {
  if((await actorFor(userId)).role!=='admin')throw new Error('Access denied');
@@ -20,7 +20,7 @@ export async function approveContributor(adminId:string,userId:string,postalCode
    // All acceptance/verification/assignment mutations lock the service first.
    await trx.selectFrom('service').select('id').where('id','=',candidate.service_id).forUpdate().executeTakeFirstOrThrow();
    const item=await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by']).where('w.service_id','=',candidate.service_id).executeTakeFirstOrThrow();
-   const eligible=item.extent===postalCode&&item.created_by!==userId&&!!(await trx.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').select('at.id').where('at.link_id','=',candidate.service_id).where('tt.code','in',granted).executeTakeFirst());
+   const eligible=item.extent===postalCode&&item.created_by!==userId&&await serviceHasCategory(trx,candidate.service_id,granted);
    if(item.assigned_to===userId&&!eligible)await trx.updateTable('work_item').set({assigned_to:null}).where('service_id','=',candidate.service_id).execute();
    if(item.assigned_to===null&&eligible)await trx.updateTable('work_item').set({assigned_to:userId}).where('service_id','=',candidate.service_id).execute();
   }

@@ -15,10 +15,16 @@ export async function assertCategoryCodes(codes:readonly string[], db:Kysely<DB>
  return unique;
 }
 // A service has at least one category attribute whose code is in `codes`.
-function hasCategory(eb:ExpressionBuilder<any,any>, serviceRef:string, codes:readonly string[]) {
- return eb.exists(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').select('at.id').whereRef('at.link_id','=',serviceRef).where('tt.code','in',codes.length?codes:['__none__']));
+function categoryAttributes(eb:ExpressionBuilder<any,any>, codes:readonly string[]) {
+ return eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').where('at.link_entity','=','service').where('at.link_type','=','category').where('tt.code','in',codes.length?codes:['__none__']);
 }
-const categoryCodes = (eb:ExpressionBuilder<any,any>) => eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').as('categories');
+function hasCategory(eb:ExpressionBuilder<any,any>, serviceRef:string, codes:readonly string[]) {
+ return eb.exists(categoryAttributes(eb,codes).select('at.id').whereRef('at.link_id','=',serviceRef));
+}
+export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:readonly string[]) {
+ return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
+}
+const categoryCodes = (eb:ExpressionBuilder<any,any>) => eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category').as('categories');
 const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
@@ -52,7 +58,7 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   const revisionId = randomUUID();
   await trx.insertInto('field_assertion').values({id:revisionId,service_id:id,actor_id:actor.user_id,origin:actor.role,value:JSON.stringify({input,previous:existing}),status:'accepted'}).execute();
   const terms = await trx.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select('t.id').where('t.code','in',codes).execute();
-  await trx.deleteFrom('attribute').where('link_id','=',id).where('taxonomy_term_id','not in',terms.map(t=>t.id)).execute();
+  await trx.deleteFrom('attribute').where('link_id','=',id).where('link_entity','=','service').where('link_type','=','category').where('taxonomy_term_id','not in',terms.map(t=>t.id)).execute();
   await trx.insertInto('attribute').values(terms.map(t=>({id:randomUUID(),link_id:id,link_entity:'service',link_type:'category',taxonomy_term_id:t.id}))).onConflict(o=>o.columns(['link_id','taxonomy_term_id']).doNothing()).execute();
   await trx.insertInto('listing_state').values({service_id:id,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
   const verifier = await trx.selectFrom('membership').select('user_id').where('role','=','community').where('approved','=',true).where('postal_code','=',input.postal_code).where(sql<boolean>`category_scope && ${codes}::text[]`).where('user_id','!=',actor.user_id).where('user_id','!=',previousState?.created_by ?? actor.user_id).orderBy('user_id').executeTakeFirst();
@@ -93,7 +99,7 @@ export async function verifyResource(userId:string, serviceId:string, raw:unknow
   const actor = await actorFor(userId,trx);
   await trx.selectFrom('service').select('id').where('id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
   const item = await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
-  const scoped = actor.role === 'community' && !!(await trx.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').select('at.id').where('at.link_id','=',serviceId).where('tt.code','in',actor.category_scope.length?actor.category_scope:['__none__']).executeTakeFirst());
+  const scoped = actor.role === 'community' && await serviceHasCategory(trx,serviceId,actor.category_scope);
   if (actor.role !== 'admin' && !(actor.role === 'community' && actor.approved && item.assigned_to === actor.user_id && item.extent === actor.postal_code && item.created_by !== actor.user_id && scoped)) throw new Error('Access denied');
   if (item.revision_id !== input.revision_id) throw new Error('The resource changed; review the current version');
   const now = new Date(), due = new Date(now.getTime()+30*86400000);
