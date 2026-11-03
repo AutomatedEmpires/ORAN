@@ -47,3 +47,4 @@ What becomes easier or harder. Which follow-up work, rules, or checks are needed
 | [0003](0003-authorize-development-bootstrap.md) | Native development bootstrap and direct admin entry | Accepted for development scope |
 | [0004](0004-conversational-resource-guide.md) | Calm personal guide, four seeker views and structured web discovery | Accepted for product direction; detailed implementation policies open |
 | [0005](0005-founder-vision-interview.md) | Founder vision interview: nationwide coverage-first directory, guide memory, licensing, nonprofit form | Accepted for product direction; detailed designs require review |
+| [0006](0006-resource-foundation-design.md) | Resource foundation: listing record, publication, identity, flags and verification queue | Accepted for design; implementation in reviewed PRs |
