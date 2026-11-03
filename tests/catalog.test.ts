@@ -8,9 +8,10 @@ import { listCategories,addCategory,acceptResource,publicResources,ownedResource
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
-const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_note:'Synthetic test fixture, permitted for tests only'};
+const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
+const assertions=(entityId:string)=>database().selectFrom('field_assertion').selectAll().where('entity_id','=',entityId).orderBy('created_at').orderBy('field_path').execute();
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual',admin2:'test-'+run+'-admin2'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
@@ -44,14 +45,15 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  it('admin directly creates an unpublished resource with atomic provenance and audit',async()=>{
   const id=await acceptResource(user.admin,input);
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
-  expect(await database().selectFrom('field_assertion').select('actor_id').where('service_id','=',id).executeTakeFirst()).toEqual({actor_id:user.admin});
+  expect(await database().selectFrom('revision').select('actor_id').where('service_id','=',id).executeTakeFirst()).toEqual({actor_id:user.admin});
   expect(await database().selectFrom('audit_event').select('action').where('subject','=',id).execute()).toEqual([{action:'resource.created'}]);
   expect((await ownedResources(user.admin)).some(r=>r.id===id)).toBe(true);
  });
  it('rejects unapplied organization-name changes without recording accepted assertions',async()=>{
-  const id=await acceptResource(user.admin,input);
+  const id=await acceptResource(user.admin,input),before=(await assertions(id)).length;
   await expect(acceptResource(user.admin,{...input,organization_name:'An unapplied rename'},id)).rejects.toThrow('Organization name changes');
-  expect(await database().selectFrom('field_assertion').select('id').where('service_id','=',id).execute()).toHaveLength(1);
+  expect(await database().selectFrom('revision').select('id').where('service_id','=',id).execute()).toHaveLength(1);
+  expect((await assertions(id)).length).toBe(before);
  });
  it('rejects ordinary users, unapproved contributors and cross-organization edits',async()=>{
   await expect(acceptResource(user.seeker,input)).rejects.toThrow('Access denied');
@@ -202,7 +204,7 @@ describe('accounts with several memberships',()=>{
   const own=await acceptResource(user.dual,{...input,organization_id:fixtureOrg});
   // The id filter keeps this check clear of the 100 earlier fixture-organization fillers.
   expect((await ownedResources(user.dual,own)).some(r=>r.id===own)).toBe(true);
-  expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',own).executeTakeFirstOrThrow()).origin).toBe('organization');
+  expect((await database().selectFrom('revision').select('origin').where('service_id','=',own).executeTakeFirstOrThrow()).origin).toBe('organization');
   expect((await database().selectFrom('audit_event').select('detail').where('subject','=',own).executeTakeFirstOrThrow()).detail).toEqual({asserted_by:'organization'});
   // Move the earlier-sorting verifier out of 98101 so the dual member is the first candidate.
   await approveContributor(user.admin,user.community,'98102',['food']);
@@ -238,7 +240,7 @@ describe('accounts with several memberships',()=>{
  });
  it('verifiers who are also staff still file a new provider inside their scope',async()=>{
   const id=await acceptResource(user.dual,{...input,organization_name:'Verifier-found provider'});
-  expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('community');
+  expect((await database().selectFrom('revision').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('verifier');
   await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',postal_code:'98102'})).rejects.toThrow('Choose an organization');
   await expect(acceptResource(user.org,{...input,organization_name:'Another new provider'})).rejects.toThrow('Organization name changes');
  });
@@ -264,7 +266,7 @@ describe('accounts with several memberships',()=>{
    expect((await verificationQueue(user.admin2)).some(r=>r.id===id)).toBe(true);
    await verify(user.admin2,id);
    // Filing for their own organization is an organization assertion, even for an admin.
-   expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('organization');
+   expect((await database().selectFrom('revision').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('organization');
    expect((await database().selectFrom('audit_event').select('detail').where('subject','=',id).where('action','=','resource.created').executeTakeFirstOrThrow()).detail).toEqual({asserted_by:'organization'});
    expect((await database().selectFrom('audit_event').select('detail').where('subject','=',id).where('action','=','resource.verified').executeTakeFirstOrThrow()).detail).toMatchObject({capacity:'admin'});
   } finally {if(added.length)await database().deleteFrom('membership').where('id','in',added).execute();}
@@ -285,5 +287,62 @@ describe('accounts with several memberships',()=>{
    if(id)await database().updateTable('work_item').set({assigned_to:null}).where('service_id','=',id).where('assigned_to','=',user.community).execute();
    if(pending)await database().deleteFrom('membership').where('id','=',pending).execute();
   }
+ });
+});
+
+describe('per-field assertions and history',()=>{
+ const currentRevision=async(id:string)=>(await database().selectFrom('listing_state').select(['state','revision_id']).where('service_id','=',id).executeTakeFirstOrThrow());
+ it('records one accepted assertion per provided field with origin, source and decider',async()=>{
+  const id=await acceptResource(user.admin,input),rows=await assertions(id);
+  expect(rows.map(r=>r.field_path)).toEqual(['application_process','categories','description','eligibility_description','name','service_area','url']);
+  for(const r of rows) expect(r).toMatchObject({status:'accepted',origin:'admin',source_type:'url',source_url:'https://example.org/listing',decided_by:user.admin});
+  expect(rows.find(r=>r.field_path==='service_area')?.value).toEqual({kind:'zip',postal_codes:['98101']});
+  const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();
+  expect(new Set(rows.map(r=>r.revision_id))).toEqual(new Set([state.revision_id]));
+  const org=(await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id;
+  expect((await assertions(org)).map(r=>[r.field_path,r.value])).toEqual([['name','Synthetic test organization']]);
+ });
+ it('an edit supersedes only the changed fields and keeps their history',async()=>{
+  const id=await acceptResource(user.admin,input),changed='A changed synthetic description for history.';
+  await acceptResource(user.admin,{...input,description:changed},id);
+  const rows=await assertions(id),state=await currentRevision(id);
+  expect(rows.filter(r=>r.field_path==='description').map(r=>[r.status,r.value])).toEqual([['superseded',input.description],['accepted',changed]]);
+  expect(rows.filter(r=>r.field_path==='name').map(r=>r.status)).toEqual(['accepted']);
+  expect(rows.filter(r=>r.revision_id===state.revision_id).map(r=>r.field_path)).toEqual(['description']);
+  expect((await database().selectFrom('service').select('description').where('id','=',id).executeTakeFirstOrThrow()).description).toBe(changed);
+ });
+ it('an unchanged resubmission records a revision without assertions and still clears the check',async()=>{
+  const id=await acceptResource(user.admin,input);
+  await verify(user.admin,id);
+  const checked=await currentRevision(id);
+  expect(checked.state).toBe('checked');
+  await acceptResource(user.admin,input,id);
+  const after=await currentRevision(id);
+  expect(after.state).toBe('unreviewed');
+  expect(after.revision_id).not.toBe(checked.revision_id);
+  expect(await database().selectFrom('field_assertion').select('id').where('revision_id','=',after.revision_id).execute()).toEqual([]);
+ });
+ it('clearing the website records an empty value',async()=>{
+  const id=await acceptResource(user.admin,input);
+  await acceptResource(user.admin,{...input,url:''},id);
+  expect((await assertions(id)).filter(r=>r.field_path==='url').map(r=>[r.status,r.value])).toEqual([['superseded','https://example.org'],['accepted',null]]);
+  expect((await database().selectFrom('service').select('url').where('id','=',id).executeTakeFirstOrThrow()).url).toBeNull();
+ });
+ it('only organization staff name the organization as the source',async()=>{
+  await expect(acceptResource(user.admin,{...input,source_type:'organization',source_url:''})).rejects.toThrow('Only organization staff can name the organization as the source');
+  await expect(acceptResource(user.admin,{...input,source_url:''})).rejects.toThrow('Give a source web address only for a website source');
+  await expect(acceptResource(user.admin,{...input,source_type:'phone_call'})).rejects.toThrow('Give a source web address only for a website source');
+  const id=await acceptResource(user.org,{...input,source_type:'organization',source_url:''}),rows=await assertions(id);
+  expect(rows.length).toBeGreaterThan(0);
+  for(const r of rows) expect(r).toMatchObject({source_type:'organization',source_url:null,origin:'organization'});
+ });
+ it('resubmitting the same categories in another order records no category assertion',async()=>{
+  const id=await acceptResource(user.admin,{...input,categories:['health','food']});
+  // Categories are stored in display order (food before health), as the legacy backfill stored them.
+  expect((await assertions(id)).find(r=>r.field_path==='categories')?.value).toEqual(['food','health']);
+  await acceptResource(user.admin,{...input,categories:['food','health']},id);
+  const state=await currentRevision(id);
+  expect((await assertions(id)).filter(r=>r.field_path==='categories'&&r.revision_id===state.revision_id)).toEqual([]);
+  expect((await assertions(id)).filter(r=>r.field_path==='categories').map(r=>r.status)).toEqual(['accepted']);
  });
 });
