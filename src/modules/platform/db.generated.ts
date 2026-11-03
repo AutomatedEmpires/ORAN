@@ -62,7 +62,6 @@ export interface FieldAssertion {
 }
 
 export interface ListingState {
-  category: string;
   checked_at: Timestamp | null;
   created_by: string;
   next_review_due: Timestamp | null;
