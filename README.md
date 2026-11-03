@@ -72,3 +72,4 @@ For dedicated remote development, copy .env.example to .env.local, configure an 
 | [Decisions](docs/DECISIONS.md) | Recorded direction and unresolved founder decisions |
 | [Architecture](docs/ARCHITECTURE.md) | Dependencies, routes, identity and verification status |
 | [Data model](docs/DATA_MODEL.md) | Implemented schema, provenance and environment contracts |
+| [Design system](docs/DESIGN_SYSTEM.md) | Approved Blend tokens, layouts, components and seeker copy |
