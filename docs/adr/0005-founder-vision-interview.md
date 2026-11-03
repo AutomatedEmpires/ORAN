@@ -1,6 +1,6 @@
 # 0005. Record the founder vision interview: nationwide coverage-first directory, guide memory, licensing and nonprofit form
 
-- Status: Accepted for founder product direction; detailed designs require review before implementation
+- Status: Accepted for founder product direction; detailed designs require review before implementation. Amended by [ADR-0007](0007-memory-and-crisis-help-refinements.md): no ask-first saving, crisis help in the menu only
 - Date: 2026-11-02
 - Decider: Founder
 - Related: D1, D3–D6, D8–D14, D16, D21–D25; C2, C6–C8, C18, C21; BLUEPRINT §1.3–§1.4, §2.3–§2.5, §5.6, §7.5, §8.3, §14; ADR-0002, ADR-0004
