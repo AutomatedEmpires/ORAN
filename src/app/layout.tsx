@@ -3,6 +3,10 @@ import Link from 'next/link';
 import { ClerkProvider } from '@clerk/nextjs';
 import { messages, changeLanguage } from '@/server/language';
 import { LocaleProvider } from '@/ui/locale';
+import '@fontsource/figtree/latin-400.css';
+import '@fontsource/figtree/latin-600.css';
+import '@fontsource/figtree/latin-700.css';
+import '@fontsource/figtree/latin-800.css';
 import './globals.css';
 export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
 export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {

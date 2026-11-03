@@ -26,6 +26,13 @@ export function documentedTokenNames(): Set<string> {
   return new Set([...designSystemSection('3. Tokens').matchAll(/`(--[a-z0-9-]+)/g)].map((match) => match[1]));
 }
 
+// Signs in through the local identity chooser and waits until the redirect has left /sign-in.
+export async function enterAs(page: Page, identity: 'Admin' | 'Organization' | 'Community' | 'My profile'): Promise<void> {
+  await page.goto('/sign-in');
+  await page.getByRole('button', { name: 'Enter as ' + identity, exact: true }).click();
+  await page.waitForURL((url) => !url.href.includes('/sign-in'));
+}
+
 export async function readTokens(page: Page, names: Iterable<string>): Promise<Map<string, string>> {
   const list = [...names];
   const values = await page.evaluate(

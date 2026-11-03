@@ -72,7 +72,7 @@
   --layer-toast: 60;
 }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--paper); color:var(--ink); font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--font-family-base); font-size:16px; line-height:1.6; }
 a { color:var(--accent); text-underline-offset:4px; }
 a:hover { text-decoration-thickness:2px; }
 :focus-visible { outline:3px solid #95641b; outline-offset:4px; }

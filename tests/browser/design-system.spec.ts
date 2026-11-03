@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
-import { contrast, documentedColors, documentedTokenNames, normalized, readTokens, resolveAs } from './support';
+import { contrast, documentedColors, documentedTokenNames, enterAs, normalized, readTokens, resolveAs } from './support';
 
 // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
 const blendTokens: Record<string, string> = {
@@ -153,4 +153,50 @@ test('forces the light color scheme', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+});
+
+const figtreeStack = /^["']?Figtree["']?,/;
+const googleFonts = /fonts\.(googleapis|gstatic)\.com/;
+
+test('seeker pages load self-hosted Figtree and never contact Google Fonts', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', (request) => requested.push(request.url()));
+
+  const checkFigtree = async (path: string) => {
+    expect(new URL(page.url()).pathname).toBe(path);
+    await page.evaluate(() => document.fonts.ready);
+    const faces = await page.evaluate(() =>
+      [...document.fonts]
+        .filter((face) => face.family.replace(/["']/g, '') === 'Figtree')
+        .map(({ weight, display, style, status }) => ({ weight, display, style, status })),
+    );
+    expect(faces.map((face) => face.weight).sort(), path + ' faces').toEqual(['400', '600', '700', '800']);
+    expect(faces.map((face) => face.display), path + ' display').toEqual(['swap', 'swap', 'swap', 'swap']);
+    expect(faces.map((face) => face.style), path + ' style').toEqual(['normal', 'normal', 'normal', 'normal']);
+    expect(faces.find((face) => face.weight === '400')?.status, path + ' regular face').toBe('loaded');
+    expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily), path + ' body font').toMatch(figtreeStack);
+  };
+
+  await page.goto('/');
+  await checkFigtree('/');
+  await page.goto('/sign-in');
+  await checkFigtree('/sign-in');
+  await enterAs(page, 'My profile');
+  await checkFigtree('/profile');
+
+  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
+  const fontFiles = requested.filter((url) => /\.woff2?$/.test(new URL(url).pathname));
+  expect(fontFiles.filter((url) => new URL(url).origin !== 'http://127.0.0.1:3100')).toEqual([]);
+  expect(fontFiles.some((url) => new URL(url).pathname.endsWith('.woff2'))).toBe(true);
+});
+
+test('text renders in the fallback stack when font files fail', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', (request) => requested.push(request.url()));
+  await page.route(/\.woff2?(\?.*)?$/, (route) => route.abort());
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(figtreeStack);
+  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
 });
