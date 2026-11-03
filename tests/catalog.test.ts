@@ -235,4 +235,20 @@ describe('accounts with several memberships',()=>{
   const id=await acceptResource(user.dual,{...input,organization_name:'Second synthetic organization',organization_id:second});
   expect((await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id).toBe(second);
  });
+ it('verifiers who are also staff still file a new provider inside their scope',async()=>{
+  const id=await acceptResource(user.dual,{...input,organization_name:'Verifier-found provider'});
+  expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('community');
+  await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',postal_code:'98102'})).rejects.toThrow('Choose an organization');
+  await expect(acceptResource(user.org,{...input,organization_name:'Another new provider'})).rejects.toThrow('Organization name changes');
+ });
+ it('admins who are also staff can still create a listing for a new organization',async()=>{
+  const membership=(await database().insertInto('membership').values({user_id:user.admin,role:'organization',organization_id:fixtureOrg,approved:true}).returning('id').executeTakeFirstOrThrow()).id;
+  try {
+   const fresh=await acceptResource(user.admin,{...input,organization_name:'Brand new provider'});
+   const org=await database().selectFrom('service as s').innerJoin('organization as o','o.id','s.organization_id').select(['o.id','o.name']).where('s.id','=',fresh).executeTakeFirstOrThrow();
+   expect(org.name).toBe('Brand new provider');expect(org.id).not.toBe(fixtureOrg);
+   const matched=await acceptResource(user.admin,input);
+   expect((await database().selectFrom('service').select('organization_id').where('id','=',matched).executeTakeFirstOrThrow()).organization_id).toBe(fixtureOrg);
+  } finally {await database().deleteFrom('membership').where('id','=',membership).execute();}
+ });
 });

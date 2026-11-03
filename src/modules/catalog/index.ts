@@ -60,14 +60,20 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   const codes = await assertCategoryCodes(input.categories,trx);
   if (!canCreate(actor)) throw new Error('Access denied');
   const existing = existingId ? await trx.selectFrom('service').selectAll().where('id','=',existingId).forUpdate().executeTakeFirstOrThrow() : null;
-  // The listing's organization: its current owner, the one chosen, or the actor's only organization.
-  let organizationId = existing?.organization_id ?? input.organization_id ?? (orgs.length === 1 ? orgs[0] : undefined);
+  // The listing's organization: its current owner or the one chosen.
+  let organizationId = existing?.organization_id ?? input.organization_id;
   if (organizationId && !admin && !orgs.includes(organizationId)) throw new Error('Access denied');
   if (existing && input.organization_id && input.organization_id !== existing.organization_id) throw new Error('Organization changes require a separate organization update');
-  if (!organizationId && orgs.length > 1) throw new Error('Choose an organization');
+  const inScope = !!scope && scope.postal_code === input.postal_code && codes.every(c=>scope.category_scope.includes(c));
+  if (!organizationId && orgs.length) {
+   // Staff file under their only organization when the name matches; admins and in-scope verifiers may name a new one.
+   const matches = (await trx.selectFrom('organization').select('id').where('id','in',orgs).where('name','=',input.organization_name).execute()).map(o=>o.id);
+   if (orgs.length === 1 && matches.length === 1) organizationId = matches[0];
+   else if (matches.length || !(admin || inScope)) throw new Error(orgs.length === 1 ? 'Organization name changes require a separate organization update' : 'Choose an organization');
+  }
   // The capacity used; with no organization, a verifier files only inside their area and categories.
   const capacity = admin ? 'admin' : organizationId ? 'organization' : 'community';
-  if (capacity === 'community' && (!scope || scope.postal_code !== input.postal_code || !codes.every(c=>scope.category_scope.includes(c)))) throw new Error('Access denied');
+  if (capacity === 'community' && !inScope) throw new Error('Access denied');
   const previousState = existing ? await trx.selectFrom('listing_state').select('created_by').where('service_id','=',existing.id).executeTakeFirstOrThrow() : null;
   if (!organizationId) {
    organizationId = randomUUID();
