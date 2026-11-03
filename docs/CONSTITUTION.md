@@ -4,7 +4,7 @@
 
 **Authority:** These rules bind every contributor, human or AI agent. They are synchronized with §15 of [BLUEPRINT.md](BLUEPRINT.md), as amended by [ADR-0002](adr/0002-founder-vision-and-native-environment.md), and section references (§) point to that document. Changing a rule requires a founder-approved ADR in [adr/](adr/).
 
-**On conflict:** follow C21. The explicit founder amendments in ADR-0002 and [ADR-0004](adr/0004-conversational-resource-guide.md) supersede earlier contradictory product assumptions; unrelated decisions and detailed implementation policies remain open. ADR-0004 preserves the rules below, including source permissions, privacy and the single catalog write path.
+**On conflict:** follow C21. The explicit founder amendments in ADR-0002, [ADR-0004](adr/0004-conversational-resource-guide.md) and [ADR-0005](adr/0005-founder-vision-interview.md) supersede earlier contradictory product assumptions; unrelated decisions and detailed implementation policies remain open. ADR-0004 and ADR-0005 preserve the rules below, including source permissions and the single catalog write path. ADR-0005 amends C8.
 
 **Purpose and scope**
 
@@ -18,7 +18,7 @@
 - **C5.** Raw source records are immutable. Every accepted value is traceable to its assertion and origin.
 - **C6.** A source must be registered, with its agreement or licence basis recorded, before its first import. Never scrape a source whose terms prohibit it.
 - **C7.** Reports and upstream updates never hide a listing automatically, except under the rules in §5.6.
-- **C8.** Anonymous discovery remains available. Store personal profiles only with voluntary, purpose-specific consent, least-privilege access, retention and deletion controls. Never log sensitive profile, search or location data; sensitive profiles are not sent to external models by default (§2.1.1, §7).
+- **C8.** Anonymous discovery remains available. Store personal profiles only with voluntary consent, least-privilege access, retention and deletion controls. An account holder's one-time opt-in to guide memory is the consent for automatic saves. Each save is visible and reversible. Health, immigration, abuse and criminal-record details are saved only after asking. Never log sensitive profile, search or location data. Profile data reaches an external model only after the memory opt-in, with minimized payloads (§2.1.1, §7, ADR-0005).
 
 **Architecture**
 
