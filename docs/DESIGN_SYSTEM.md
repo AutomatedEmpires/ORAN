@@ -5,7 +5,7 @@
 ## 1. Status and authority
 
 - **Status.** The founder chose the Blend direction (D25, [ADR-0005](adr/0005-founder-vision-interview.md)). This document records its exact tokens, layouts, components and seeker copy. Once merged after founder review, it is the approved set under **C18**: screens use only the layouts and components defined here.
-- **Precedence.** CONSTITUTION, then ADR-0005 and [ADR-0006](adr/0006-resource-foundation-design.md), then this document, then BLUEPRINT §12. This document supersedes BLUEPRINT §12.2's "system font stack", the §12.4 trust vocabulary (replaced by the ADR-0006 labels in §7) and §12.7 QuestionChoices (withdrawn: chat has no preset replies, D25). It renames §12.3 items: ListingCard → ResourceCard, VerificationBadge → TrustLabel, ReportProblemForm → FlagForm, CrisisStrip → GetHelpNow (inline), ChatComposer → Composer.
+- **Precedence.** CONSTITUTION, then the ADRs (a later ADR wins over an earlier one: ADR-0005, [ADR-0006](adr/0006-resource-foundation-design.md), [ADR-0007](adr/0007-memory-and-crisis-help-refinements.md)), then this document, then BLUEPRINT §12. This document supersedes BLUEPRINT §12.2's "system font stack", the §12.4 trust vocabulary (replaced by the ADR-0006 labels in §7) and §12.7 QuestionChoices (withdrawn: chat has no preset replies, D25). It renames §12.3 items: ListingCard → ResourceCard, VerificationBadge → TrustLabel, ReportProblemForm → FlagForm, CrisisStrip → GetHelpNow (inline), ChatComposer → Composer.
 - **Sources.** The approved Blend mockups are Seek, Resource detail, Map, Profile and Chat v2 (phone, history drawer, desktop). The earlier Blend chat mockup with preset reply chips is superseded. The mockups are not in this repository, so this document is the normative record. Where it differs from a mockup, this document wins; the differences are listed in §11.
 - **Scope.** Seeker screens. Organization, community and admin workspaces use the same tokens and controls; their layouts are not designed yet (§11).
 - **Proposing a component or token.** Open a PR that edits this document. Give the purpose, anatomy, variants and states, tokens, accessibility notes, the screens that need it and why existing components do not fit. Add it to the component catalog route in every state, with axe and visual tests. The founder approves in review; until merged it is proposed, not approved. Changing copy that comes from an ADR requires an ADR.
@@ -136,7 +136,7 @@ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Ro
 | Seek | TopBar (brand) → h1 "Find support" → SearchField → ContextChips → FilterBar → ResourceCard list |
 | Resource detail | TopBar (back) → white surface. Top block: h1 name, organization (md, secondary), open status (md/600), StatusNote, TrustLabel and its lines, AccuracyNote (full). Then "Call {phone}" (primary, large, full width), and Directions / Website / Share (secondary, three columns). Hairline. Sections, each with an 18px teal icon, an md/700 heading and md body text indented 26px: Who it's for, How to get help, What to bring, Hours (HoursTable), Address (or "Call for location"). Last, the FlagForm entry link |
 | Map | TopBar (brand) → full-bleed map → MapBanner, callout and List toggle → category Chips → BottomSheet on selection |
-| Profile | TopBar (brand) → h1 "What ORAN remembers" → memory Switch row → memory ListRows → ask-first note → "Helping someone else" Switch row → "Saved" (lg) ListRows → Language row → "Delete everything ORAN remembers" |
+| Profile | TopBar (brand) → h1 "What ORAN remembers" → memory Switch row (with its helper text) → memory ListRows → "Helping someone else" Switch row → "Saved" (lg) ListRows → Language row → "Get help now" row → "Delete everything ORAN remembers" |
 | Chat | Phone and desktop shells above; ChatMessage stream → Composer |
 
 ## 5. Components
@@ -145,7 +145,7 @@ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Ro
 
 | Component | Purpose and anatomy | Variants and states | Accessibility |
 |---|---|---|---|
-| **TopBar** | 56px white bar with a bottom hairline and 16px gutters. Logo: a 28px teal rounded square (radius 8) with a marigold half-sun, a white horizon line and marigold rays, plus the wordmark | **brand**: logo left, actions right (GetHelpNow, with QuickExit before it where required). **back**: "Back to results" (primary, md/700, chevron) left. **chat**: "Open chat history" button, centered logo, QuickExit, "New chat" | `<header>`. The wordmark may hide below 380px so actions fit; the mark stays. Icon buttons are named |
+| **TopBar** | 56px white bar with a bottom hairline and 16px gutters. Logo: a 28px teal rounded square (radius 8) with a marigold half-sun, a white horizon line and marigold rays, plus the wordmark | **brand**: logo left; QuickExit on the right where §5.6 requires it. No "Get help now" button (ADR-0007). **back**: "Back to results" (primary, md/700, chevron) left. **chat**: "Open chat history" button, centered logo, QuickExit, "New chat" | `<header>`. The wordmark may hide below 380px so actions fit; the mark stays. Icon buttons are named |
 | **SeekerTabBar** | Bottom bar with four equal items: Seek (magnifier), Chat (speech bubble), Map (folded map), Profile (person). A 22px icon in a 56×32 pill (`--radius-control`) over an xs label | Active: tint-strong pill, primary color, 800 weight, 2.1 stroke. Inactive: secondary color, 600 weight, 1.8 stroke. Hidden while the keyboard is open | `<nav aria-label="Main">` with links and `aria-current="page"`. Labels are always visible; each item is at least 44px |
 | **SideNav** | Desktop, 272px. Logo and "Collapse sidebar". The four items as 44px rows (20px icon, md/600). Divider. "New chat" (white, `--shadow-1`, primary 700). "Search chats". History groups "Today", "Previous 7 days" and "Older" (sm/700 secondary headings), each row 44px. Footer: the GetHelpNow row and the account row (32px teal avatar with an initial, name md/700, "Profile and memory" sm) | Active item: tint-strong and primary 800. Current chat: primary tint, primary 700, plus "Options for {chat title}" (…), which offers Delete. Anonymous: no history and no account row | `<nav aria-label="ORAN">`. `aria-current` on the active item and the current chat. The options button follows the menu-button pattern |
 | **ChatHistoryDrawer** | The phone and tablet history, opened from the chat TopBar. A left panel `--size-drawer` wide, white, `--shadow-2`, over `--color-scrim`. Contents: logo and "Close chat history"; "Search chats"; "New chat"; "Get help now"; hairline; history groups; a lock icon with "Your chats are private to your account. Delete any chat from its menu."; the account row | Row states as in SideNav. Anonymous: only New chat and Get help now | Modal: focus moves in and is trapped. Esc or a scrim tap closes it and returns focus to the history button. Slides in over 200ms; instant with reduced motion |
@@ -157,7 +157,7 @@ There are **no preset reply chips** or suggested-question buttons (D25). The per
 | Component | Purpose and anatomy | Variants and states | Accessibility |
 |---|---|---|---|
 | **ChatMessage** | **User:** a right-aligned bubble, `--color-surface-user`, `--radius-bubble`, padding 12/16, at most 80% of the column (70% on desktop), md text. **Assistant:** plain md text on white with no bubble. It may contain a MemoryNote, ResourceCards (chat variant: stacked on phones, wrapping two-up at 280px or wider on desktop), "See {N} more options" (primary link) and AnswerActions | Streaming; complete; stopped; failed (an inline ErrorState with retry that keeps the person's text); partial (catalog results first, saying when web search is unavailable) | `<section aria-label="Conversation">`. Set `aria-busy` while streaming and announce the finished answer once in a polite live region, never token by token. Never move focus while streaming |
-| **MemoryNote** | Shown after an automatic save. `--color-accent-tint`, `--radius-control`, a person-check icon in `--color-text-personal`, "**Remembered:** {items joined by ' · '}", then "Undo" (primary, underlined, 44px target) | Only for signed-in users with memory on; never for anonymous use or in "Helping someone else". Undo deletes the item | Undo's name says what it undoes ("Undo remembering 2 kids and no car"). The note is announced politely |
+| **MemoryNote** | Shown after an automatic save. `--color-accent-tint`, `--radius-control`, a person-check icon in `--color-text-personal`, "**Remembered:** {items joined by ' · '}", then "Undo" (primary, underlined, 44px target) | Only for signed-in users with memory on; never for anonymous use or in "Helping someone else". Sensitive details (health, immigration, abuse, criminal record) save the same way, with no extra prompt (ADR-0007). Undo deletes the item | Undo's name says what it undoes ("Undo remembering 2 kids and no car"). The note is announced politely |
 | **AnswerActions** | Four 44×44 quiet icon buttons under each finished answer, with 18px secondary icons: "Copy answer", "This helped", "This did not help", "Read answer aloud" | Helped and Did not help are toggles (`aria-pressed`; the icon turns primary and filled). Copy confirms briefly. Read aloud toggles to stop. Hidden while streaming | A tooltip with the same text appears on hover and on focus |
 
 **Composer.** This is the only input in Chat.
@@ -226,22 +226,27 @@ Use the organization name alone, without the "by" prefix the chat mockups use. N
 
 **The map always has a list.** The "List" toggle is always visible. The list shows ResourceCards in the same order with the same filters. It also contains confidential listings ("Call for location") and remote and phone-only listings, which have no pin. If the map cannot load (vendor failure, no JavaScript, low memory), show the list automatically. The map is never the only way to reach a listing.
 
-### 5.6 Safety (D24)
+### 5.6 Safety (D24, ADR-0007)
+
+ORAN is a resource guide, not crisis care. Crisis help is always available, but it is never a core focus of the interface.
 
 **GetHelpNow.** "Get help now" with a life-buoy icon.
-- **Where:** a compact secondary button at the right of the TopBar on phone Seek, Map, Profile and Detail; a row in the ChatHistoryDrawer on phone Chat; a row in the SideNav footer on desktop.
-- **Panel:** static crisis numbers (BLUEPRINT §7.5: 988, 911, the domestic violence hotline and the local 211). No classifier is involved.
-- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Show it prominently:
-  - on crisis signs in chat, inside the assistant turn, never as a modal;
-  - on Safety, Mental health and Housing & shelter results, and searches for shelter, domestic violence or mental health;
-  - in ErrorState, OutageState and offline.
+- **Where, menu only:**
+  - a row in the ChatHistoryDrawer and on the Profile screen on phones;
+  - a row in the SideNav footer on desktop.
+  - It never appears in a TopBar.
+- **Panel:** static crisis numbers (988, 911, the domestic violence hotline and the local 211). No classifier is involved.
+- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Use it only:
+  - inside the assistant's reply when someone in a chat shows signs of immediate danger (never as a modal);
+  - in OutageState and Offline, which C19 requires.
+  - Never use it on category results or searches.
 
 **QuickExit.** "Exit" with an exit icon.
 - **Look:** `--color-surface-neutral`, `--color-text`, sm/700, 44px tall. The phone mockup's 36px is fixed to 44px.
 - **Name:** "Quick exit to a neutral website".
 - **Where:** the chat TopBar on phones and the chat header on desktop; the TopBar on Safety and Housing & shelter results and their listings. Domestic violence resources fall under Safety.
-- **Shortcut:** a keyboard shortcut works at least wherever the button shows (key choice open, §11).
-- **Behavior:** it replaces the page and its history entry with a neutral site (`location.replace`) at once, with no confirmation (BLUEPRINT §7.5).
+- **Shortcut:** pressing Esc twice within one second, at least wherever the button shows. A single Esc still closes drawers and dialogs.
+- **Behavior:** it replaces the page and its history entry with `https://www.weather.gov` (`location.replace`) at once, with no confirmation (ADR-0007).
 - **Page titles and URLs:** keep them neutral. Sensitive categories never appear in `<title>` or in shareable URLs by default.
 
 ### 5.7 States
@@ -249,7 +254,7 @@ Use the organization name alone, without the "by" prefix the chat mockups use. N
 | Component | Purpose and anatomy | Rules |
 |---|---|---|
 | **EmptyState** | A heading, one line and the next action, centered in the content column. **Before input:** Seek offers search and categories; Chat offers the composer. **Zero results:** recovery actions to widen the area, try other categories, or call the local 211 | Tell apart "no matching records", "unknown coverage" and "system failure". Widening a search is a visible change, never a hidden relaxation |
-| **ErrorState** | An alert icon, an honest message, Retry, and the inline GetHelpNow | Keep filters and typed text. When the model fails, point to Seek and Map |
+| **ErrorState** | An alert icon, an honest message and Retry | Keep filters and typed text. When the model fails, point to Seek and Map |
 | **OutageState** | An honest message, the crisis numbers and a 211 link | Never "no resources exist". Never cached data presented as current |
 | **Offline** | The cached shell, the crisis numbers, and actions that need the network disabled with a reason | Shown by the shell on every screen |
 | **Skeleton** | `--color-bg` blocks in the content's shape | No shimmer with reduced motion. `aria-busy` on the region |
@@ -295,7 +300,8 @@ All seeker strings live in the EN and ES message catalogs (`src/ui/en.json`, `sr
 | Map | "{N} places offering help near you"; "You're not alone."; "List"; "Details"; "Selected place" | Mockup |
 | Detail | "Back to results"; "Call {phone}"; "Directions"; "Website"; "Share"; "Who it's for"; "How to get help"; "What to bring"; "Hours"; "Address"; "Something wrong with this listing?" | Mockup |
 | Chat | "See {N} more options" (singular: "See 1 more option"); "New chat"; "Search chats"; "Exit"; "Today"; "Previous 7 days"; "Older"; "Your chats are private to your account. Delete any chat from its menu."; "Profile and memory" | Mockup |
-| Profile | "What ORAN remembers"; "Let ORAN remember things to personalize your help"; "ORAN asks before saving anything about health, immigration, safety or legal history."; "Searches won't be saved to your memory"; "Saved"; "Delete everything ORAN remembers" | Mockup |
+| Profile | "What ORAN remembers"; "Let ORAN remember things to personalize your help"; "Searches won't be saved to your memory"; "Saved"; "Delete everything ORAN remembers" | Mockup |
+| Memory opt-in helper | "This can include details like your health or immigration status. You can review, edit or delete anything here." | ADR-0007 |
 | Accessible names | "Quick exit to a neutral website"; "Open chat history"; "Close chat history"; "Copy answer"; "This helped"; "This did not help"; "Read answer aloud"; "Speak your message"; "Send message"; "Search for support"; "Save {name}"; "Turn off Using your profile"; "Options for {chat title}"; "Filters, {N} active"; "Edit {item}"; "Delete {item}"; "Collapse sidebar" | Mockup |
 
 ## 8. Required states (C19, BLUEPRINT §12.5)
@@ -319,7 +325,7 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 | Accessibility | WCAG 2.2 AA. Axe shows zero serious or critical issues on every layout in CI. A manual VoiceOver and TalkBack pass on seeker flows each release |
 | Touch targets | At least 44×44px on every interactive element, beyond the WCAG 2.5.8 minimum of 24px |
 | Contrast | §3.2. Status never relies on color alone (1.4.1). Non-text 3:1 (1.4.11) |
-| WCAG 2.2 specifics | Reflow at 320 CSS px (1.4.10); text spacing overrides (1.4.12); focus not hidden by sticky bars (2.4.11); non-drag alternatives for the sheet and map (2.5.7); help in a consistent place (3.2.6; see §11) |
+| WCAG 2.2 specifics | Reflow at 320 CSS px (1.4.10); text spacing overrides (1.4.12); focus not hidden by sticky bars (2.4.11); non-drag alternatives for the sheet and map (2.5.7); help in a consistent place (3.2.6: "Get help now" is always in the menu) |
 | Seeker first-load JavaScript | At most 90 KB gzip per seeker route. Map code loads only on Map |
 | Largest Contentful Paint | At most 2.5s on a mid-range Android over throttled 4G |
 | Fonts | Figtree woff2, 4 weights, latin subset, `font-display: swap` |
@@ -339,7 +345,7 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 
 **Not designed yet:**
 - **Themes and layouts:** the dark theme; the tablet layout, collapsed SideNav and desktop Seek, Map, Profile and Detail; the Filters panel and expanded BottomSheet; staff workspace layouts.
-- **Flows:** the chat welcome (BLUEPRINT proposes "What would help today?"); the ask-before-saving prompt for health, immigration, abuse and criminal-record details; the "Did it help?" follow-up; the "Share this list" output; the "Helping someone else" indicator in Chat and Seek; delete confirmations; how a saved but permanently closed listing appears.
+- **Flows:** the chat welcome (BLUEPRINT proposes "What would help today?"); the "Did it help?" follow-up; the "Share this list" output; the "Helping someone else" indicator in Chat and Seek; delete confirmations; how a saved but permanently closed listing appears.
 - **Copy:** the anonymous drawer and sidebar; the GetHelpNow panel; FlagForm buttons, warning and confirmation; remote, phone-only and service-area listings; holiday exceptions.
 - **Policy:** whether chat may show unpublished web discoveries, and with what label (D21).
 
@@ -347,9 +353,6 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 - **Spanish review:** all strings need native-speaker review. Test the longer labels at 360px.
 - **Icon library:** decide whether to depend on lucide (ISC) or hand-draw the icons (D6, C13).
 - **Map vendor:** tiles and geocoding are under D6. Recheck pin contrast and the cluster design once tiles are chosen.
-- **QuickExit:** choose the shortcut key and the neutral destination site.
-- **Consistent help:** phone Chat puts "Get help now" in the drawer, not the TopBar, which WCAG 3.2.6 may question.
-- **Profile wording:** the mockup's "health, immigration, safety or legal history" must be confirmed to cover ADR-0005's "abuse or criminal-record details".
 
 **Changes from the mockups:**
 
@@ -367,3 +370,5 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 | Mockups omit the AccuracyNote | Required on every card, sheet and detail | ADR-0006 §2 |
 | Prose fills the 760px column | Prose at most 65ch inside it | BLUEPRINT §12.2 line length of 45–75 characters |
 | Hours "Today" uses marigold | Kept | Today is "about you now"; the word "Today" carries the meaning |
+| "Get help now" in every TopBar | Menu only: chat drawer, Profile, desktop sidebar | ADR-0007: resources, not crisis care |
+| Profile note "ORAN asks before saving anything about…" | Opt-in helper "This can include details like your health or immigration status…" | ADR-0007: no ask-first saving |
