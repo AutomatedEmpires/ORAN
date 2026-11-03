@@ -22,7 +22,7 @@
     "db:types": "tsx scripts/types.ts",
     "db:types:check": "tsx scripts/types.ts --verify",
     "admin:grant": "node --env-file-if-exists=.env.local --import tsx scripts/grant-admin.ts",
-    "test:integration": "vitest run tests/catalog.test.ts"
+    "test:integration": "vitest run tests/catalog.test.ts tests/migrations.test.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "7.9.23",

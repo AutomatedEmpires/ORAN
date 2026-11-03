@@ -1,13 +1,53 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'kysely';
+import { sql,type Kysely,type ExpressionBuilder } from 'kysely';
 import { z } from 'zod';
-import { database, lockCatalog } from '@/modules/platform';
+import { database, lockCatalog, type DB } from '@/modules/platform';
 import { actorFor, canCreate } from '@/modules/identity';
-export const categories = ['food','housing','health','work','legal','other'] as const;
+export type Category = { code: string; label: string };
+export async function listCategories(locale:'en'|'es', db:Kysely<DB> = database()):Promise<Category[]> {
+ const rows = await db.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select(['t.code','d.label_en','d.label_es']).orderBy('d.sort_order').execute();
+ return rows.map(r=>({code:r.code,label:locale==='es'?r.label_es:r.label_en}));
+}
+export async function assertCategoryCodes(codes:readonly string[], db:Kysely<DB>):Promise<string[]> {
+ const unique = [...new Set(codes)];
+ const found = unique.length ? await db.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select('t.code').where('t.code','in',unique).execute() : [];
+ if (found.length !== unique.length) throw new Error('Unknown category');
+ return unique;
+}
+const categoryTaxonomyId='7f3c2a10-0c5e-4d8e-9a51-0a0000000001';
+export const categoryCodeList=z.array(z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)).min(1).max(50);
+const categoryInput=z.object({code:z.string().regex(/^[a-z][a-z0-9_]{1,39}$/,'Use lower-case letters, digits and underscores'),label_en:z.string().trim().min(2).max(60),label_es:z.string().trim().min(2).max(60)}).strict();
+export async function addCategory(adminId:string, raw:unknown):Promise<string> {
+ const input = categoryInput.parse(raw);
+ return database().transaction().execute(async trx=>{
+  await lockCatalog(trx);
+  if ((await actorFor(adminId,trx)).role !== 'admin') throw new Error('Access denied');
+  if (await trx.selectFrom('taxonomy_term').select('id').where('taxonomy_id','=',categoryTaxonomyId).where('code','=',input.code).executeTakeFirst()) throw new Error('Category already exists');
+  const id = randomUUID();
+  const last = await trx.selectFrom('category_display').select(sql<number>`COALESCE(MAX(sort_order),0)`.as('max')).executeTakeFirstOrThrow();
+  await trx.insertInto('taxonomy_term').values({id,taxonomy_id:categoryTaxonomyId,code:input.code,name:input.label_en}).execute();
+  await trx.insertInto('category_display').values({term_id:id,sort_order:Number(last.max)+1,label_en:input.label_en,label_es:input.label_es}).execute();
+  await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:adminId,action:'category.added',subject:input.code,detail:JSON.stringify({label_en:input.label_en,label_es:input.label_es})}).execute();
+  return input.code;
+ });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBuilder = ExpressionBuilder<any,any>;
+// A service has at least one category attribute whose code is in `codes`.
+function categoryAttributes(eb:AnyBuilder, codes:readonly string[]) {
+ return eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').where('at.link_entity','=','service').where('at.link_type','=','category').where('tt.code','in',codes.length?codes:['__none__']);
+}
+function hasCategory(eb:AnyBuilder, serviceRef:string, codes:readonly string[]) {
+ return eb.exists(categoryAttributes(eb,codes).select('at.id').whereRef('at.link_id','=',serviceRef));
+}
+export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:readonly string[]) {
+ return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
+}
+const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
 const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
- organization_name:z.string().trim().min(2).max(150), category:z.enum(categories),
+ organization_name:z.string().trim().min(2).max(150), categories:categoryCodeList,
  postal_code:z.string().regex(/^[0-9]{5}$/, 'Use a five-digit ZIP code'),
  eligibility_description:z.string().trim().min(3).max(2000), application_process:z.string().trim().min(3).max(2000),
  url:optionalUrl, source_note:z.string().trim().min(10).max(2000),
@@ -17,7 +57,8 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
  return database().transaction().execute(async trx=>{
   await lockCatalog(trx);
   const actor = await actorFor(userId,trx);
-  if (!canCreate(actor) || (actor.role === 'community' && (actor.postal_code !== input.postal_code || !actor.category_scope.includes(input.category)))) throw new Error('Access denied');
+  const codes = await assertCategoryCodes(input.categories,trx);
+  if (!canCreate(actor) || (actor.role === 'community' && (actor.postal_code !== input.postal_code || !codes.every(c=>actor.category_scope.includes(c))))) throw new Error('Access denied');
   const existing = existingId ? await trx.selectFrom('service').selectAll().where('id','=',existingId).forUpdate().executeTakeFirstOrThrow() : null;
   if (existing && actor.role !== 'admin' && (actor.role !== 'organization' || existing.organization_id !== actor.organization_id)) throw new Error('Access denied');
   const previousState = existing ? await trx.selectFrom('listing_state').select('created_by').where('service_id','=',existing.id).executeTakeFirstOrThrow() : null;
@@ -35,8 +76,11 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   await trx.insertInto('service_area').values({id:randomUUID(),service_id:id,name:'ZIP '+input.postal_code,extent:input.postal_code,extent_type:'text'}).onConflict(o=>o.column('service_id').doUpdateSet({name:'ZIP '+input.postal_code,extent:input.postal_code})).execute();
   const revisionId = randomUUID();
   await trx.insertInto('field_assertion').values({id:revisionId,service_id:id,actor_id:actor.user_id,origin:actor.role,value:JSON.stringify({input,previous:existing}),status:'accepted'}).execute();
-  await trx.insertInto('listing_state').values({service_id:id,category:input.category,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({category:input.category,revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
-  const verifier = await trx.selectFrom('membership').select('user_id').where('role','=','community').where('approved','=',true).where('postal_code','=',input.postal_code).where(sql<boolean>`${input.category} = ANY(category_scope)`).where('user_id','!=',actor.user_id).where('user_id','!=',previousState?.created_by ?? actor.user_id).orderBy('user_id').executeTakeFirst();
+  const terms = await trx.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select('t.id').where('t.code','in',codes).execute();
+  await trx.deleteFrom('attribute').where('link_id','=',id).where('link_entity','=','service').where('link_type','=','category').where('taxonomy_term_id','not in',terms.map(t=>t.id)).execute();
+  await trx.insertInto('attribute').values(terms.map(t=>({id:randomUUID(),link_id:id,link_entity:'service',link_type:'category',taxonomy_term_id:t.id}))).onConflict(o=>o.columns(['link_id','taxonomy_term_id']).doNothing()).execute();
+  await trx.insertInto('listing_state').values({service_id:id,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
+  const verifier = await trx.selectFrom('membership').select('user_id').where('role','=','community').where('approved','=',true).where('postal_code','=',input.postal_code).where(sql<boolean>`category_scope && ${codes}::text[]`).where('user_id','!=',actor.user_id).where('user_id','!=',previousState?.created_by ?? actor.user_id).orderBy('user_id').executeTakeFirst();
   await trx.insertInto('work_item').values({service_id:id,assigned_to:verifier?.user_id ?? null}).onConflict(o=>o.column('service_id').doUpdateSet({assigned_to:verifier?.user_id ?? null,due_at:new Date()})).execute();
   await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:actor.user_id,action:existing?'resource.updated':'resource.created',subject:id,detail:JSON.stringify({asserted_by:actor.role})}).execute();
   return id;
@@ -44,17 +88,17 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
 }
 export async function publicResources(filters?:{postal_code:string;needs:readonly string[]}) {
  let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id')
- .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.category','l.checked_at','l.next_review_due','a.extent as postal_code'])
- .select(eb=>[eb.selectFrom('verification_event as v').select('v.method').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('check_method'),eb.selectFrom('verification_event as v').select('v.fields_checked').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('fields_checked')])
+ .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.checked_at','l.next_review_due','a.extent as postal_code'])
+ .select(eb=>[categoryCodes(eb),eb.selectFrom('verification_event as v').select('v.method').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('check_method'),eb.selectFrom('verification_event as v').select('v.fields_checked').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('fields_checked')])
  .where('s.status','=','active').where('l.state','=','checked').where('l.next_review_due','>',new Date());
- if(filters){if(!filters.needs.length)return [];query=query.where('a.extent','=',filters.postal_code).where('l.category','in',filters.needs);}
+ if(filters){if(!filters.needs.length)return [];query=query.where('a.extent','=',filters.postal_code).where(eb=>hasCategory(eb,'s.id',filters.needs));}
  return query.orderBy('s.name').limit(100).execute();
 }
 export async function ownedResources(userId:string,resourceId?:string) {
  const actor = await actorFor(userId);
  if (!['admin','organization'].includes(actor.role)) throw new Error('Access denied');
  if(resourceId&&!z.uuid().safeParse(resourceId).success)return [];
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.category','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
  if (actor.role === 'organization') query = query.where('s.organization_id','=',actor.organization_id!);
  if(resourceId)query=query.where('s.id','=',resourceId);
  return query.orderBy('s.name').limit(100).execute();
@@ -64,7 +108,7 @@ export async function verificationQueue(userId:string) {
  const actor = await actorFor(userId);
  if (actor.role !== 'admin' && !(actor.role === 'community' && actor.approved)) throw new Error('Access denied');
  let query = database().selectFrom('work_item as w').innerJoin('service as s','s.id','w.service_id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('listing_state as l','l.service_id','s.id').select(['s.id','s.name','s.description','s.eligibility_description','s.application_process','s.url','w.due_at','a.extent as postal_code','l.revision_id']).where('w.due_at','<=',new Date());
- if (actor.role !== 'admin') query = query.where('w.assigned_to','=',actor.user_id).where('a.extent','=',actor.postal_code!).where('l.category','in',actor.category_scope.length?actor.category_scope:['__none__']);
+ if (actor.role !== 'admin') query = query.where('w.assigned_to','=',actor.user_id).where('a.extent','=',actor.postal_code!).where(eb=>hasCategory(eb,'s.id',actor.category_scope));
  return query.orderBy('w.due_at').limit(100).execute();
 }
 export async function verifyResource(userId:string, serviceId:string, raw:unknown) {
@@ -73,8 +117,9 @@ export async function verifyResource(userId:string, serviceId:string, raw:unknow
   await lockCatalog(trx);
   const actor = await actorFor(userId,trx);
   await trx.selectFrom('service').select('id').where('id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
-  const item = await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by','l.category','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
-  if (actor.role !== 'admin' && !(actor.role === 'community' && actor.approved && item.assigned_to === actor.user_id && item.extent === actor.postal_code && item.created_by !== actor.user_id && actor.category_scope.includes(item.category))) throw new Error('Access denied');
+  const item = await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
+  const scoped = actor.role === 'community' && await serviceHasCategory(trx,serviceId,actor.category_scope);
+  if (actor.role !== 'admin' && !(actor.role === 'community' && actor.approved && item.assigned_to === actor.user_id && item.extent === actor.postal_code && item.created_by !== actor.user_id && scoped)) throw new Error('Access denied');
   if (item.revision_id !== input.revision_id) throw new Error('The resource changed; review the current version');
   const now = new Date(), due = new Date(now.getTime()+30*86400000);
   await trx.insertInto('verification_event').values({id:randomUUID(),service_id:serviceId,actor_id:userId,method:input.method,evidence:input.evidence,fields_checked:input.fields_checked,expires_at:due}).execute();

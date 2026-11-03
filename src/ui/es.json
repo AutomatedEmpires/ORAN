@@ -76,12 +76,6 @@
   "noMatches": "No hay recursos con revisiones vigentes que coincidan con tus necesidades y código postal.",
   "needReason": "Coincide con una necesidad de apoyo que seleccionaste.",
   "zipReason": "La cobertura publicada incluye tu código postal.",
-  "food": "Alimentos",
-  "housing": "Vivienda",
-  "health": "Salud",
-  "work": "Trabajo",
-  "legal": "Apoyo legal",
-  "other": "Otro apoyo",
   "applyCommunity": "Solicitar colaborar",
   "applyOrganization": "Registrar una organización",
   "applied": "Tu solicitud fue enviada.",
@@ -90,5 +84,14 @@
   "organizationIntro": "Crea y mantén los recursos de tu organización.",
   "returnResources": "Volver a los recursos",
   "dataSaved": "Guardado.",
-  "languageReview": "El texto en español es un borrador de desarrollo."
+  "languageReview": "El texto en español es un borrador de desarrollo.",
+  "categories": "Categorías de apoyo",
+  "addCategory": "Agregar una categoría",
+  "categoryCode": "Código de categoría",
+  "labelEnglish": "Nombre en inglés",
+  "labelSpanish": "Nombre en español",
+  "categoryAdded": "Categoría agregada.",
+  "categoryExists": "Ese código de categoría ya existe.",
+  "categoryCodeHint": "Letras minúsculas, números y guiones bajos, por ejemplo immigration.",
+  "chooseAtLeastOne": "Elige al menos una."
 }

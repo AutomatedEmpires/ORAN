@@ -12,7 +12,7 @@ test('admin entry → approved scoped community verification → personalized di
  await page.getByLabel('Organization name',{exact:true}).fill('Synthetic browser organization');
  await page.getByLabel('Service ZIP code',{exact:true}).fill('98101');
  await page.getByLabel('Website',{exact:true}).fill('https://example.org');
- await page.getByRole('combobox',{name:'Support category',exact:true}).selectOption('food');
+ await page.locator('form').filter({has:page.getByLabel('Resource name',{exact:true})}).getByRole('checkbox',{name:'Food',exact:true}).check();
  await page.getByLabel('Description',{exact:true}).fill('Synthetic browser test listing, not a real assistance service.');
  await page.getByLabel('Who may qualify',{exact:true}).fill('Contact the provider about requirements');
  await page.getByLabel('How to get help',{exact:true}).fill('Contact the provider before visiting');
@@ -59,6 +59,8 @@ test('admin entry → approved scoped community verification → personalized di
  await page.getByRole('button',{name:'Apply',exact:true}).click();
  await expect(page.locator('html')).toHaveAttribute('lang','es');
  await expect(page.getByRole('heading',{name:'Encuentra tu próximo paso.',exact:true})).toBeVisible();
+ await page.goto('/profile');
+ await expect(page.getByRole('checkbox',{name:'Alimentos',exact:true})).toBeVisible();
  await page.setViewportSize({width:375,height:812});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
@@ -69,6 +71,7 @@ test('organization staff maintain their own unpublished resources',async({page})
  await expect(page.getByLabel('Organization name',{exact:true})).toHaveValue('Development organization');
  await page.getByLabel('Resource name',{exact:true}).fill(name);
  await page.getByLabel('Service ZIP code',{exact:true}).fill('98101');
+ await page.getByRole('checkbox',{name:'Food',exact:true}).check();
  await page.getByLabel('Description',{exact:true}).fill('Synthetic organization fixture for browser verification only.');
  await page.getByLabel('Who may qualify',{exact:true}).fill('Contact the organization');
  await page.getByLabel('How to get help',{exact:true}).fill('Contact before visiting');

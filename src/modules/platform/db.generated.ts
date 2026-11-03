@@ -25,6 +25,16 @@ export type MemberRole = "admin" | "community" | "organization" | "user";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface Attribute {
+  id: string;
+  label: string | null;
+  link_entity: string;
+  link_id: string;
+  link_type: string;
+  taxonomy_term_id: string;
+  value: string | null;
+}
+
 export interface AuditEvent {
   action: string;
   actor_id: string;
@@ -32,6 +42,13 @@ export interface AuditEvent {
   detail: Generated<Json>;
   id: string;
   subject: string;
+}
+
+export interface CategoryDisplay {
+  label_en: string;
+  label_es: string;
+  sort_order: number;
+  term_id: string;
 }
 
 export interface FieldAssertion {
@@ -45,7 +62,6 @@ export interface FieldAssertion {
 }
 
 export interface ListingState {
-  category: string;
   checked_at: Timestamp | null;
   created_by: string;
   next_review_due: Timestamp | null;
@@ -97,6 +113,24 @@ export interface ServiceArea {
   service_id: string;
 }
 
+export interface Taxonomy {
+  description: string;
+  id: string;
+  name: string;
+  uri: string | null;
+  version: string | null;
+}
+
+export interface TaxonomyTerm {
+  code: string;
+  description: Generated<string>;
+  id: string;
+  language: Generated<string>;
+  name: string;
+  parent_id: string | null;
+  taxonomy_id: string;
+}
+
 export interface VerificationEvent {
   actor_id: string;
   evidence: string;
@@ -115,7 +149,9 @@ export interface WorkItem {
 }
 
 export interface DB {
+  attribute: Attribute;
   audit_event: AuditEvent;
+  category_display: CategoryDisplay;
   field_assertion: FieldAssertion;
   listing_state: ListingState;
   membership: Membership;
@@ -123,6 +159,8 @@ export interface DB {
   personal_profile: PersonalProfile;
   service: Service;
   service_area: ServiceArea;
+  taxonomy: Taxonomy;
+  taxonomy_term: TaxonomyTerm;
   verification_event: VerificationEvent;
   work_item: WorkItem;
 }
