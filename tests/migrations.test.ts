@@ -110,6 +110,34 @@ describe('taxonomy migration',()=>{
    expect((await client.query("SELECT field_path,value,revision_id FROM oran.field_assertion WHERE entity_type='organization' AND entity_id=$1",[o])).rows).toEqual([{field_path:'name',value:'Legacy provider',revision_id:r1}]);
   });
  },120000);
+ it('skips empty legacy values and links each organization name to its earliest revision',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103100100_membership_organization_scope.sql'});
+   const [oa,oidle,bare,sparse,mixed,early,mid,late]=Array.from({length:8},()=>randomUUID());
+   for(const u of ['legacy-admin','legacy-verifier','legacy-staff']) await client.query('INSERT INTO oran.account(user_id,display_name) VALUES ($1,$1)',[u]);
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Skip provider'),($2,'Idle provider')",[oa,oidle]);
+   // bare: empty text, a non-ZIP area and no listing_state. sparse: empty text, a non-ZIP area and no categories. mixed: one empty and one filled text, a url and a ZIP.
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$3,'Bare service','Bare description'),($2,$3,'Sparse service','Sparse description')",[bare,sparse,oa]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description,url,application_process) VALUES ($1,$2,'Mixed service','Mixed description','https://example.org/mixed','Call first')",[mixed,oa]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'United States','US'),($3,$4,'United States','US'),($5,$6,'ZIP 98102','98102')",[randomUUID(),bare,randomUUID(),sparse,randomUUID(),mixed]);
+   const revise=(id:string,service:string,actor:string,origin:string,note:string,ago:string)=>client.query(`INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status,created_at) VALUES ($1,$2,$3,$4,$5,'accepted',now()-interval '${ago}')`,[id,service,actor,origin,JSON.stringify({input:{source_note:note}})]);
+   await revise(early,bare,'legacy-admin','admin','Earliest note','3 days');
+   await revise(mid,mixed,'legacy-staff','organization','Middle note','1 day');
+   await revise(late,sparse,'legacy-verifier','community','Latest note','0 days');
+   for(const [s,r] of [[sparse,late],[mixed,mid]]) await client.query("INSERT INTO oran.listing_state(service_id,created_by,revision_id) VALUES ($1,'legacy-admin',$2)",[s,r]);
+   await migrate(url);
+   const paths=async(type:string,id:string)=>(await client.query('SELECT field_path FROM oran.field_assertion WHERE entity_type=$1 AND entity_id=$2 ORDER BY field_path',[type,id])).rows.map(x=>x.field_path);
+   expect(await paths('service',bare)).toEqual([]);
+   expect(await paths('service',sparse)).toEqual(['description','name']);
+   expect(await paths('service',mixed)).toEqual(['application_process','description','name','service_area','url']);
+   expect(await paths('organization',oidle)).toEqual([]);
+   const mixedRows=(await client.query("SELECT field_path,value,origin,source_note,decided_by,revision_id FROM oran.field_assertion WHERE entity_type='service' AND entity_id=$1 AND field_path IN ('url','service_area','application_process') ORDER BY field_path",[mixed])).rows;
+   expect(mixedRows.map(r=>r.value)).toEqual(['Call first',{kind:'zip',postal_codes:['98102']},'https://example.org/mixed']);
+   for(const r of mixedRows) expect(r).toMatchObject({origin:'organization',source_note:'Middle note',decided_by:'legacy-staff',revision_id:mid});
+   const org=(await client.query("SELECT f.value,f.revision_id,f.origin,f.source_type,f.source_note,f.decided_by,f.status,f.observed_at=r.created_at AS observed_at_revision,f.decided_at=r.created_at AS decided_at_revision FROM oran.field_assertion f JOIN oran.revision r ON r.id=f.revision_id WHERE f.entity_type='organization' AND f.entity_id=$1",[oa])).rows;
+   expect(org).toEqual([{value:'Skip provider',revision_id:early,origin:'admin',source_type:'legacy',source_note:'Earliest note',decided_by:'legacy-admin',status:'accepted',observed_at_revision:true,decided_at_revision:true}]);
+  });
+ },120000);
  it('allows one accepted value per field and enforces decision and source shapes',async()=>{
   await withDatabase(async(client,url)=>{
    await migrate(url);
@@ -126,11 +154,11 @@ describe('taxonomy migration',()=>{
    await expect(insert('accepted')).rejects.toThrow('field_assertion_one_accepted');
    await insert('superseded');
    await insert('proposed');
-   await expect(insert('proposed',{decided_by:'shape-actor',decided_at:new Date()})).rejects.toThrow();
-   await expect(insert('superseded',{decided_by:null})).rejects.toThrow();
-   await expect(insert('superseded',{source_type:'url',source_url:null})).rejects.toThrow();
-   await expect(insert('superseded',{source_type:'phone_call',source_url:'https://example.org/a'})).rejects.toThrow();
-   await expect(insert('superseded',{source_type:'url',source_url:'ftp://example.org/a'})).rejects.toThrow();
+   await expect(insert('proposed',{decided_by:'shape-actor',decided_at:new Date()})).rejects.toThrow('field_assertion_decision_shape');
+   await expect(insert('superseded',{decided_by:null})).rejects.toThrow('field_assertion_decider_shape');
+   await expect(insert('superseded',{source_type:'url',source_url:null})).rejects.toThrow('field_assertion_source_shape');
+   await expect(insert('superseded',{source_type:'phone_call',source_url:'https://example.org/a'})).rejects.toThrow('field_assertion_source_shape');
+   await expect(insert('superseded',{source_type:'url',source_url:'ftp://example.org/a'})).rejects.toThrow('field_assertion_source_url_check');
    await insert('superseded',{source_type:'url',source_url:'https://example.org/a'});
   });
  },120000);

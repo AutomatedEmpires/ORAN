@@ -19,9 +19,9 @@ CREATE TABLE oran.field_assertion (
  status text NOT NULL CHECK (status IN ('proposed','accepted','superseded','rejected')),
  decided_by text REFERENCES oran.account(user_id), decided_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),
- CHECK ((source_type = 'url') = (source_url IS NOT NULL)),
- CHECK ((status = 'proposed') = (decided_at IS NULL)),
- CHECK ((decided_by IS NULL) = (decided_at IS NULL)));
+ CONSTRAINT field_assertion_source_shape CHECK ((source_type = 'url') = (source_url IS NOT NULL)),
+ CONSTRAINT field_assertion_decision_shape CHECK ((status = 'proposed') = (decided_at IS NULL)),
+ CONSTRAINT field_assertion_decider_shape CHECK ((decided_by IS NULL) = (decided_at IS NULL)));
 CREATE UNIQUE INDEX field_assertion_one_accepted ON oran.field_assertion (entity_type, entity_id, field_path) WHERE status = 'accepted';
 CREATE INDEX field_assertion_entity ON oran.field_assertion (entity_id);
 -- Backfill: each listing's current revision becomes the accepted, 'legacy'-sourced value of every field the old form carried. Empty and missing values are skipped.
