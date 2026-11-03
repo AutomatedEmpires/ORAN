@@ -12,7 +12,7 @@ const input={name:'Synthetic food program',description:'Synthetic test record, n
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 const run=randomUUID().replaceAll('-','');
-const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second'};
+const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
 const original={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
 function restoreEnvironment(){for(const [key,value] of Object.entries(original)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
@@ -191,5 +191,48 @@ describe('adding categories',()=>{
  });
  it('only admins add categories',async()=>{
   await expect(addCategory(user.org,{...immigration,code:'org_attempt'})).rejects.toThrow('Access denied');
+ });
+});
+
+describe('accounts with several memberships',()=>{
+ const assignee=async(id:string)=>(await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to;
+ it('one account can hold organization and community memberships at once',async()=>{
+  await database().insertInto('account').values({user_id:user.dual,display_name:'Synthetic dual member'}).execute();
+  await database().insertInto('membership').values([{user_id:user.dual,role:'organization',organization_id:fixtureOrg,approved:true},{user_id:user.dual,role:'community',approved:true,postal_code:'98101',category_scope:['food']}]).execute();
+  const own=await acceptResource(user.dual,{...input,organization_id:fixtureOrg});
+  // The id filter keeps this check clear of the 100 earlier fixture-organization fillers.
+  expect((await ownedResources(user.dual,own)).some(r=>r.id===own)).toBe(true);
+  expect((await database().selectFrom('field_assertion').select('origin').where('service_id','=',own).executeTakeFirstOrThrow()).origin).toBe('organization');
+  expect((await database().selectFrom('audit_event').select('detail').where('subject','=',own).executeTakeFirstOrThrow()).detail).toEqual({asserted_by:'organization'});
+  // Move the earlier-sorting verifier out of 98101 so the dual member is the first candidate.
+  await approveContributor(user.admin,user.community,'98102',['food']);
+  const id=await acceptResource(user.admin,input);
+  expect(await assignee(id)).toBe(user.dual);
+  expect((await verificationQueue(user.dual)).some(r=>r.id===id)).toBe(true);
+  await verify(user.dual,id);
+  await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+ it('staff never verify their own organization\'s listings',async()=>{
+  await approveContributor(user.admin,user.community,'98102',['food']);
+  const id=await acceptResource(user.org,input);
+  expect(await assignee(id)).not.toBe(user.dual);
+  expect((await verificationQueue(user.dual)).some(r=>r.id===id)).toBe(false);
+  await expect(verify(user.dual,id)).rejects.toThrow('Access denied');
+  // An assignment made before the verifier joined the organization's staff stays blocked.
+  await database().updateTable('work_item').set({assigned_to:user.dual}).where('service_id','=',id).execute();
+  expect((await verificationQueue(user.dual)).some(r=>r.id===id)).toBe(false);
+  await expect(verify(user.dual,id)).rejects.toThrow('Access denied');
+  await approveContributor(user.admin,user.dual,'98101',['food']);
+  expect(await assignee(id)).not.toBe(user.dual);
+  await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+ it('staff with several organizations must choose one',async()=>{
+  const second=randomUUID(),outside=randomUUID();
+  await database().insertInto('organization').values([{id:second,name:'Second synthetic organization'},{id:outside,name:'Outside synthetic organization'}]).execute();
+  await database().insertInto('membership').values({user_id:user.dual,role:'organization',organization_id:second,approved:true}).execute();
+  await expect(acceptResource(user.dual,input)).rejects.toThrow('Choose an organization');
+  await expect(acceptResource(user.dual,{...input,organization_name:'Outside synthetic organization',organization_id:outside})).rejects.toThrow('Access denied');
+  const id=await acceptResource(user.dual,{...input,organization_name:'Second synthetic organization',organization_id:second});
+  expect((await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id).toBe(second);
  });
 });
