@@ -93,5 +93,6 @@
   "categoryAdded": "Categoría agregada.",
   "categoryExists": "Ese código de categoría ya existe.",
   "categoryCodeHint": "Letras minúsculas, números y guiones bajos, por ejemplo immigration.",
-  "chooseAtLeastOne": "Elige al menos una."
+  "chooseAtLeastOne": "Elige al menos una.",
+  "chooseOrganization": "Organización"
 }

@@ -9,8 +9,9 @@ export type ActionState={message:string;ok?:boolean};
 const values=(form:FormData,names:string[])=>Object.fromEntries(names.map(n=>[n,String(form.get(n)??'')]));
 function refresh(){for(const path of ['/','/admin','/organization','/community','/profile'])revalidatePath(path);}
 export async function resourceAction(_:ActionState,form:FormData):Promise<ActionState>{
- const actor=await requireActor(),{text:t}=await messages();
- try {await acceptResource(actor.user_id,{...values(form,['name','description','organization_name','postal_code','eligibility_description','application_process','url','source_note']),categories:form.getAll('categories').map(String)},String(form.get('id')??'')||undefined);refresh();return {message:t.saved,ok:true};}
+ const actor=await requireActor(),{text:t}=await messages(),organization_id=String(form.get('organization_id')??'');
+ // Leave the field out when no organization was chosen: an empty string is not a valid id.
+ try {await acceptResource(actor.user_id,{...values(form,['name','description','organization_name','postal_code','eligibility_description','application_process','url','source_note']),...(organization_id?{organization_id}:{}),categories:form.getAll('categories').map(String)},String(form.get('id')??'')||undefined);refresh();return {message:t.saved,ok:true};}
  catch{return {message:t.invalid};}
 }
 export async function addCategoryAction(_:ActionState,form:FormData):Promise<ActionState>{

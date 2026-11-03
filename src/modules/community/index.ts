@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { database,lockCatalog } from '@/modules/platform';
 import { assertCategoryCodes,serviceHasCategory } from '@/modules/catalog';
-import { actorFor } from '@/modules/identity';
-export async function members(userId:string) {
- if((await actorFor(userId)).role!=='admin')throw new Error('Access denied');
- return database().selectFrom('membership').select(['user_id','display_name','role','approved','postal_code','category_scope']).where('role','=','community').execute();
+import { actorFor,affiliatedOrganizationIds,isAdmin } from '@/modules/identity';
+export async function members(adminId:string) {
+ if(!isAdmin(await actorFor(adminId)))throw new Error('Access denied');
+ return database().selectFrom('membership as m').innerJoin('account as a','a.user_id','m.user_id').select(['m.user_id','a.display_name','m.role','m.approved','m.postal_code','m.category_scope']).where('m.role','=','community').execute();
 }
 export async function approveContributor(adminId:string,userId:string,postalCode:string,categoryScope:readonly string[]){
  const requested=z.array(z.string()).min(1).parse(categoryScope);
@@ -13,14 +13,16 @@ export async function approveContributor(adminId:string,userId:string,postalCode
  await database().transaction().execute(async trx=>{
   await lockCatalog(trx);
   const granted=await assertCategoryCodes(requested,trx);
-  if((await actorFor(adminId,trx)).role!=='admin')throw new Error('Access denied');
+  if(!isAdmin(await actorFor(adminId,trx)))throw new Error('Access denied');
   await trx.updateTable('membership').set({approved:true,postal_code:postalCode,category_scope:granted}).where('user_id','=',userId).where('role','=','community').returning('user_id').executeTakeFirstOrThrow();
+  // Ownership is never independent verification: no work from organizations this verifier is affiliated with, approved or pending.
+  const affiliated=affiliatedOrganizationIds(await actorFor(userId,trx));
   const candidates=await trx.selectFrom('work_item').select('service_id').where(eb=>eb.or([eb('assigned_to','=',userId),eb('assigned_to','is',null)])).orderBy('service_id').execute();
   for(const candidate of candidates){
    // All acceptance/verification/assignment mutations lock the service first.
-   await trx.selectFrom('service').select('id').where('id','=',candidate.service_id).forUpdate().executeTakeFirstOrThrow();
+   const service=await trx.selectFrom('service').select('organization_id').where('id','=',candidate.service_id).forUpdate().executeTakeFirstOrThrow();
    const item=await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by']).where('w.service_id','=',candidate.service_id).executeTakeFirstOrThrow();
-   const eligible=item.extent===postalCode&&item.created_by!==userId&&await serviceHasCategory(trx,candidate.service_id,granted);
+   const eligible=item.extent===postalCode&&item.created_by!==userId&&!affiliated.includes(service.organization_id)&&await serviceHasCategory(trx,candidate.service_id,granted);
    if(item.assigned_to===userId&&!eligible)await trx.updateTable('work_item').set({assigned_to:null}).where('service_id','=',candidate.service_id).execute();
    if(item.assigned_to===null&&eligible)await trx.updateTable('work_item').set({assigned_to:userId}).where('service_id','=',candidate.service_id).execute();
   }

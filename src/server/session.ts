@@ -1,8 +1,8 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { config,database,readToken } from '@/modules/platform';
-import { actorFor } from '@/modules/identity';
+import { config,readToken } from '@/modules/platform';
+import { actorFor,ensureAccount } from '@/modules/identity';
 export const currentActor = cache(async()=>{
  let userId:string|null=null;
  if(process.env.ORAN_LOCAL_DEV==='1') {
@@ -13,7 +13,8 @@ export const currentActor = cache(async()=>{
  } else if(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY) {
   const {auth}=await import('@clerk/nextjs/server');
   userId=(await auth()).userId;
-  if(userId) await database().insertInto('membership').values({user_id:userId,display_name:'Member',role:'user',approved:true}).onConflict(o=>o.column('user_id').doNothing()).execute();
+  // Having an account makes you a seeker; roles are separate memberships.
+  if(userId) await ensureAccount(userId,'Member');
  }
  return userId ? actorFor(userId) : null;
 });

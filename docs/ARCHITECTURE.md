@@ -28,7 +28,9 @@ Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browse
 
 ## Identity and route contract
 
-Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. An unknown verified Clerk user gets only the user role. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+
+One account may hold several memberships (admin, organization, community), each with its own scope and approval, and only approved memberships grant privileges. Independence rule: no admin or verifier is assigned, sees in a queue or verifies a listing of an organization they are affiliated with, whether that affiliation is approved or pending. Any future organization-membership grant or claim flow must release that organization's verification work currently assigned to the new member, using the same release logic as `approveContributor`.
 
 The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
 

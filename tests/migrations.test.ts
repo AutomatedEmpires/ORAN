@@ -54,6 +54,19 @@ describe('taxonomy migration',()=>{
    expect(r.rows.map(x=>x.code)).toEqual(['health']);
   });
  },120000);
+ it('maps legacy memberships to accounts',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103090100_drop_listing_state_category.sql'});
+   for(const [id,role] of [['u1','user'],['a1','admin']]) await client.query("INSERT INTO oran.membership(user_id,display_name,role,approved) VALUES ($1,$1,$2,true)",[id,role]);
+   await client.query("INSERT INTO oran.audit_event(id,actor_id,action,subject) VALUES ($1,'u1','test.legacy','x')",[randomUUID()]);
+   await migrate(url);
+   expect((await client.query('SELECT user_id FROM oran.account ORDER BY user_id')).rows.map(x=>x.user_id)).toEqual(['a1','u1']);
+   const m=await client.query('SELECT id,user_id,role FROM oran.membership');
+   expect(m.rows).toHaveLength(1);expect(m.rows[0].user_id).toBe('a1');expect(m.rows[0].role).toBe('admin');expect(m.rows[0].id).toBeTruthy();
+   expect((await client.query("SELECT 1 FROM oran.audit_event WHERE actor_id='u1'")).rows).toHaveLength(1);
+   await expect(client.query("INSERT INTO oran.membership(user_id,role) VALUES ('a1','admin')")).rejects.toThrow();
+  });
+ },120000);
  it('rejects an unknown migration target',async()=>{
   await withDatabase(async(_,url)=>{
    await expect(migrate(url,{until:'no_such_migration.sql'})).rejects.toThrow('Unknown migration: no_such_migration.sql');
@@ -71,6 +84,15 @@ describe('taxonomy migration',()=>{
    await migrate(url);
    const tax=(await client.query('SELECT id FROM oran.taxonomy LIMIT 1')).rows[0].id;
    await expect(client.query("INSERT INTO oran.taxonomy_term(id,taxonomy_id,code,name) VALUES ($1,$2,'Bad Code','Bad')",[randomUUID(),tax])).rejects.toThrow();
+  });
+ },120000);
+ it('rejects a community membership scoped to an organization',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url);
+   const org=randomUUID();
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Scoped org')",[org]);
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('c1','c1')");
+   await expect(client.query("INSERT INTO oran.membership(user_id,role,organization_id) VALUES ('c1','community',$1)",[org])).rejects.toThrow('membership_organization_scope');
   });
  },120000);
 });

@@ -88,6 +88,14 @@ test('organization staff maintain their own unpublished resources',async({page})
  await page.goto('/organization');await expect(page.getByText('Updated synthetic organization fixture.',{exact:true})).toBeVisible();
  await page.goto('/');await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
 });
+test('a signed-in user with no memberships is denied staff workspaces',async({page})=>{
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as My profile',exact:true}).click();
+ await expect(page).toHaveURL(/\/profile/);
+ for(const path of ['/organization','/community','/admin']){
+  await page.goto(path);
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText('You do not have access to this workspace.');
+ }
+});
 test('local sign-in rejects cross-origin and unknown identities',async({request})=>{
  const rejected=await request.post('/api/dev-session',{headers:{origin:'https://outside.example'},form:{identity:'dev-admin'}});
  expect(rejected.status()).toBe(403);
