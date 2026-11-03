@@ -58,11 +58,19 @@ export interface CategoryDisplay {
 }
 
 export interface FieldAssertion {
-  actor_id: string;
   created_at: Generated<Timestamp>;
+  decided_at: Timestamp | null;
+  decided_by: string | null;
+  entity_id: string;
+  entity_type: string;
+  field_path: string;
   id: string;
+  observed_at: Timestamp;
   origin: string;
-  service_id: string;
+  revision_id: string;
+  source_note: Generated<string>;
+  source_type: string;
+  source_url: string | null;
   status: string;
   value: Json;
 }
@@ -98,6 +106,15 @@ export interface PersonalProfile {
   postal_code: string;
   updated_at: Generated<Timestamp>;
   user_id: string;
+}
+
+export interface Revision {
+  actor_id: string;
+  created_at: Generated<Timestamp>;
+  id: string;
+  legacy_snapshot: Json | null;
+  origin: string;
+  service_id: string;
 }
 
 export interface Service {
@@ -164,6 +181,7 @@ export interface DB {
   membership: Membership;
   organization: Organization;
   personal_profile: PersonalProfile;
+  revision: Revision;
   service: Service;
   service_area: ServiceArea;
   taxonomy: Taxonomy;
