@@ -130,7 +130,7 @@ export async function ownedResources(userId:string,resourceId?:string) {
  const actor = await actorFor(userId), admin = isAdmin(actor), orgs = organizationIds(actor);
  if (!admin && !orgs.length) throw new Error('Access denied');
  if(resourceId&&!z.uuid().safeParse(resourceId).success)return [];
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name','s.organization_id']);
  if (!admin) query = query.where('s.organization_id','in',orgs);
  if(resourceId)query=query.where('s.id','=',resourceId);
  return query.orderBy('s.name').limit(100).execute();

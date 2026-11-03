@@ -94,5 +94,10 @@
   "categoryExists": "That category code already exists.",
   "categoryCodeHint": "Lower-case letters, numbers and underscores, for example immigration.",
   "chooseAtLeastOne": "Choose at least one.",
-  "chooseOrganization": "Organization"
+  "chooseOrganization": "Organization",
+  "sourceType": "Where this information comes from",
+  "sourceWebsite": "A website",
+  "sourcePhoneCall": "A phone call",
+  "sourceOrganization": "The organization itself",
+  "sourceUrl": "Source web address"
 }
