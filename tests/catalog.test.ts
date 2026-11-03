@@ -14,6 +14,8 @@ async function verify(user:string,id:string,data:unknown=check) {const state=awa
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
+const original={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
+function restoreEnvironment(){for(const [key,value] of Object.entries(original)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 let ready=false,baseUrl:string|undefined,createdDatabase=false,roleCreated=false;
 const databaseName='oran_test_'+run;
 beforeAll(async()=>{
@@ -27,7 +29,7 @@ beforeAll(async()=>{
 });
 afterAll(async()=>{
  try {if(ready&&roleCreated)await sql`DROP ROLE IF EXISTS ${sql.id(deniedRole)}`.execute(database());}
- finally {await closeDatabase();if(createdDatabase&&baseUrl){process.env.DATABASE_URL=baseUrl;try{await sql`DROP DATABASE ${sql.id(databaseName)}`.execute(database());}finally{await closeDatabase();}}await local?.close();}
+ finally {await closeDatabase();if(createdDatabase&&baseUrl){process.env.DATABASE_URL=baseUrl;try{await sql`DROP DATABASE ${sql.id(databaseName)}`.execute(database());}finally{await closeDatabase();}}await local?.close();restoreEnvironment();}
 });
 describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  it('has PostGIS and denies a role without schema grants',async()=>{
