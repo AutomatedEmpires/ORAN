@@ -10,6 +10,8 @@ The founder's expanded model has four pinned seeker experiences: **Seek** for di
 
 Chat discoveries should improve the catalog through structured, source-backed proposals. Collecting a candidate, accepting facts, publishing a listing and independently verifying it remain distinct operations; source permissions and explicit automation/display policies apply. The target is explained in [Blueprint §2.3–§2.6](docs/BLUEPRINT.md#23-the-seeker-product-a-calm-personal-guide) and [§5.8](docs/BLUEPRINT.md#58-chat-assisted-acquisition-and-catalog-improvement), with the direction recorded in [ADR-0004](docs/adr/0004-conversational-resource-guide.md). Delivery slices and evaluation are in [Architecture](docs/ARCHITECTURE.md#proposed-delivery-slices-and-release-evidence).
 
+[ADR-0005](docs/adr/0005-founder-vision-interview.md) records the founder's vision interview: nationwide scope, automatic publication of complete records with trust labels, automatic guide memory, "people reaching help" as the primary success measure, CC BY 4.0 data, AGPL-3.0 code and nonprofit form.
+
 **This is target design.** Chat, web discovery/acquisition, interactive maps, expanded profiles and saved resources are not implemented in the current bootstrap. The native first-run workflow below remains credential-free.
 
 ## Pull and open in Cursor

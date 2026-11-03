@@ -7,6 +7,7 @@ Read this file first. It applies to every contributor, human or AI agent.
 1. [docs/CONSTITUTION.md](docs/CONSTITUTION.md) is binding (rules C1–C23).
 2. [ADR-0002](docs/adr/0002-founder-vision-and-native-environment.md) records the authoritative founder amendment: four domains, voluntary profiles, grounded matching, independent acquisition and the native environment below. It supersedes conflicting earlier assumptions.
    [ADR-0004](docs/adr/0004-conversational-resource-guide.md) records the later calm personal guide direction: Seek / Chat / Map / Profile, bounded catalog-and-web assistance and structured acquisition. It supersedes earlier map/chat deferral and blanket web-extraction exclusion; detailed policies remain open.
+   [ADR-0005](docs/adr/0005-founder-vision-interview.md) records the founder vision interview. It sets nationwide scope and automatic publication of complete records with trust labels, automatic guide memory (C8 amended), relevance-based crisis/quick-exit placement, CC BY 4.0 data, AGPL-3.0 code and nonprofit form. Where it conflicts with earlier documents, ADR-0005 governs.
 3. [docs/BLUEPRINT.md](docs/BLUEPRINT.md) explains the amended rules and product and architecture intent until Gate 2. At Gate 2 it is split into the core documents listed in BLUEPRINT §11.4.
 4. Founder decisions are recorded in [docs/DECISIONS.md](docs/DECISIONS.md). Architecture decisions are recorded in [docs/adr/](docs/adr/).
 5. Follow explicit recorded founder amendments. Report unresolved conflicts with the rule/decision ID; do not invent approval (C21).
@@ -17,7 +18,7 @@ Read this file first. It applies to every contributor, human or AI agent.
 
 - Implement and test the development scaffold and small four-domain resource workflows through reviewed PRs.
 - Admins can directly create resources, with the same acceptance, provenance, history and verification rules as other channels.
-- Pilot evidence, funding, legal form, launch languages, data licensing and production readiness remain open. Do not mark those gates complete without evidence.
+- Legal form, launch languages and data/code licensing are decided in ADR-0005. Funding, the assistant provider (D22), replacement milestones for the pilot-county gates and production readiness remain open. Do not mark gates complete without evidence.
 - No production deployment or paid cloud provisioning is part of this bootstrap.
 
 ## 3. Fixed platform direction
@@ -34,7 +35,8 @@ Hosting is Vercel, the database is Supabase Postgres + PostGIS, and identity is 
 ## 5. Founder product contract
 
 - Four foundational experiences: **user, organization, approved community, admin**, sharing one app and canonical resource catalog.
-- Users can browse anonymously or opt into voluntary purpose-specific profiles and personalized matching. Use deterministic eligibility/coverage rules plus staged AI-assisted interpretation and catalog-grounded explanations; expose unknowns and never guarantee qualification or capacity.
+- Primary success measure: **people reaching help** (D23). Scope is nationwide. Complete records publish automatically with trust labels; flags jump the verification queue; duplicates resolve to one listing (ADR-0005).
+- Users can browse anonymously, or opt into a profile that also serves as the guide's automatic memory, with visible, reversible saves and ask-first sensitive categories (C8). Use deterministic eligibility/coverage rules plus staged AI-assisted interpretation and catalog-grounded explanations; expose unknowns and never guarantee qualification or capacity.
 - Seek, Chat, Map and Profile are the foundational seeker views. Chat helps with resources and access steps, uses consent-filtered context and attributed catalog/web evidence, and produces structured proposals through the shared acceptance path. It never writes HSDS directly, establishes independent verification, or overrides permissions. See BLUEPRINT §2.3–§2.6 and §5.8; D21/D22 still gate display, automation and provider policies.
 - Organizations own and maintain one or many resources through scoped staff memberships and approved claims. All channels use the acceptance service; ownership does not establish independent verification.
 - Community contributors require admin approval and geographic/category-scoped assignments. They discover, propose, verify and periodically reverify resources with evidence. They do not gain access to seeker profiles or unrestricted edits to claimed listings.
