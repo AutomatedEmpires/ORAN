@@ -92,6 +92,13 @@ test('organization staff maintain their own unpublished resources',async({page})
  await page.goto('/organization');await expect(page.getByText('Updated synthetic organization fixture.',{exact:true})).toBeVisible();
  await page.goto('/');await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
 });
+test('an admin who belongs to no organization has no source preselected',async({page})=>{
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
+ await page.goto('/organization');
+ await expect(page.getByRole('heading',{name:'Resources you maintain',exact:true})).toBeVisible();
+ for(const name of ['A website','A phone call','The organization itself'])await expect(page.getByRole('radio',{name,exact:true})).not.toBeChecked();
+});
 test('a signed-in user with no memberships is denied staff workspaces',async({page})=>{
  await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as My profile',exact:true}).click();
  await expect(page).toHaveURL(/\/profile/);
