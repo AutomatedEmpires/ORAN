@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe,it,expect } from 'vitest';
-import { addressValue,areaRows,formatPhone,hoursValue,listingOptions,locationInput,normalizePhone,partMessages,phoneValue,serviceAreaValue,usStates,usTimeZones,weekDays } from '@/modules/catalog';
+import { addressValue,areaRows,formatPhone,hoursValue,listingOptions,locationInput,normalizePhone,partLimits,partMessages,partPatterns,phoneValue,serviceAreaValue,usStates,usTimeZones,weekDays } from '@/modules/catalog';
 // Pure value tests: no database. The migration's named CHECKs are read from the SQL so these schemas cannot drift from them.
 const migration = readFileSync(fileURLToPath(new URL('../supabase/migrations/20261104100000_listing_parts.sql',import.meta.url)),'utf8');
 const checkPattern = (name:string) => new RegExp(new RegExp(`CONSTRAINT ${name} CHECK \\([a-z_]+ ~ '([^']+)'\\)`).exec(migration)![1]);
@@ -10,6 +10,7 @@ const weekly = {kind:'weekly',time_zone:'America/Los_Angeles',weekly:[{day:'FR',
 const withException = (e:object) => ({...weekly,exceptions:[{...weekly.exceptions[0],...e}]});
 const withWeekly = (rows:unknown[]) => ({...weekly,weekly:rows});
 const hasIssue = (r:{success:boolean;error?:{issues:{message:string}[]}},message:string) => !r.success && !!r.error?.issues.some(i=>i.message===message);
+const issuePath = (r:{success:boolean;error?:{issues:{message:string;path:PropertyKey[]}[]}},message:string) => r.error?.issues.find(i=>i.message===message)?.path;
 
 describe('phone numbers',()=>{
  it('normalizes common US formats and hotline short codes',()=>{
@@ -31,6 +32,14 @@ describe('phone numbers',()=>{
   }
   expect(formatPhone('+18005550199')).toBe('(800) 555-0199');
   for (const code of ['211','311','511','711','811','988']) expect(formatPhone(code)).toBe(code);
+ });
+ it('does not invent a US number from non-US or lettered input',()=>{
+  for (const raw of ['+65 9876 5432','Suite 211','206-555-010 x1','206-555-CALL','+988','++12065550100','1+2065550100','206/555/0100','(206) 555-0100 ext 5','+']) expect(normalizePhone(raw),raw).toBeNull();
+  expect(normalizePhone('+1 (206) 555-0100')).toBe('+12065550100');
+  expect(normalizePhone('+1.206.555.0100')).toBe('+12065550100');
+  expect(normalizePhone('  (206) 555-0100\n')).toBe('+12065550100');
+  expect(normalizePhone('\t9-8-8 ')).toBe('988');
+  expect(phoneValue.safeParse({number:'+65 9876 5432',extension:null}).success).toBe(false);
  });
  it('stores the normalized number with an optional extension',()=>{
   expect(phoneValue.parse({number:'(206) 555-0100',extension:null})).toEqual({number:'+12065550100',extension:null});
@@ -93,6 +102,19 @@ describe('hours',()=>{
   expect(hoursValue.safeParse(withException({from:'2026-02-30',to:'2026-03-01'})).success).toBe(false);
   expect(hoursValue.safeParse({kind:'sometimes'}).success).toBe(false);
  });
+ it('names the empty time of a one-sided exception',()=>{
+  expect(issuePath(hoursValue.safeParse(withException({opens_at:'09:00'})),partMessages.oneTime)).toEqual(['exceptions',0,'closes_at']);
+  expect(issuePath(hoursValue.safeParse(withException({closes_at:'17:00'})),partMessages.oneTime)).toEqual(['exceptions',0,'opens_at']);
+  expect(issuePath(hoursValue.safeParse(withException({opens_at:'09:00',closes_at:'09:00'})),partMessages.sameTimes)).toEqual(['exceptions',0,'closes_at']);
+  expect(issuePath(hoursValue.safeParse(withException({from:'2026-12-26',to:'2026-12-25'})),partMessages.endBeforeStart)).toEqual(['exceptions',0,'to']);
+ });
+ it('rejects dates before year 1, which Postgres cannot store',()=>{
+  expect(partLimits.date.min).toBe('0001-01-01');
+  expect(hoursValue.safeParse(withException({from:'0000-01-01',to:'0000-01-02'})).success).toBe(false);
+  expect(hoursValue.safeParse(withException({from:'0000-12-31',to:'2026-01-01'})).success).toBe(false);
+  expect(hoursValue.safeParse(withException({from:'2026-01-01',to:'0000-01-01'})).success).toBe(false);
+  expect(hoursValue.safeParse(withException({from:'0001-01-01',to:'0001-01-02'})).success).toBe(true);
+ });
  it('keeps the row counts and the note length the form promises',()=>{
   const row = weekly.weekly[0];
   expect(hoursValue.safeParse(withWeekly(Array.from({length:21},()=>row))).success).toBe(true);
@@ -135,6 +157,17 @@ describe('service areas',()=>{
   expect(serviceAreaValue.safeParse({kind:'city',name:'Seattle',state:'ZZ'}).success).toBe(false);
   expect(serviceAreaValue.safeParse({kind:'region'}).success).toBe(false);
  });
+ it('trims pasted ZIP codes',()=>{
+  expect(serviceAreaValue.parse({kind:'zip',postal_codes:['98101 ',' 98102','98101\n']})).toEqual({kind:'zip',postal_codes:['98101','98102']});
+  expect(serviceAreaValue.safeParse({kind:'zip',postal_codes:['98 101']}).success).toBe(false);
+  expect(serviceAreaValue.safeParse({kind:'zip',postal_codes:['   ']}).success).toBe(false);
+ });
+ it('keeps the place-name pattern usable as an HTML pattern, which matches the whole value',()=>{
+  const html = new RegExp(`^(?:${partPatterns.letter})$`,'v');
+  for (const ok of ['Seattle','King County',"Coeur d'Alene",'Añasco','Route 66']) expect(html.test(ok),ok).toBe(true);
+  for (const bad of ['12345','--','']) expect(html.test(bad),bad).toBe(false);
+  expect(serviceAreaValue.parse({kind:'county',name:'King County',state:'WA'}).kind).toBe('county');
+ });
  it('writes the HSDS rows each kind produces',()=>{
   expect(areaRows({kind:'zip',postal_codes:['98101','98102']})).toEqual([{name:'ZIP 98101',extent:'98101',kind:'zip'},{name:'ZIP 98102',extent:'98102',kind:'zip'}]);
   expect(areaRows({kind:'city',name:'Seattle',state:'WA'})).toEqual([{name:'Seattle, WA',extent:'Seattle, WA',kind:'city'}]);
@@ -144,6 +177,11 @@ describe('service areas',()=>{
 });
 
 describe('addresses',()=>{
+ it('trims a pasted postal code',()=>{
+  expect(addressValue.parse({...address,postal_code:' 98101 '}).postal_code).toBe('98101');
+  expect(addressValue.parse({...address,postal_code:'98101-1234\n'}).postal_code).toBe('98101-1234');
+  expect(addressValue.safeParse({...address,postal_code:'98 101'}).success).toBe(false);
+ });
  it('trims text and turns an empty second line into null',()=>{
   expect(addressValue.parse({...address,address_1:'  123 Main St ',address_2:'   ',city:' Seattle '})).toEqual(address);
   expect(addressValue.parse({...address,address_2:' Suite 4 '}).address_2).toBe('Suite 4');
@@ -180,6 +218,10 @@ describe('locations',()=>{
   expect(locationInput.parse({access:'physical',confidential:false,address}).confidential).toBe(false);
   expect(locationInput.parse({access:'remote',confidential:false}).confidential).toBe(false);
   expect(locationInput.parse({access:'remote',name:'Online'})).toEqual({access:'remote',name:'Online',address:null,coordinates:null});
+ });
+ it('shares the coordinate limits with the form',()=>{
+  expect(partLimits.latitude).toEqual({min:-90,max:90});
+  expect(partLimits.longitude).toEqual({min:-180,max:180});
  });
  it('rejects coordinates out of range, a bad id and an unknown access',()=>{
   for (const coordinates of [{latitude:91,longitude:0},{latitude:-91,longitude:0},{latitude:0,longitude:181},{latitude:0,longitude:-181},{latitude:0},{longitude:0}]) expect(locationInput.safeParse({access:'physical',address,coordinates}).success,JSON.stringify(coordinates)).toBe(false);
