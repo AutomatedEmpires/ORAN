@@ -50,7 +50,7 @@ Organization staff create and edit only their own resources. Approved community 
 .\scripts\run.ps1 test:e2e
 ```
 
-Browser tests use a separate fresh database, port 3100 and .next-test build folder. Windows uses installed Microsoft Edge when available; otherwise install the Playwright Chromium browser with the package runner. CI installs Chromium explicitly. Test traces are ignored.
+Browser tests use a separate fresh database, app port 3100, a loopback-only test database on port 3101, and the .next-test build folder. Windows uses installed Microsoft Edge when available; otherwise install the Playwright Chromium browser with the package runner. CI installs Chromium explicitly. Test traces are ignored.
 
 CI checks Windows and Linux, standard PostgreSQL 17/PostGIS 3.6 integration and browser accessibility. Native Windows ARM64 has also been exercised locally. See the PR checks for the exact current result; a Linux build alone is not ARM64 evidence.
 

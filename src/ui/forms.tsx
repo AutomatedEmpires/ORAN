@@ -106,6 +106,8 @@ export function ResourceForm({resource={},lockOrganizationName=false,categories,
  // - otherwise nothing. The form then sends no choice and the server decides (S2-24), so a form sent without JavaScript is safe too.
  const startsSafety=Boolean(resource.categories?.includes('safety')),[safety,setSafety]=useState(startsSafety),[chosen,setChosen]=useState<Partial<Record<number,Privacy>>>({}),added=safety&&!startsSafety;
  const startsHours=resource.hours?.kind??'unknown',[hoursKind,setHoursKind]=useState<string>(startsHours);
+ // After a save, the stored kind replaces whatever the form had selected. Typing still switches "Not known yet" to weekly before that save.
+ useEffect(()=>{setHoursKind(startsHours);},[startsHours]);
  const privacy=(slot:number,location?:Location):Privacy|undefined=>chosen[slot]??(location?.access==='physical'?(added||location.confidential?'private':'public'):safety?'private':undefined);
  // A full listing offers no empty location slot.
  const saved=resource.locations??[],slots=[...saved,...(saved.length<options.limits.locations.max?[undefined]:[])];

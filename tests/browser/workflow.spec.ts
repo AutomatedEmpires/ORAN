@@ -27,7 +27,14 @@ async function startListing(page:Page,name:string,category='Food'){
  await form.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');
  return form;
 }
-async function save(form:Locator,label:'Add resource'|'Save'){await form.getByRole('button',{name:label,exact:true}).click();await expect(form.getByRole('status')).toHaveText(/^Saved\. This resource needs/);}
+async function save(form:Locator,label:'Add resource'|'Save'){
+ const button=form.getByRole('button',{name:label,exact:true});
+ // Wait for this save's server action. The status can already say "Saved…" from an earlier save in the same view, so reading it first would accept the previous revision (M-5).
+ const posted=form.page().waitForResponse(response=>response.request().method()==='POST'&&response.request().headers()['next-action']!==undefined);
+ await button.click();
+ await posted;
+ await expect(form.getByRole('status')).toHaveText(/^Saved\. This resource needs/);
+}
 // Opens the listing's edit page from "Resources you maintain" and returns its id and form.
 async function openEdit(page:Page,name:string){
  await page.goto('/admin');
@@ -268,10 +275,12 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await location.getByLabel('Longitude (optional)',{exact:true}).fill('-122.3101');
  await form.getByLabel('Phone number',{exact:true}).fill('(206) 555-0100');
  await form.getByLabel('Extension (optional)',{exact:true}).fill('12');
- await form.getByRole('radio',{name:'Weekly hours',exact:true}).check();
+ await expect(form.getByRole('radio',{name:'Not known yet',exact:true})).toBeChecked();
  await form.getByLabel('Time zone',{exact:true}).selectOption('America/Los_Angeles');
  const group=(scope:Locator,name:string)=>scope.getByRole('group',{name,exact:true});
+ // Typing a time leaves "Not known yet", so the hours are kept instead of dropped (S2-28).
  await group(form,'Monday').getByLabel('Opens',{exact:true}).fill('09:00');
+ await expect(form.getByRole('radio',{name:'Weekly hours',exact:true})).toBeChecked();
  await group(form,'Monday').getByLabel('Closes',{exact:true}).fill('17:00');
  await group(form,'Friday').getByLabel('Opens',{exact:true}).fill('19:00');
  await group(form,'Friday').getByLabel('Closes',{exact:true}).fill('07:00');
@@ -312,6 +321,8 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(mine.getByRole('heading',{level:3,name:'Hours',exact:true})).toBeVisible();
  await expect(task.getByRole('heading',{level:4,name:'Hours',exact:true})).toBeVisible();
  await expect(task.getByRole('heading',{level:5,name:'Dates with different hours',exact:true})).toBeVisible();
+ // "Record verification" is its own heading under the task title, not inside the hours (M-3).
+ await expect(task.getByRole('heading',{level:4,name:'Record verification',exact:true})).toBeVisible();
  await hydrated(task.locator('form'));
  await task.getByLabel('Method',{exact:true}).selectOption('website');
  await task.getByLabel('Evidence and source reference').fill('Synthetic evidence from example.org used only in browser testing');
@@ -325,7 +336,7 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(card.getByRole('heading',{level:3,name:'Hours',exact:true})).toBeVisible();
  await expect(card.getByRole('heading',{level:4,name:'Dates with different hours',exact:true})).toBeVisible();
  await expect(card).toContainText('(206) 555-0100');
- await expect(card.getByRole('link',{name:'(206) 555-0100',exact:true})).toHaveAttribute('href','tel:+12065550100');
+ await expect(card.getByRole('link',{name:'(206) 555-0100',exact:true})).toHaveAttribute('href','tel:+12065550100;ext=12');
  await expect(card).toContainText('ext. 12');
  await expect(card).toContainText(/9:00\sAM – 5:00\sPM/);
  await expect(card).toContainText(/7:00\sPM – 7:00\sAM/);
