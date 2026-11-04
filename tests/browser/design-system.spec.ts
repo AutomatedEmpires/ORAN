@@ -290,6 +290,24 @@ test('controls follow the Blend button and field specs', async ({ page }) => {
     const box = await checkbox.locator('..').boundingBox();
     expect(box?.height, 'checkbox label height').toBeGreaterThanOrEqual(44);
   }
+
+  // Radios get the same 44px row and teal accent as checkboxes. No page here has one yet, so a minimal fieldset is added.
+  await page.evaluate(() => {
+    const fieldset = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = 'Test';
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 't';
+    label.append(input, ' Option');
+    fieldset.append(legend, label);
+    document.querySelector('main')?.append(fieldset);
+  });
+  const radio = page.getByRole('radio', { name: 'Option', exact: true });
+  await expect(radio).toBeVisible();
+  expect((await radio.locator('..').boundingBox())?.height, 'radio label height').toBeGreaterThanOrEqual(44);
+  await expect(radio).toHaveCSS('accent-color', 'rgb(23, 89, 107)');
 });
 
 const focusRing = { style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' };
@@ -331,11 +349,53 @@ test('honours reduced motion and keeps control boundaries under forced colors', 
   await expect(enter).toHaveCSS('border-top-style', 'solid');
   await expect(enter).toHaveCSS('border-top-width', '1px');
   await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveCSS('border-top-style', 'solid');
+
+  // The focus ring is an outline, which forced colors keep (the color becomes a system color, so only its shape is checked).
+  await focusByKeyboard(page, enter);
+  expect(await ring(enter), 'ring under forced colors').toMatchObject({ style: 'solid', width: '3px' });
+
+  await enterAs(page, 'Admin');
+  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
+  await expect(field).toBeVisible();
+  await expect(field).toHaveCSS('border-top-style', 'solid');
 });
 
+test('the error glyph is not painted in the page background under forced colors', async ({ page }) => {
+  await page.goto('/sign-in');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await page.evaluate(() => {
+    const message = document.createElement('p');
+    message.className = 'error';
+    message.textContent = 'Example error message';
+    document.querySelector('main')?.append(message);
+  });
+  await page.emulateMedia({ forcedColors: 'active' });
+  const message = page.locator('p.error');
+  await expect(message).toBeVisible();
+  const colors = await message.evaluate((element) => ({
+    glyph: getComputedStyle(element, '::before').backgroundColor,
+    page: getComputedStyle(document.body).backgroundColor,
+  }));
+  expect(colors.glyph, 'glyph against the page color ' + colors.page).not.toBe(colors.page);
+});
+
+// A hex color or a color function. Named colors are left to review: `transparent`, `currentColor` and system colors are allowed.
+const rawColor = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\(/i;
+
+// Drops only the rules whose whole selector is `:root`. `html:root`, `.a, :root` and `.x :root` stay, so their values are checked.
+function withoutTokenBlocks(css: string): string {
+  return css.replace(/(?<=^|\})\s*:root\s*\{[^}]*\}/g, '');
+}
+
 test('rules use tokens instead of raw colors', () => {
-  const rules = readFileSync('src/app/globals.css', 'utf8').replace(/:root\s*\{[^}]*\}/g, '');
+  const rules = withoutTokenBlocks(readFileSync('src/app/globals.css', 'utf8'));
   expect(rules).toContain('.card');
-  expect(rules.match(/#[0-9a-f]{3,8}\b/i)).toBeNull();
-  expect(rules.match(/rgba?\(/i)).toBeNull();
+  expect(rules.match(rawColor)).toBeNull();
+
+  // Negative controls: the guard can fail. Raw colors hidden behind a `:root` in a longer selector are still found,
+  // and an exact `:root` block is still skipped.
+  for (const css of ['html:root{color:#fff}', '.a, :root{color:rgb(0,0,0)}', '.x :root{color:hsl(0 0% 0%)}', 'a{}:root,.b{color:#000}']) {
+    expect(withoutTokenBlocks(css).match(rawColor), css).not.toBeNull();
+  }
+  expect(withoutTokenBlocks(':root{color:#fff}\n:root { color:rgb(0,0,0) }').match(rawColor)).toBeNull();
 });

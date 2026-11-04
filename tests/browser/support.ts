@@ -5,6 +5,8 @@ import AxeBuilder from '@axe-core/playwright';
 // `test` for specs that read a page right after it loads. Next's dev server keeps a Fast Refresh socket open to every
 // page, and on this setup it can start a reload loop (it logs the browser's console to a file it also watches), which
 // destroys any evaluate in flight. These specs want a static page, so their pages get no Fast Refresh channel.
+// New specs import `test` from './support' until the loop is fixed, and this override is removed when it is
+// (the DS-6 root-cause PR). workflow.spec.ts still uses Playwright's own `test`.
 export const test = base.extend({
   page: async ({ page }, provide) => {
     await page.routeWebSocket(/\/_next\//, () => undefined);
