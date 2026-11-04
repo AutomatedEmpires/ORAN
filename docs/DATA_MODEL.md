@@ -1,8 +1,13 @@
 # Implemented development data contract
 
-The initial evolving subset uses HSDS 3.3.1 organization, service and service_area names and field semantics. Checked against tagged schemas before implementation:
+The evolving subset uses HSDS 3.3.1 organization, service, service_area, location, service_at_location, address, phone and schedule names and field semantics. Checked against tagged schemas before implementation:
 [service](https://github.com/openreferral/specification/blob/3.3.1/schema/service.json),
 [service_area](https://github.com/openreferral/specification/blob/3.3.1/schema/service_area.json),
+[location](https://github.com/openreferral/specification/blob/3.3.1/schema/location.json),
+[service_at_location](https://github.com/openreferral/specification/blob/3.3.1/schema/service_at_location.json),
+[address](https://github.com/openreferral/specification/blob/3.3.1/schema/address.json),
+[phone](https://github.com/openreferral/specification/blob/3.3.1/schema/phone.json),
+[schedule](https://github.com/openreferral/specification/blob/3.3.1/schema/schedule.json),
 [taxonomy](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy.json),
 [taxonomy_term](https://github.com/openreferral/specification/blob/3.3.1/schema/taxonomy_term.json),
 [attribute](https://github.com/openreferral/specification/blob/3.3.1/schema/attribute.json).
@@ -20,9 +25,11 @@ All tables live in the private oran schema. The Supabase Data API is not used. R
 | listing_state, verification_event, work_item | Unreviewed until evidence is recorded; current accepted revision, methods/fields/evidence, 30-day review due date and scoped assignment; edits invalidate verification and stale verification submissions are rejected |
 | personal_profile | Own-user ZIP and selected needs only, explicit consent timestamp, update and deletion; no sensitive expanded fields yet |
 | taxonomy, taxonomy_term, category_display, attribute | HSDS 3.3.1 taxonomy tables hold the ten ORAN categories as data; category_display is the ORAN presentation extension (sort order, English and draft Spanish labels). Service categories are attribute rows; the catalog acceptance service is the sole application writer |
+| location, service_at_location, address, phone, schedule | HSDS 3.3.1 listing parts. A location belongs to one organization and links to services through `service_at_location`. A physical location has one US physical address and optional WGS84 coordinates, which are never geocoded. Phones are normalized E.164 numbers or the short codes 211, 311, 511, 711, 811 and 988. A weekly schedule row has a day and local opening and closing times; closing before opening means the next day. A dated exception has a date range and either no times (closed) or different hours. The catalog acceptance service is the sole writer |
+| location_access, service_hours, service_area_kind | ORAN extensions holding, in order: a location's access mode (physical, remote, phone) and confidential flag; a service's hours state (weekly with an IANA US time zone, 24/7, or by appointment; no row means unknown); each service-area row's kind (zip, city, county, state, nationwide). The catalog acceptance service is the sole writer |
 | oran_meta.migration | Migration name and SHA-256; reject edits to already-applied migrations |
 
-ZIP coverage is a stated text service area, not an inferred polygon or a capacity claim. Public discovery includes only active records with current checks. Expired checks leave public discovery and reappear in the due-date queue. Reminder delivery, full risk tiers, claims, external imports and complete HSDS export validation remain future work.
+Service areas are stated named areas (ZIP codes, a city, a county, a state or nationwide), not inferred polygons or capacity claims. ZIP filters match listed ZIP codes and nationwide areas only. Confidential locations: public discovery, resource cards and verification tasks never select a confidential location's address, coordinates or name. A location with no location_access row is treated as confidential. Only the edit view returns them, to admins and the listing's organization staff, and only for locations of the listing's organization. Removed (unlinked) locations currently keep their address, coordinates and history, and no read returns them; whether removing a confidential location deletes or scrubs them is a pending founder decision, needed before a "remove location" control ships. Public discovery includes only active records with current checks. Expired checks leave public discovery and reappear in the due-date queue. Reminder delivery, full risk tiers, claims, external imports and complete HSDS export validation remain future work.
 
 The local store is .local/postgres and contains development identities only by default. Use synthetic data. It persists between starts and is never committed. The signed local session expires after one hour and becomes invalid when the launcher restarts. No local identity mode is allowed with production/preview stage, production Node mode, hosted Vercel, or a remote database.
 

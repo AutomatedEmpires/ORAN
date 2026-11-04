@@ -99,5 +99,6 @@
   "sourceWebsite": "Un sitio web",
   "sourcePhoneCall": "Una llamada telefónica",
   "sourceOrganization": "La propia organización",
-  "sourceUrl": "Dirección web de la fuente"
+  "sourceUrl": "Dirección web de la fuente",
+  "areaNationwide": "Todo el país"
 }

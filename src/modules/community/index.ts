@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { database,lockCatalog } from '@/modules/platform';
-import { assertCategoryCodes,serviceHasCategory } from '@/modules/catalog';
+import { assertCategoryCodes,serviceHasCategory,serviceInVerifierArea } from '@/modules/catalog';
 import { actorFor,affiliatedOrganizationIds,isAdmin } from '@/modules/identity';
 export async function members(adminId:string) {
  if(!isAdmin(await actorFor(adminId)))throw new Error('Access denied');
@@ -21,8 +21,8 @@ export async function approveContributor(adminId:string,userId:string,postalCode
   for(const candidate of candidates){
    // All acceptance/verification/assignment mutations lock the service first.
    const service=await trx.selectFrom('service').select('organization_id').where('id','=',candidate.service_id).forUpdate().executeTakeFirstOrThrow();
-   const item=await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by']).where('w.service_id','=',candidate.service_id).executeTakeFirstOrThrow();
-   const eligible=item.extent===postalCode&&item.created_by!==userId&&!affiliated.includes(service.organization_id)&&await serviceHasCategory(trx,candidate.service_id,granted);
+   const item=await trx.selectFrom('work_item as w').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','l.created_by']).where('w.service_id','=',candidate.service_id).executeTakeFirstOrThrow();
+   const eligible=item.created_by!==userId&&!affiliated.includes(service.organization_id)&&await serviceInVerifierArea(trx,candidate.service_id,postalCode)&&await serviceHasCategory(trx,candidate.service_id,granted);
    if(item.assigned_to===userId&&!eligible)await trx.updateTable('work_item').set({assigned_to:null}).where('service_id','=',candidate.service_id).execute();
    if(item.assigned_to===null&&eligible)await trx.updateTable('work_item').set({assigned_to:userId}).where('service_id','=',candidate.service_id).execute();
   }

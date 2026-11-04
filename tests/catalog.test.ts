@@ -1,17 +1,20 @@
-import { beforeAll,afterAll,describe,it,expect } from 'vitest';
+import { beforeAll,afterAll,describe,it,expect,vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
-import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,editableResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { locationAssertions,type Audience } from '../src/modules/catalog/projection';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
-const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
+const zip=(...codes:string[])=>({kind:'zip' as const,postal_codes:codes});
+const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],service_area:zip('98101'),eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 const assertions=(entityId:string)=>database().selectFrom('field_assertion').selectAll().where('entity_id','=',entityId).orderBy('created_at').orderBy('field_path').execute();
+const accepted=async(entityId:string,path:string)=>(await assertions(entityId)).find(r=>r.field_path===path&&r.status==='accepted')?.value;
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual',admin2:'test-'+run+'-admin2'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
@@ -105,19 +108,19 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  });
  it('keeps assignments within current scope when approval and edits race',async()=>{
   const id=await acceptResource(user.admin,input);
-  await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,postal_code:'98102'},id)]);
+  await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,service_area:zip('98102')},id)]);
   const item=await database().selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('membership as m','m.user_id','w.assigned_to').select(['m.postal_code','a.extent','m.category_scope']).where('m.role','=','community').where('w.service_id','=',id).executeTakeFirstOrThrow();
   expect(item.postal_code).toBe(item.extent);expect(item.category_scope).toContain('food');
   await approveContributor(user.admin,user.community,'98101',['food']);
  });
  it('rechecks approval and geography at mutation time',async()=>{
-  const id=await acceptResource(user.admin,{...input,postal_code:'98102'});
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98102')});
   await expect(verify(user.community,id,check)).rejects.toThrow('Access denied');
   await database().updateTable('membership').set({approved:false}).where('user_id','=',user.community).execute();
   await expect(verificationQueue(user.community)).rejects.toThrow('Access denied');
  });
  it('filters matching and authorized editing before the 100-row result cap',async()=>{
-  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,postal_code:'98102',categories:['work']});await verify(user.admin,id);}
+  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,service_area:zip('98102'),categories:['work']});await verify(user.admin,id);}
   const id=await acceptResource(user.org,{...input,name:'ZZZ matching target'});await verify(user.admin,id);
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
   expect((await publicResources({postal_code:'98101',needs:['food']})).some(r=>r.id===id)).toBe(true);
@@ -172,6 +175,302 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(true);
   await verify(user.community,id);
   await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+ it('stores phones and weekly hours with their time zone',async()=>{
+  const id=await acceptResource(user.admin,{...input,phones:[{number:'(206) 555-0100',extension:12},{number:'988',extension:null}],hours:{kind:'weekly',time_zone:'America/Los_Angeles',weekly:[{day:'MO',opens_at:'09:00',closes_at:'17:00'},{day:'FR',opens_at:'19:00',closes_at:'07:00'}],exceptions:[{from:'2026-12-25',to:'2026-12-25',opens_at:null,closes_at:null,note:'Holiday'}]}});
+  expect((await database().selectFrom('phone').select(['number','extension']).where('service_id','=',id).orderBy('number').execute()).map(r=>[r.number,r.extension])).toEqual([['+12065550100',12],['988',null]]);
+  expect(await accepted(id,'phones')).toEqual([{number:'+12065550100',extension:12},{number:'988',extension:null}]);
+  // Times and dates are read as text, so no time zone (the server's or this machine's) can shift them.
+  const schedule=await sql<{byday:string|null;opens_at:string|null;closes_at:string|null;valid_from:string|null;valid_to:string|null}>`SELECT byday, opens_at::text, closes_at::text, valid_from::text, valid_to::text FROM oran.schedule WHERE service_id=${id} ORDER BY valid_from NULLS FIRST, byday`.execute(database());
+  expect(schedule.rows.map(r=>[r.byday,r.opens_at,r.closes_at,r.valid_from,r.valid_to])).toEqual([['FR','19:00:00','07:00:00',null,null],['MO','09:00:00','17:00:00',null,null],[null,null,null,'2026-12-25','2026-12-25']]);
+  expect((await sql<{description:string}>`SELECT description FROM oran.schedule WHERE service_id=${id} AND valid_from IS NOT NULL`.execute(database())).rows).toEqual([{description:'Holiday'}]);
+  expect(await database().selectFrom('service_hours').select(['kind','time_zone']).where('service_id','=',id).executeTakeFirst()).toEqual({kind:'weekly',time_zone:'America/Los_Angeles'});
+ });
+ it('stores 24/7 and by-appointment hours without schedule rows, and unknown hours as no row',async()=>{
+  const hours=(id:string)=>database().selectFrom('service_hours').select(['kind','time_zone']).where('service_id','=',id).executeTakeFirst();
+  const schedules=async(id:string)=>(await database().selectFrom('schedule').select('id').where('service_id','=',id).execute()).length;
+  const id=await acceptResource(user.admin,{...input,hours:{kind:'always_open'}});
+  expect(await hours(id)).toEqual({kind:'always_open',time_zone:null});
+  expect(await schedules(id)).toBe(0);
+  await acceptResource(user.admin,{...input,hours:{kind:'weekly',time_zone:'America/Chicago',weekly:[{day:'TU',opens_at:'08:00',closes_at:'12:00'}],exceptions:[]}},id);
+  expect(await schedules(id)).toBe(1);
+  await acceptResource(user.admin,{...input,hours:{kind:'by_appointment'}},id);
+  expect(await hours(id)).toEqual({kind:'by_appointment',time_zone:null});
+  expect(await schedules(id)).toBe(0);
+  await acceptResource(user.admin,{...input,hours:null},id);
+  expect(await hours(id)).toBeUndefined();
+  expect(await schedules(id)).toBe(0);
+  const rows=(await assertions(id)).filter(r=>r.field_path==='hours');
+  expect(rows.map(r=>r.status)).toEqual(['superseded','superseded','superseded','accepted']);
+  expect(await accepted(id,'hours')).toBeNull();
+ });
+ it('keeps omitted parts and the row ids of unchanged parts on edit',async()=>{
+  const hours={kind:'weekly' as const,time_zone:'America/New_York',weekly:[{day:'WE',opens_at:'22:00',closes_at:'06:00'}],exceptions:[{from:'2026-12-24',to:'2026-12-26',opens_at:'10:00',closes_at:'14:00',note:''}]};
+  const place={access:'physical' as const,address:{address_1:'5 Kept Street',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98101'}};
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98101','98102'),phones:[{number:'206.555.0100',extension:7}],hours,locations:[place]});
+  const rowIds=async()=>({
+   phones:(await database().selectFrom('phone').select('id').where('service_id','=',id).execute()).map(r=>r.id),
+   schedules:(await database().selectFrom('schedule').select('id').where('service_id','=',id).orderBy('id').execute()).map(r=>r.id),
+   areas:(await database().selectFrom('service_area').select('id').where('service_id','=',id).orderBy('id').execute()).map(r=>r.id),
+   locations:await database().selectFrom('service_at_location as sl').innerJoin('address as ad','ad.location_id','sl.location_id').select(['sl.id','sl.location_id','ad.id as address_id']).where('sl.service_id','=',id).execute(),
+  });
+  const asserted=async()=>{
+   const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();
+   return (await database().selectFrom('field_assertion').select('field_path').where('revision_id','=',state.revision_id).execute()).map(r=>r.field_path).sort();
+  };
+  const first=await rowIds();
+  expect(first.phones).toHaveLength(1);expect(first.schedules).toHaveLength(2);expect(first.areas).toHaveLength(2);expect(first.locations).toHaveLength(1);
+  // An edit that leaves the parts out asserts nothing about them and keeps every row.
+  const edited={...input,service_area:zip('98102','98101'),description:'An edited synthetic description that leaves the parts out.'};
+  await acceptResource(user.admin,edited,id);
+  expect(await rowIds()).toEqual(first);
+  expect(await asserted()).toEqual(['description']);
+  // The same parts again, with the phone typed another way, change no row and assert nothing.
+  const location=((await accepted(id,'locations')) as string[])[0];
+  await acceptResource(user.admin,{...edited,phones:[{number:'+1 206 555 0100',extension:7}],hours,locations:[{...place,id:location}]},id);
+  expect(await rowIds()).toEqual(first);
+  expect(await asserted()).toEqual([]);
+  // An empty list removes the phones and asserts "none".
+  await acceptResource(user.admin,{...edited,phones:[]},id);
+  expect((await rowIds()).phones).toEqual([]);
+  expect(await accepted(id,'phones')).toBeNull();
+ });
+ it('makes a Safety listing\'s physical location confidential unless the input says otherwise',async()=>{
+  const hidden={access:'physical' as const,address:{address_1:'1 Hidden Way',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98109'}};
+  const confidential=async(id:string)=>(await database().selectFrom('service_at_location as sl').innerJoin('location_access as la','la.location_id','sl.location_id').select('la.confidential').where('sl.service_id','=',id).execute()).map(r=>r.confidential);
+  const safety=await acceptResource(user.admin,{...input,categories:['safety'],locations:[hidden]});
+  expect(await confidential(safety)).toEqual([true]);
+  expect(await accepted(((await accepted(safety,'locations')) as string[])[0],'confidential')).toBe(true);
+  expect(await confidential(await acceptResource(user.admin,{...input,categories:['safety'],locations:[{...hidden,confidential:false}]}))).toEqual([false]);
+  // Without Safety, a physical location is confidential only when the input says so.
+  expect(await confidential(await acceptResource(user.admin,{...input,locations:[hidden]}))).toEqual([false]);
+ });
+ it('links a service to several locations of its organization',async()=>{
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',address:{address_1:'200 Main Street',address_2:'Suite 3',city:'Seattle',state_province:'WA',postal_code:'98101'},coordinates:{latitude:47.61,longitude:-122.33}},{access:'phone'}]});
+  const organization=(await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id;
+  const linked=await database().selectFrom('service_at_location as sl').innerJoin('location as l','l.id','sl.location_id').select(['l.organization_id','l.location_type']).where('sl.service_id','=',id).execute();
+  expect(linked).toHaveLength(2);
+  for(const l of linked) expect(l.organization_id).toBe(organization);
+  expect(linked.map(l=>l.location_type).sort()).toEqual(['physical','virtual']);
+  const order=(await accepted(id,'locations')) as string[];
+  const modes=await database().selectFrom('location_access').select(['location_id','mode']).where('location_id','in',order).execute();
+  expect(order.map(l=>modes.find(m=>m.location_id===l)?.mode)).toEqual(['physical','phone']);
+  expect(await database().selectFrom('address').select(['location_id','address_2']).where('location_id','in',order).execute()).toEqual([{location_id:order[0],address_2:'Suite 3'}]);
+  // S2-13: every linked location has exactly one access row, and no location anywhere is without one.
+  const access=await sql<{n:number}>`SELECT count(la.location_id)::int AS n FROM oran.service_at_location sl LEFT JOIN oran.location_access la ON la.location_id=sl.location_id WHERE sl.service_id=${id} GROUP BY sl.location_id`.execute(database());
+  expect(access.rows.map(r=>r.n)).toEqual([1,1]);
+  expect((await sql<{n:number}>`SELECT count(*)::int AS n FROM oran.location l WHERE NOT EXISTS (SELECT 1 FROM oran.location_access la WHERE la.location_id=l.id)`.execute(database())).rows).toEqual([{n:0}]);
+  // Dropping a location unlinks it; an empty list unlinks every one and asserts "none".
+  await acceptResource(user.admin,{...input,locations:[{id:order[1],access:'phone'}]},id);
+  expect(await database().selectFrom('service_at_location').select('location_id').where('service_id','=',id).execute()).toEqual([{location_id:order[1]}]);
+  await acceptResource(user.admin,{...input,locations:[]},id);
+  expect(await database().selectFrom('service_at_location').select('location_id').where('service_id','=',id).execute()).toEqual([]);
+  expect(await accepted(id,'locations')).toBeNull();
+ });
+ it('rejects a location id that is not already part of the listing',async()=>{
+  const a=await acceptResource(user.admin,{...input,locations:[{access:'phone'}]});
+  const aLocation=((await accepted(a,'locations')) as string[])[0];
+  const b=await acceptResource(user.admin,input);
+  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'}]},b)).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.admin,{...input,locations:[{id:randomUUID(),access:'phone'}]})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'},{id:aLocation,access:'remote'}]},a)).rejects.toThrow('List each location once');
+  // Nothing was written: B keeps its one revision, and A's location is linked only to A.
+  expect(await database().selectFrom('revision').select('id').where('service_id','=',b).execute()).toHaveLength(1);
+  expect(await database().selectFrom('service_at_location').select('service_id').where('location_id','=',aLocation).execute()).toEqual([{service_id:a}]);
+  expect(await accepted(aLocation,'access')).toBe('phone');
+  // A listed location that no longer belongs to the listing's organization is not edited through it either.
+  const owner=(await database().selectFrom('location').select('organization_id').where('id','=',aLocation).executeTakeFirstOrThrow()).organization_id;
+  await database().updateTable('location').set({organization_id:fixtureOrg}).where('id','=',aLocation).execute();
+  try {await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'remote'}]},a)).rejects.toThrow('Access denied');}
+  finally {await database().updateTable('location').set({organization_id:owner}).where('id','=',aLocation).execute();}
+  expect(await accepted(aLocation,'access')).toBe('phone');
+ });
+ it('assigns ZIP-area work to verifiers in any listed ZIP and leaves nationwide work to admins',async()=>{
+  const assignee=async(id:string)=>(await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to;
+  await approveContributor(user.admin,user.community,'98101',['food']);
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98102','98101')});
+  expect(await assignee(id)).toBe(user.community);
+  expect((await verificationQueue(user.community)).filter(r=>r.id===id)).toHaveLength(1);
+  await verify(user.community,id);
+  const nationwide=await acceptResource(user.admin,{...input,service_area:{kind:'nationwide'}});
+  expect(await assignee(nationwide)).toBeNull();
+  await expect(verify(user.community,nationwide)).rejects.toThrow('Access denied');
+  await expect(verify(user.admin,nationwide)).resolves.toBeUndefined();
+ });
+ it('verifiers file new listings only for their own ZIP',async()=>{
+  await expect(acceptResource(user.community,{...input,service_area:zip('98101','98102')})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.community,{...input,service_area:{kind:'state',state:'WA'}})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.community,{...input,service_area:zip('98101')})).resolves.toBeTruthy();
+ });
+ // S2-16: leaving the privacy flag out of an edit never makes a private address public.
+ const privateLocation=async(id:string)=>{
+  const location=((await accepted(id,'locations')) as string[])[0];
+  const access=await database().selectFrom('location_access').select(['mode','confidential']).where('location_id','=',location).executeTakeFirstOrThrow();
+  const flags=(await assertions(location)).filter(r=>r.field_path==='confidential').map(r=>[r.status,r.value]);
+  const address=await database().selectFrom('address').select('id').where('location_id','=',location).execute();
+  return {location,...access,flags,addresses:address.length};
+ };
+ it('an edit that omits the privacy flag keeps a confidential address private',async()=>{
+  const place={access:'physical' as const,address:{address_1:'12 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,locations:[{...place,confidential:true}]});
+  const {location}=await privateLocation(id);
+  // The edit renames the location, so the location is written again, with the flag left out.
+  await acceptResource(user.admin,{...input,locations:[{...place,id:location,name:'Front office'}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'physical',confidential:true,flags:[['accepted',true]],addresses:1});
+  expect(await accepted(location,'name')).toBe('Front office');
+ });
+ it('an edit that drops Safety keeps a confidential address private',async()=>{
+  const place={access:'physical' as const,address:{address_1:'34 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,categories:['safety'],locations:[place]});
+  const {location,confidential}=await privateLocation(id);
+  expect(confidential).toBe(true);
+  await acceptResource(user.admin,{...input,categories:['food'],locations:[{...place,id:location}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'physical',confidential:true,flags:[['accepted',true]],addresses:1});
+  expect(await accepted(id,'categories')).toEqual(['food']);
+ });
+ it('turning a private physical location into a phone line clears the flag',async()=>{
+  const place={access:'physical' as const,address:{address_1:'56 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,categories:['safety'],locations:[place]});
+  const {location}=await privateLocation(id);
+  await acceptResource(user.admin,{...input,categories:['safety'],locations:[{id:location,access:'phone'}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'phone',confidential:false,flags:[['superseded',true],['accepted',false]],addresses:0});
+  expect((await database().selectFrom('location').select('location_type').where('id','=',location).executeTakeFirstOrThrow()).location_type).toBe('virtual');
+  expect(await accepted(location,'address')).toBeNull();
+ });
+ // The listings below are named to sort ahead of the 100 earlier "A synthetic filler" listings, so the unfiltered public read (capped at 100 rows) includes them.
+ it('never returns a confidential address or coordinates from public, card or queue reads',async()=>{
+  const secret={address_1:'77 Sealed Lane',address_2:'Unit 4B',city:'Seattle',state_province:'WA' as const,postal_code:'98199'};
+  const id=await acceptResource(user.admin,{...input,name:'A confidential safety listing',categories:['safety'],locations:[{access:'physical',name:'Lantern House Magnolia',address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}}]});
+  const queue=await verificationQueue(user.admin);
+  expect(queue.some(r=>r.id===id)).toBe(true);
+  const queued=JSON.stringify(queue);
+  await verify(user.admin,id);
+  const text=queued+JSON.stringify(await publicResources())+JSON.stringify(await publicResources({postal_code:'98101',needs:['safety']}))+JSON.stringify(await ownedResources(user.admin,id));
+  for(const leak of ['77 Sealed Lane','Unit 4B','98199','47.6512','-122.4011','Lantern House Magnolia']) expect(text).not.toContain(leak);
+  const hidden=[{id:expect.any(String),access:'physical',confidential:true,name:null,address:null,coordinates:null}];
+  expect((await publicResources()).find(r=>r.id===id)?.locations).toEqual(hidden);
+  expect((await publicResources({postal_code:'98101',needs:['safety']})).find(r=>r.id===id)?.locations).toEqual(hidden);
+  expect((await ownedResources(user.admin,id))[0]?.locations).toEqual(hidden);
+  expect((await editableResource(user.admin,id))?.locations[0]).toMatchObject({name:'Lantern House Magnolia',address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}});
+ });
+ it('returns a confidential address only to the listing\'s editors',async()=>{
+  const place={access:'physical' as const,confidential:true,name:'Staff Only Annex',address:{address_1:'88 Staff Only Road',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98107'}};
+  const id=await acceptResource(user.org,{...input,locations:[place]});
+  expect(await editableResource(user.org,id)).toMatchObject({id,organization_id:fixtureOrg,organization_name:input.organization_name,name:input.name,categories:['food'],service_area:zip('98101'),phones:[],hours:null});
+  expect((await editableResource(user.org,id))?.locations).toEqual([{id:expect.any(String),access:'physical',confidential:true,name:'Staff Only Annex',address:place.address,coordinates:null}]);
+  // The same staff member's card read is a public read.
+  const card=JSON.stringify(await ownedResources(user.org,id));
+  for(const leak of ['88 Staff Only Road','Staff Only Annex']) expect(card).not.toContain(leak);
+  expect(await editableResource(user.other,id)).toBeUndefined();
+  expect(await editableResource(user.org,'invalid')).toBeUndefined();
+  await expect(editableResource(user.seeker,id)).rejects.toThrow('Access denied');
+  // An approved verifier is not an editor (approved for 98101 by the earlier tests).
+  expect((await database().selectFrom('membership').select('approved').where('user_id','=',user.community).where('role','=','community').executeTakeFirstOrThrow()).approved).toBe(true);
+  await expect(editableResource(user.community,id)).rejects.toThrow('Access denied');
+  // Nor is pending staff of the listing's own organization.
+  const pending=(await database().insertInto('membership').values({user_id:user.seeker,role:'organization',organization_id:fixtureOrg,approved:false}).returning('id').executeTakeFirstOrThrow()).id;
+  try {await expect(editableResource(user.seeker,id)).rejects.toThrow('Access denied');}
+  finally {await database().deleteFrom('membership').where('id','=',pending).execute();}
+ });
+ it('covers every ZIP for a nationwide listing and only the listed ZIPs otherwise',async()=>{
+  const nationwide=await acceptResource(user.admin,{...input,name:'A nationwide listing',service_area:{kind:'nationwide'}});
+  const multi=await acceptResource(user.admin,{...input,name:'A multi zip listing',service_area:zip('98101','98102')});
+  // Every read lists a multi-ZIP listing once.
+  expect((await verificationQueue(user.admin)).filter(r=>r.id===multi)).toHaveLength(1);
+  await verify(user.admin,nationwide);await verify(user.admin,multi);
+  expect((await publicResources({postal_code:'10001',needs:['food']})).some(r=>r.id===nationwide)).toBe(true);
+  expect((await publicResources({postal_code:'98102',needs:['food']})).some(r=>r.id===multi)).toBe(true);
+  expect((await publicResources({postal_code:'10001',needs:['food']})).some(r=>r.id===multi)).toBe(false);
+  expect((await publicResources()).filter(r=>r.id===multi)).toHaveLength(1);
+  expect((await ownedResources(user.admin,multi)).filter(r=>r.id===multi)).toHaveLength(1);
+  expect((await publicResources()).find(r=>r.id===multi)?.service_area).toEqual(zip('98101','98102'));
+ });
+ it('returns listing parts in the order they were entered',async()=>{
+  const id=await acceptResource(user.admin,{...input,phones:[{number:'988',extension:null},{number:'(206) 555-0100',extension:null}],locations:[{access:'phone'},{access:'remote'}]});
+  const [owned]=await ownedResources(user.admin,id);
+  expect(owned.phones.map(p=>p.number)).toEqual(['988','+12065550100']);
+  expect(owned.locations.map(l=>l.access)).toEqual(['phone','remote']);
+  expect((await editableResource(user.admin,id))?.locations.map(l=>l.access)).toEqual(['phone','remote']);
+ });
+ // S2-17 and S2-13: public reads fail closed, so a location with no access row reads as confidential.
+ it('treats a location without an access row as confidential',async()=>{
+  const place={access:'physical' as const,confidential:false,name:'Quillback Annex',address:{address_1:'91 Unguarded Court',address_2:'Rear Gate 7',city:'Tacoma',state_province:'WA',postal_code:'98422'},coordinates:{latitude:47.2529,longitude:-122.4443}};
+  const id=await acceptResource(user.admin,{...input,name:'A missing access row listing',locations:[place]});
+  const location=((await accepted(id,'locations')) as string[])[0];
+  // With its access row the address is public, so the checks below are not vacuous.
+  expect((await ownedResources(user.admin,id))[0]?.locations[0]).toMatchObject({confidential:false,name:'Quillback Annex',address:place.address,coordinates:place.coordinates});
+  const row=await database().selectFrom('location_access').selectAll().where('location_id','=',location).executeTakeFirstOrThrow();
+  // Test-only damage: no application code deletes an access row.
+  await sql`DELETE FROM oran.location_access WHERE location_id=${location}`.execute(database());
+  try {
+   const hidden=[{id:location,access:'physical',confidential:true,name:null,address:null,coordinates:null}];
+   const queued=(await verificationQueue(user.admin)).filter(r=>r.id===id);
+   expect(queued.map(r=>r.locations)).toEqual([hidden]);
+   await verify(user.admin,id);
+   const published=(await publicResources()).filter(r=>r.id===id),matched=(await publicResources({postal_code:'98101',needs:['food']})).filter(r=>r.id===id),owned=await ownedResources(user.admin,id);
+   expect(published.map(r=>r.locations)).toEqual([hidden]);
+   expect(matched.map(r=>r.locations)).toEqual([hidden]);
+   expect(owned.map(r=>r.locations)).toEqual([hidden]);
+   const text=JSON.stringify([queued,published,matched,owned]);
+   for(const leak of ['91 Unguarded Court','Rear Gate 7','Tacoma','98422','47.2529','-122.4443','Quillback Annex']) expect(text).not.toContain(leak);
+  } finally {await database().insertInto('location_access').values(row).execute();}
+ });
+ // The SQL layer on its own keeps private fields out of a public read; the JS layer is a second guard.
+ it('never selects a confidential location\'s private fields for a public read',async()=>{
+  const at=(address_1:string,postal_code:string)=>({address_1,address_2:null,city:'Seattle',state_province:'WA',postal_code});
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',confidential:true,name:'Heron Point Rooms',address:at('5 Heron Point Way','98126'),coordinates:{latitude:47.5301,longitude:-122.3802}},{access:'physical',confidential:false,name:'Open Door Hall',address:at('9 Open Door Street','98134'),coordinates:{latitude:47.5802,longitude:-122.3301}}]});
+  const [secret,open]=(await accepted(id,'locations')) as string[];
+  const organization=(await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id;
+  const paths=async(location:string,audience:Audience)=>(await locationAssertions(database(),[location],audience)).map(r=>r.field_path).sort();
+  const all=['access','address','confidential','coordinates','name'],bare=['access','confidential'];
+  // Controls: the listing's editors read every field of the confidential location, and the public every field of the open one.
+  expect(await paths(secret,{kind:'editor',organization_id:organization})).toEqual(all);
+  expect(await paths(open,{kind:'public'})).toEqual(all);
+  expect(await paths(secret,{kind:'public'})).toEqual(bare);
+  // An editor audience of another organization gets no private field either.
+  expect(await paths(secret,{kind:'editor',organization_id:fixtureOrg})).toEqual(bare);
+  const row=await database().selectFrom('location_access').selectAll().where('location_id','=',open).executeTakeFirstOrThrow();
+  // Test-only damage: no application code deletes an access row.
+  await sql`DELETE FROM oran.location_access WHERE location_id=${open}`.execute(database());
+  try {expect(await paths(open,{kind:'public'})).toEqual(bare);}
+  finally {await database().insertInto('location_access').values(row).execute();}
+ });
+ it('an editor read hides a listed location that belongs to another organization',async()=>{
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',name:'Driftwood Rooms',address:{address_1:'23 Driftwood Lane',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98118'},coordinates:{latitude:47.5413,longitude:-122.2716}}]});
+  const location=((await accepted(id,'locations')) as string[])[0];
+  const owner=(await database().selectFrom('location').select('organization_id').where('id','=',location).executeTakeFirstOrThrow()).organization_id;
+  // Control: the editor reads the location while it belongs to the listing's organization.
+  expect((await editableResource(user.admin,id))?.locations[0]).toMatchObject({confidential:false,name:'Driftwood Rooms',address:{address_1:'23 Driftwood Lane'}});
+  // Test-only damage: no application code moves a location to another organization.
+  await database().updateTable('location').set({organization_id:fixtureOrg}).where('id','=',location).execute();
+  try {expect((await editableResource(user.admin,id))?.locations).toEqual([{id:location,access:'physical',confidential:true,name:null,address:null,coordinates:null}]);}
+  finally {await database().updateTable('location').set({organization_id:owner}).where('id','=',location).execute();}
+ });
+ it('a public read falls back closed on an unreadable stored part, and an editor read throws',async()=>{
+  const broken=await acceptResource(user.admin,{...input,name:'A broken parts listing',phones:[{number:'988',extension:null}],locations:[{access:'physical',name:'Ashgrove Wing',address:{address_1:'14 Ashgrove Terrace',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98144'}},{access:'phone'}]});
+  const healthy=await acceptResource(user.admin,{...input,name:'A healthy parts listing',phones:[{number:'211',extension:null}]});
+  await verify(user.admin,broken);await verify(user.admin,healthy);
+  const [place,line]=(await accepted(broken,'locations')) as string[];
+  const write=(entity:string,path:string,value:unknown)=>database().updateTable('field_assertion').set({value:JSON.stringify(value)}).where('entity_id','=',entity).where('field_path','=',path).where('status','=','accepted').execute();
+  const damage:[string,string,unknown][]=[[broken,'phones',[{number:'not a phone',extension:null}]],[place,'address',{address_1:'14 Ashgrove Terrace'}],[line,'access','teleport']];
+  const saved=await Promise.all(damage.map(async([entity,path])=>(await database().selectFrom('field_assertion').select('value').where('entity_id','=',entity).where('field_path','=',path).where('status','=','accepted').executeTakeFirstOrThrow()).value));
+  const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  try {
+   // Test-only damage: values the part schemas reject, written past acceptance.
+   for(const [entity,path,value] of damage) await write(entity,path,value);
+   const rows=await publicResources();
+   expect(rows.find(r=>r.id===healthy)?.phones).toEqual([{number:'211',extension:null}]);
+   expect(rows.find(r=>r.id===broken)).toMatchObject({phones:[],locations:[{id:place,access:'physical',confidential:true,name:null,address:null,coordinates:null}]});
+   expect(JSON.stringify(rows)).not.toContain('Ashgrove');
+   // The log names the entity, never the value.
+   const logged=warn.mock.calls.map(c=>c.join(' '));
+   for(const entity of [broken,place,line]) expect(logged.some(l=>l.includes(entity))).toBe(true);
+   for(const value of ['not a phone','Ashgrove','teleport']) expect(logged.join('\n')).not.toContain(value);
+   await expect(editableResource(user.admin,broken)).rejects.toThrow('Use a US phone number');
+  } finally {
+   warn.mockRestore();
+   for(const [i,[entity,path]] of damage.entries()) await write(entity,path,saved[i]);
+  }
  });
 });
 
@@ -241,7 +540,7 @@ describe('accounts with several memberships',()=>{
  it('verifiers who are also staff still file a new provider inside their scope',async()=>{
   const id=await acceptResource(user.dual,{...input,organization_name:'Verifier-found provider'});
   expect((await database().selectFrom('revision').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('verifier');
-  await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',postal_code:'98102'})).rejects.toThrow('Choose an organization');
+  await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',service_area:zip('98102')})).rejects.toThrow('Choose an organization');
   await expect(acceptResource(user.org,{...input,organization_name:'Another new provider'})).rejects.toThrow('Organization name changes');
  });
  it('admins who are also staff can still create a listing for a new organization',async()=>{
