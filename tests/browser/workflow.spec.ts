@@ -55,6 +55,8 @@ async function editDescription(page:Page,name:string,description:string){
  return id;
 }
 test('admin entry → approved scoped community verification → personalized discovery',async({page})=>{
+ // Four accessibility passes on this journey need more than a minute when the machine is busy. The checks themselves are unchanged.
+ test.setTimeout(120000);
  const name='Synthetic browser resource '+Date.now();
  await page.goto('/admin');
  await expect(page).toHaveURL(/sign-in/);
