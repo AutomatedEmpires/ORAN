@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect } from '@playwright/test';
-import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, hydratedTest, normalized, readTokens, resolveAs, ring, test } from './support';
+import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, normalized, readTokens, resolveAs, ring, test } from './support';
 
 // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
 const blendTokens: Record<string, string> = {
@@ -236,8 +236,7 @@ test('existing pages pass axe and reflow at phone and desktop widths', async ({ 
   for (const path of ['/admin', '/organization', '/community', '/profile']) await check(path);
 });
 
-// Uses the hydrated `test`: choosing "A website" runs React state, which the blocked Fast Refresh socket would prevent.
-hydratedTest('controls follow the Blend button and field specs', async ({ page }) => {
+test('controls follow the Blend button and field specs', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await enterAs(page, 'Admin');
   await page.goto('/admin');
