@@ -1,24 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-// `test` for specs that read a page right after it loads. Next's dev server keeps a Fast Refresh socket open to every
-// page. Over a Turbopack dev cache that an earlier run left behind, Next 16.4 answers every HMR subscribe with
-// "restart", so the page reloads forever and destroys any evaluate in flight (vercel/next.js#100251). PR #15 fixed that
-// cause: browser test runs now compile without the saved dev cache (next.config.ts). This override stays in PR A so the
-// evidence gathered with it stays valid, and PR B removes it after one gated run passes without it. These specs want a
-// static page, so their pages get no Fast Refresh channel. workflow.spec.ts still uses Playwright's own `test`.
-export const test = base.extend({
-  page: async ({ page }, provide) => {
-    await page.routeWebSocket(/\/_next\//, () => undefined);
-    await provide(page);
-  },
-});
-
-// Specs that need React to hydrate use Playwright's own `test`. With the socket above blocked, hydration never started on
-// /admin (a click on a controlled radio never reached React state), so a client component cannot change the page.
-// PR #15 removed the reload loop, so these specs do not need the override.
-export const hydratedTest = base;
+// Specs use Playwright's own `test`, so pages can hydrate. Blocking the dev server's /_next/ socket used to keep a Turbopack
+// reload loop away (vercel/next.js#100251), but it also stopped React from hydrating, so those specs tested a page that
+// never became interactive. PR #15 fixed the loop at its cause: test runs compile without the saved dev cache
+// (next.config.ts). A page still hydrates after it loads, so a spec that needs React to be running waits with hydrated().
+export { test };
 
 // The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
 // The path is relative to the working directory, which is the repository root for Playwright.
@@ -129,4 +117,10 @@ export async function ring(target: Locator): Promise<{ style: string; width: str
     const computed = getComputedStyle(element);
     return { style: computed.outlineStyle, width: computed.outlineWidth, color: computed.outlineColor, offset: computed.outlineOffset };
   });
+}
+
+// Waits until React has hydrated the element. React puts its props on a DOM node when it hydrates the node, and before
+// that nothing runs the page's click handlers. If React ever renames that key, the poll times out loudly.
+export async function hydrated(target: Locator): Promise<void> {
+  await expect.poll(() => target.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps$'))), { message: 'React has hydrated the element' }).toBe(true);
 }

@@ -35,6 +35,8 @@ One account may hold several memberships (admin, organization, community), each 
 
 The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
 
+GET /dev/components renders the design-system component catalog only in local launcher mode: config() accepts ORAN_LOCAL_DEV=1 (development stage, loopback database), NODE_ENV is not production, VERCEL is unset and the Host is loopback; otherwise it renders the not-found page. It reads no identity, profile or catalog data, is marked noindex and is not linked from navigation.
+
 Framework agent-file generation is disabled to preserve AGENTS.md. next-env.d.ts and .next are generated/ignored; typecheck runs next typegen before TypeScript so it also works immediately after a fresh clone.
 
 ## Native onboarding and browser isolation
