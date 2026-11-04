@@ -8,10 +8,12 @@ import { listCategories,addCategory,acceptResource,publicResources,ownedResource
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
-const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],postal_code:'98101',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
+const zip=(...codes:string[])=>({kind:'zip' as const,postal_codes:codes});
+const input={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',categories:['food'],service_area:zip('98101'),eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',url:'https://example.org',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
 const check={method:'website',evidence:'Synthetic evidence for a synthetic test record',fields_checked:'name, description, eligibility and intake instructions'};
 async function verify(user:string,id:string,data:unknown=check) {const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();return verifyResource(user,id,{...(data as typeof check),revision_id:state.revision_id});}
 const assertions=(entityId:string)=>database().selectFrom('field_assertion').selectAll().where('entity_id','=',entityId).orderBy('created_at').orderBy('field_path').execute();
+const accepted=async(entityId:string,path:string)=>(await assertions(entityId)).find(r=>r.field_path===path&&r.status==='accepted')?.value;
 const run=randomUUID().replaceAll('-','');
 const user={admin:'test-'+run+'-admin',org:'test-'+run+'-org',community:'test-'+run+'-community',seeker:'test-'+run+'-user',other:'test-'+run+'-other',second:'test-'+run+'-second',dual:'test-'+run+'-dual',admin2:'test-'+run+'-admin2'};
 const fixtureOrg=randomUUID(),deniedRole='test_denied_'+run;
@@ -105,19 +107,19 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  });
  it('keeps assignments within current scope when approval and edits race',async()=>{
   const id=await acceptResource(user.admin,input);
-  await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,postal_code:'98102'},id)]);
+  await Promise.all([approveContributor(user.admin,user.community,'98102',['food']),acceptResource(user.admin,{...input,service_area:zip('98102')},id)]);
   const item=await database().selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('membership as m','m.user_id','w.assigned_to').select(['m.postal_code','a.extent','m.category_scope']).where('m.role','=','community').where('w.service_id','=',id).executeTakeFirstOrThrow();
   expect(item.postal_code).toBe(item.extent);expect(item.category_scope).toContain('food');
   await approveContributor(user.admin,user.community,'98101',['food']);
  });
  it('rechecks approval and geography at mutation time',async()=>{
-  const id=await acceptResource(user.admin,{...input,postal_code:'98102'});
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98102')});
   await expect(verify(user.community,id,check)).rejects.toThrow('Access denied');
   await database().updateTable('membership').set({approved:false}).where('user_id','=',user.community).execute();
   await expect(verificationQueue(user.community)).rejects.toThrow('Access denied');
  });
  it('filters matching and authorized editing before the 100-row result cap',async()=>{
-  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,postal_code:'98102',categories:['work']});await verify(user.admin,id);}
+  for(let i=0;i<100;i++){const id=await acceptResource(user.org,{...input,name:'A synthetic filler '+i,service_area:zip('98102'),categories:['work']});await verify(user.admin,id);}
   const id=await acceptResource(user.org,{...input,name:'ZZZ matching target'});await verify(user.admin,id);
   expect((await publicResources()).some(r=>r.id===id)).toBe(false);
   expect((await publicResources({postal_code:'98101',needs:['food']})).some(r=>r.id===id)).toBe(true);
@@ -172,6 +174,132 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   expect((await verificationQueue(user.community)).some(r=>r.id===id)).toBe(true);
   await verify(user.community,id);
   await approveContributor(user.admin,user.community,'98101',['food']);
+ });
+ it('stores phones and weekly hours with their time zone',async()=>{
+  const id=await acceptResource(user.admin,{...input,phones:[{number:'(206) 555-0100',extension:12},{number:'988',extension:null}],hours:{kind:'weekly',time_zone:'America/Los_Angeles',weekly:[{day:'MO',opens_at:'09:00',closes_at:'17:00'},{day:'FR',opens_at:'19:00',closes_at:'07:00'}],exceptions:[{from:'2026-12-25',to:'2026-12-25',opens_at:null,closes_at:null,note:'Holiday'}]}});
+  expect((await database().selectFrom('phone').select(['number','extension']).where('service_id','=',id).orderBy('number').execute()).map(r=>[r.number,r.extension])).toEqual([['+12065550100',12],['988',null]]);
+  expect(await accepted(id,'phones')).toEqual([{number:'+12065550100',extension:12},{number:'988',extension:null}]);
+  // Times and dates are read as text, so no time zone (the server's or this machine's) can shift them.
+  const schedule=await sql<{byday:string|null;opens_at:string|null;closes_at:string|null;valid_from:string|null;valid_to:string|null}>`SELECT byday, opens_at::text, closes_at::text, valid_from::text, valid_to::text FROM oran.schedule WHERE service_id=${id} ORDER BY valid_from NULLS FIRST, byday`.execute(database());
+  expect(schedule.rows.map(r=>[r.byday,r.opens_at,r.closes_at,r.valid_from,r.valid_to])).toEqual([['FR','19:00:00','07:00:00',null,null],['MO','09:00:00','17:00:00',null,null],[null,null,null,'2026-12-25','2026-12-25']]);
+  expect((await sql<{description:string}>`SELECT description FROM oran.schedule WHERE service_id=${id} AND valid_from IS NOT NULL`.execute(database())).rows).toEqual([{description:'Holiday'}]);
+  expect(await database().selectFrom('service_hours').select(['kind','time_zone']).where('service_id','=',id).executeTakeFirst()).toEqual({kind:'weekly',time_zone:'America/Los_Angeles'});
+ });
+ it('stores 24/7 and by-appointment hours without schedule rows, and unknown hours as no row',async()=>{
+  const hours=(id:string)=>database().selectFrom('service_hours').select(['kind','time_zone']).where('service_id','=',id).executeTakeFirst();
+  const schedules=async(id:string)=>(await database().selectFrom('schedule').select('id').where('service_id','=',id).execute()).length;
+  const id=await acceptResource(user.admin,{...input,hours:{kind:'always_open'}});
+  expect(await hours(id)).toEqual({kind:'always_open',time_zone:null});
+  expect(await schedules(id)).toBe(0);
+  await acceptResource(user.admin,{...input,hours:{kind:'weekly',time_zone:'America/Chicago',weekly:[{day:'TU',opens_at:'08:00',closes_at:'12:00'}],exceptions:[]}},id);
+  expect(await schedules(id)).toBe(1);
+  await acceptResource(user.admin,{...input,hours:{kind:'by_appointment'}},id);
+  expect(await hours(id)).toEqual({kind:'by_appointment',time_zone:null});
+  expect(await schedules(id)).toBe(0);
+  await acceptResource(user.admin,{...input,hours:null},id);
+  expect(await hours(id)).toBeUndefined();
+  expect(await schedules(id)).toBe(0);
+  const rows=(await assertions(id)).filter(r=>r.field_path==='hours');
+  expect(rows.map(r=>r.status)).toEqual(['superseded','superseded','superseded','accepted']);
+  expect(await accepted(id,'hours')).toBeNull();
+ });
+ it('keeps omitted parts and the row ids of unchanged parts on edit',async()=>{
+  const hours={kind:'weekly' as const,time_zone:'America/New_York',weekly:[{day:'WE',opens_at:'22:00',closes_at:'06:00'}],exceptions:[{from:'2026-12-24',to:'2026-12-26',opens_at:'10:00',closes_at:'14:00',note:''}]};
+  const place={access:'physical' as const,address:{address_1:'5 Kept Street',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98101'}};
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98101','98102'),phones:[{number:'206.555.0100',extension:7}],hours,locations:[place]});
+  const rowIds=async()=>({
+   phones:(await database().selectFrom('phone').select('id').where('service_id','=',id).execute()).map(r=>r.id),
+   schedules:(await database().selectFrom('schedule').select('id').where('service_id','=',id).orderBy('id').execute()).map(r=>r.id),
+   areas:(await database().selectFrom('service_area').select('id').where('service_id','=',id).orderBy('id').execute()).map(r=>r.id),
+   locations:await database().selectFrom('service_at_location as sl').innerJoin('address as ad','ad.location_id','sl.location_id').select(['sl.id','sl.location_id','ad.id as address_id']).where('sl.service_id','=',id).execute(),
+  });
+  const asserted=async()=>{
+   const state=await database().selectFrom('listing_state').select('revision_id').where('service_id','=',id).executeTakeFirstOrThrow();
+   return (await database().selectFrom('field_assertion').select('field_path').where('revision_id','=',state.revision_id).execute()).map(r=>r.field_path).sort();
+  };
+  const first=await rowIds();
+  expect(first.phones).toHaveLength(1);expect(first.schedules).toHaveLength(2);expect(first.areas).toHaveLength(2);expect(first.locations).toHaveLength(1);
+  // An edit that leaves the parts out asserts nothing about them and keeps every row.
+  const edited={...input,service_area:zip('98102','98101'),description:'An edited synthetic description that leaves the parts out.'};
+  await acceptResource(user.admin,edited,id);
+  expect(await rowIds()).toEqual(first);
+  expect(await asserted()).toEqual(['description']);
+  // The same parts again, with the phone typed another way, change no row and assert nothing.
+  const location=((await accepted(id,'locations')) as string[])[0];
+  await acceptResource(user.admin,{...edited,phones:[{number:'+1 206 555 0100',extension:7}],hours,locations:[{...place,id:location}]},id);
+  expect(await rowIds()).toEqual(first);
+  expect(await asserted()).toEqual([]);
+  // An empty list removes the phones and asserts "none".
+  await acceptResource(user.admin,{...edited,phones:[]},id);
+  expect((await rowIds()).phones).toEqual([]);
+  expect(await accepted(id,'phones')).toBeNull();
+ });
+ it('makes a Safety listing\'s physical location confidential unless the input says otherwise',async()=>{
+  const hidden={access:'physical' as const,address:{address_1:'1 Hidden Way',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98109'}};
+  const confidential=async(id:string)=>(await database().selectFrom('service_at_location as sl').innerJoin('location_access as la','la.location_id','sl.location_id').select('la.confidential').where('sl.service_id','=',id).execute()).map(r=>r.confidential);
+  const safety=await acceptResource(user.admin,{...input,categories:['safety'],locations:[hidden]});
+  expect(await confidential(safety)).toEqual([true]);
+  expect(await accepted(((await accepted(safety,'locations')) as string[])[0],'confidential')).toBe(true);
+  expect(await confidential(await acceptResource(user.admin,{...input,categories:['safety'],locations:[{...hidden,confidential:false}]}))).toEqual([false]);
+  // Without Safety, a physical location is confidential only when the input says so.
+  expect(await confidential(await acceptResource(user.admin,{...input,locations:[hidden]}))).toEqual([false]);
+ });
+ it('links a service to several locations of its organization',async()=>{
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',address:{address_1:'200 Main Street',address_2:'Suite 3',city:'Seattle',state_province:'WA',postal_code:'98101'},coordinates:{latitude:47.61,longitude:-122.33}},{access:'phone'}]});
+  const organization=(await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id;
+  const linked=await database().selectFrom('service_at_location as sl').innerJoin('location as l','l.id','sl.location_id').select(['l.organization_id','l.location_type']).where('sl.service_id','=',id).execute();
+  expect(linked).toHaveLength(2);
+  for(const l of linked) expect(l.organization_id).toBe(organization);
+  expect(linked.map(l=>l.location_type).sort()).toEqual(['physical','virtual']);
+  const order=(await accepted(id,'locations')) as string[];
+  const modes=await database().selectFrom('location_access').select(['location_id','mode']).where('location_id','in',order).execute();
+  expect(order.map(l=>modes.find(m=>m.location_id===l)?.mode)).toEqual(['physical','phone']);
+  expect(await database().selectFrom('address').select(['location_id','address_2']).where('location_id','in',order).execute()).toEqual([{location_id:order[0],address_2:'Suite 3'}]);
+  // S2-13: every linked location has exactly one access row, and no location anywhere is without one.
+  const access=await sql<{n:number}>`SELECT count(la.location_id)::int AS n FROM oran.service_at_location sl LEFT JOIN oran.location_access la ON la.location_id=sl.location_id WHERE sl.service_id=${id} GROUP BY sl.location_id`.execute(database());
+  expect(access.rows.map(r=>r.n)).toEqual([1,1]);
+  expect((await sql<{n:number}>`SELECT count(*)::int AS n FROM oran.location l WHERE NOT EXISTS (SELECT 1 FROM oran.location_access la WHERE la.location_id=l.id)`.execute(database())).rows).toEqual([{n:0}]);
+  // Dropping a location unlinks it; an empty list unlinks every one and asserts "none".
+  await acceptResource(user.admin,{...input,locations:[{id:order[1],access:'phone'}]},id);
+  expect(await database().selectFrom('service_at_location').select('location_id').where('service_id','=',id).execute()).toEqual([{location_id:order[1]}]);
+  await acceptResource(user.admin,{...input,locations:[]},id);
+  expect(await database().selectFrom('service_at_location').select('location_id').where('service_id','=',id).execute()).toEqual([]);
+  expect(await accepted(id,'locations')).toBeNull();
+ });
+ it('rejects a location id that is not already part of the listing',async()=>{
+  const a=await acceptResource(user.admin,{...input,locations:[{access:'phone'}]});
+  const aLocation=((await accepted(a,'locations')) as string[])[0];
+  const b=await acceptResource(user.admin,input);
+  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'}]},b)).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.admin,{...input,locations:[{id:randomUUID(),access:'phone'}]})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'},{id:aLocation,access:'remote'}]},a)).rejects.toThrow();
+  // Nothing was written: B keeps its one revision, and A's location is linked only to A.
+  expect(await database().selectFrom('revision').select('id').where('service_id','=',b).execute()).toHaveLength(1);
+  expect(await database().selectFrom('service_at_location').select('service_id').where('location_id','=',aLocation).execute()).toEqual([{service_id:a}]);
+  expect(await accepted(aLocation,'access')).toBe('phone');
+  // A listed location that no longer belongs to the listing's organization is not edited through it either.
+  const owner=(await database().selectFrom('location').select('organization_id').where('id','=',aLocation).executeTakeFirstOrThrow()).organization_id;
+  await database().updateTable('location').set({organization_id:fixtureOrg}).where('id','=',aLocation).execute();
+  try {await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'remote'}]},a)).rejects.toThrow('Access denied');}
+  finally {await database().updateTable('location').set({organization_id:owner}).where('id','=',aLocation).execute();}
+  expect(await accepted(aLocation,'access')).toBe('phone');
+ });
+ it('assigns ZIP-area work to verifiers in any listed ZIP and leaves nationwide work to admins',async()=>{
+  const assignee=async(id:string)=>(await database().selectFrom('work_item').select('assigned_to').where('service_id','=',id).executeTakeFirstOrThrow()).assigned_to;
+  await approveContributor(user.admin,user.community,'98101',['food']);
+  const id=await acceptResource(user.admin,{...input,service_area:zip('98102','98101')});
+  expect(await assignee(id)).toBe(user.community);
+  expect((await verificationQueue(user.community)).filter(r=>r.id===id)).toHaveLength(1);
+  await verify(user.community,id);
+  const nationwide=await acceptResource(user.admin,{...input,service_area:{kind:'nationwide'}});
+  expect(await assignee(nationwide)).toBeNull();
+  await expect(verify(user.community,nationwide)).rejects.toThrow('Access denied');
+  await expect(verify(user.admin,nationwide)).resolves.toBeUndefined();
+ });
+ it('verifiers file new listings only for their own ZIP',async()=>{
+  await expect(acceptResource(user.community,{...input,service_area:zip('98101','98102')})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.community,{...input,service_area:{kind:'state',state:'WA'}})).rejects.toThrow('Access denied');
+  await expect(acceptResource(user.community,{...input,service_area:zip('98101')})).resolves.toBeTruthy();
  });
 });
 
@@ -241,7 +369,7 @@ describe('accounts with several memberships',()=>{
  it('verifiers who are also staff still file a new provider inside their scope',async()=>{
   const id=await acceptResource(user.dual,{...input,organization_name:'Verifier-found provider'});
   expect((await database().selectFrom('revision').select('origin').where('service_id','=',id).executeTakeFirstOrThrow()).origin).toBe('verifier');
-  await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',postal_code:'98102'})).rejects.toThrow('Choose an organization');
+  await expect(acceptResource(user.dual,{...input,organization_name:'Verifier-found provider',service_area:zip('98102')})).rejects.toThrow('Choose an organization');
   await expect(acceptResource(user.org,{...input,organization_name:'Another new provider'})).rejects.toThrow('Organization name changes');
  });
  it('admins who are also staff can still create a listing for a new organization',async()=>{

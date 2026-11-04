@@ -158,7 +158,7 @@ describe('taxonomy migration',()=>{
    process.env.DATABASE_URL=url;process.env.ORAN_ENV='test';process.env.ORAN_DATABASE_HOST=new URL(url).hostname;
    try {
     await closeDatabase();
-    await acceptResource('legacy-admin',{name:'Legacy pantry',description:'Synthetic legacy listing',organization_name:'Legacy provider',categories:['food'],postal_code:'98101',eligibility_description:'Anyone nearby',application_process:'Walk in during open hours',url:'https://example.org',source_type:'phone_call',source_url:'',source_note:'Resubmitted without changes'},s);
+    await acceptResource('legacy-admin',{name:'Legacy pantry',description:'Synthetic legacy listing',organization_name:'Legacy provider',categories:['food'],service_area:{kind:'zip',postal_codes:['98101']},eligibility_description:'Anyone nearby',application_process:'Walk in during open hours',url:'https://example.org',source_type:'phone_call',source_url:'',source_note:'Resubmitted without changes'},s);
    } finally {
     await closeDatabase();
     for(const [key,value] of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}

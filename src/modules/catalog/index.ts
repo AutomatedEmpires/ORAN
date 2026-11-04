@@ -3,8 +3,9 @@ import { sql,type Kysely,type ExpressionBuilder } from 'kysely';
 import { z } from 'zod';
 import { database, lockCatalog, type DB } from '@/modules/platform';
 import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
-import { acceptedValues, changedFields, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
-import { applyFields } from './apply';
+import { acceptedValues, changedFields, fieldKey, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
+import { applyFields, idList } from './apply';
+import { hoursValue, locationInput, phoneValue, serviceAreaValue } from './parts';
 export { fieldKey, changedFields } from './assertions';
 export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
 export { usStates, usTimeZones, weekDays, listingOptions, partPatterns, partLimits, partMessages, normalizePhone, formatPhone, phoneValue, hoursValue, serviceAreaValue, addressValue, locationInput, areaRows } from './parts';
@@ -49,28 +50,48 @@ function hasCategory(eb:AnyBuilder, serviceRef:string, codes:readonly string[]) 
 export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:readonly string[]) {
  return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
 }
+// A verifier's geography is one ZIP: a service is in their area when one of its ZIP areas is that ZIP (city, county, state and nationwide areas are not).
+export async function serviceInVerifierArea(db:Kysely<DB>, serviceId:string, postalCode:string):Promise<boolean> {
+ return !!(await db.selectFrom('service_area as a').innerJoin('service_area_kind as k','k.service_area_id','a.id').select('a.id').where('a.service_id','=',serviceId).where('k.kind','=','zip').where('a.extent','=',postalCode).executeTakeFirst());
+}
 const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
 // A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds.
 const optionalUrl = z.union([z.literal(''),z.url().max(500).refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address').transform(v=>/^https?:\/\//.test(v)?v:new URL(v).href)]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
  organization_name:z.string().trim().min(2).max(150), organization_id:z.uuid().optional(), categories:categoryCodeList,
- postal_code:z.string().regex(/^[0-9]{5}$/, 'Use a five-digit ZIP code'),
+ service_area:serviceAreaValue,
  eligibility_description:z.string().trim().min(3).max(2000), application_process:z.string().trim().min(3).max(2000),
  url:optionalUrl, source_type:z.enum(['url','phone_call','organization']), source_url:optionalUrl, source_note:z.string().trim().min(10).max(2000),
+ // Parts left out are not asserted and stay as they are; an empty list or null asserts "none" or "unknown".
+ phones:z.array(phoneValue).max(10).optional(), hours:hoursValue.optional(), locations:z.array(locationInput).max(10).optional(),
 }).strict().superRefine((v,ctx)=>{
  if ((v.source_type === 'url') !== (v.source_url !== '')) ctx.addIssue({code:'custom',path:['source_url'],message:'Give a source web address only for a website source'});
+ const ids = (v.locations ?? []).flatMap(l=>l.id ? [l.id] : []);
+ if (new Set(ids).size !== ids.length) ctx.addIssue({code:'custom',path:['locations'],message:'List each location once'});
 });
 type ResourceInput = z.infer<typeof resourceInput>;
-// The facts a submission states. `codes` are the listing's categories in display order.
-function listingFields(input:ResourceInput, ids:{service_id:string;organization_id:string;new_organization:boolean}, codes:string[]):FieldValue[] {
+// The facts a submission states. `codes` are the listing's categories in display order; `location_ids` give each submitted location its id, in entry order.
+function listingFields(input:ResourceInput, ids:{service_id:string;organization_id:string;new_organization:boolean;location_ids:string[]}, codes:string[]):FieldValue[] {
  const service = (field_path:string, value:JsonValue):FieldValue => ({entity_type:'service',entity_id:ids.service_id,field_path,value});
- return [
+ const fields:FieldValue[] = [
   service('name',input.name), service('description',input.description), service('url',input.url || null),
   service('eligibility_description',input.eligibility_description), service('application_process',input.application_process),
-  service('categories',codes), service('service_area',{kind:'zip',postal_codes:[input.postal_code]}),
+  service('categories',codes), service('service_area',input.service_area),
   ...(ids.new_organization ? [{entity_type:'organization' as const,entity_id:ids.organization_id,field_path:'name',value:input.organization_name}] : []),
  ];
+ if (input.phones !== undefined) fields.push(service('phones',input.phones.length ? input.phones : null));
+ if (input.hours !== undefined) fields.push(service('hours',input.hours));
+ if (input.locations !== undefined) {
+  fields.push(service('locations',ids.location_ids.length ? ids.location_ids : null));
+  input.locations.forEach((loc,i)=>{
+   const location = (field_path:string, value:JsonValue):FieldValue => ({entity_type:'location',entity_id:ids.location_ids[i],field_path,value});
+   // Safety makes a physical location confidential unless the input says otherwise (ADR-0006 §1).
+   const confidential = loc.confidential ?? (codes.includes('safety') && loc.access === 'physical');
+   fields.push(location('access',loc.access), location('confidential',confidential), location('name',loc.name), location('address',loc.address), location('coordinates',loc.coordinates));
+  });
+ }
+ return fields;
 }
 const origins = {organization:'organization',admin:'admin',community:'verifier'} as const satisfies Record<string,Origin>;
 export async function acceptResource(userId:string, raw:unknown, existingId?:string) {
@@ -87,7 +108,9 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   let organizationId = existing?.organization_id ?? input.organization_id;
   if (organizationId && !admin && !orgs.includes(organizationId)) throw new Error('Access denied');
   if (existing && input.organization_id && input.organization_id !== existing.organization_id) throw new Error('Organization changes require a separate organization update');
-  const inScope = !!scope && scope.postal_code === input.postal_code && codes.every(c=>scope.category_scope.includes(c));
+  // A verifier's area is one ZIP: they file only a listing whose area is exactly that ZIP, in their categories.
+  const area = input.service_area, zips = area.kind === 'zip' ? area.postal_codes : [];
+  const inScope = !!scope && zips.length > 0 && zips.every(z=>z===scope.postal_code) && codes.every(c=>scope.category_scope.includes(c));
   if (!organizationId && orgs.length) {
    // Staff file under their only organization when the name matches; admins and in-scope verifiers may name a new one.
    const matches = (await trx.selectFrom('organization').select('id').where('id','in',orgs).where('name','=',input.organization_name).execute()).map(o=>o.id);
@@ -107,15 +130,22 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
    if (owner.name !== input.organization_name) throw new Error('Organization name changes require a separate organization update');
   } else organizationId = randomUUID();
   const id = existing?.id ?? randomUUID(), listing = {service_id:id,organization_id:organizationId,new_service:!existing,new_organization:newOrganization};
-  const desired = listingFields(input,listing,codes);
+  // Current values: the service's, then those of the locations it lists.
   const current = existing ? await acceptedValues(trx,[id]) : new Map<string,JsonValue>();
+  const currentLocations = idList(current.get(fieldKey({entity_type:'service',entity_id:id,field_path:'locations'})) ?? null);
+  for (const [key,value] of await acceptedValues(trx,currentLocations)) current.set(key,value);
+  // A location is edited only through a listing that already lists it, and only while it belongs to the listing's organization, so no submission reaches another listing's or organization's location.
+  const kept = (input.locations ?? []).flatMap(l=>l.id ? [l.id] : []);
+  if (kept.some(k=>!currentLocations.includes(k))) throw new Error('Access denied');
+  if (kept.length && await trx.selectFrom('location').select('id').where('id','in',kept).where('organization_id','!=',organizationId).executeTakeFirst()) throw new Error('Access denied');
+  const desired = listingFields(input,{...listing,location_ids:(input.locations ?? []).map(l=>l.id ?? randomUUID())},codes);
   const changed = changedFields(current,desired);
   await applyFields(trx,listing,desired,changed);
   const revisionId = await recordRevision(trx,{service_id:id,actor_id:actor.user_id,origin:origins[capacity],source:{source_type:input.source_type,source_url:input.source_url || null,source_note:input.source_note},current,changed});
   await trx.insertInto('listing_state').values({service_id:id,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
-  // Ownership is never independent verification: skip candidates affiliated with this organization, approved or pending.
-  const verifier = await trx.selectFrom('membership as m').select('m.user_id').where('m.role','=','community').where('m.approved','=',true).where('m.postal_code','=',input.postal_code).where(sql<boolean>`m.category_scope && ${codes}::text[]`).where('m.user_id','!=',actor.user_id).where('m.user_id','!=',previousState?.created_by ?? actor.user_id)
-   .where(eb=>eb.not(eb.exists(eb.selectFrom('membership as staff').select('staff.id').whereRef('staff.user_id','=','m.user_id').where('staff.role','=','organization').where('staff.organization_id','=',organizationId)))).orderBy('m.user_id').executeTakeFirst();
+  // A verifier in any of the listing's ZIPs; other areas go to admins. Ownership is never independent verification: skip candidates affiliated with this organization, approved or pending.
+  const verifier = zips.length ? await trx.selectFrom('membership as m').select('m.user_id').where('m.role','=','community').where('m.approved','=',true).where('m.postal_code','in',zips).where(sql<boolean>`m.category_scope && ${codes}::text[]`).where('m.user_id','!=',actor.user_id).where('m.user_id','!=',previousState?.created_by ?? actor.user_id)
+   .where(eb=>eb.not(eb.exists(eb.selectFrom('membership as staff').select('staff.id').whereRef('staff.user_id','=','m.user_id').where('staff.role','=','organization').where('staff.organization_id','=',organizationId)))).orderBy('m.user_id').executeTakeFirst() : undefined;
   await trx.insertInto('work_item').values({service_id:id,assigned_to:verifier?.user_id ?? null}).onConflict(o=>o.column('service_id').doUpdateSet({assigned_to:verifier?.user_id ?? null,due_at:new Date()})).execute();
   await trx.insertInto('audit_event').values({id:randomUUID(),actor_id:actor.user_id,action:existing?'resource.updated':'resource.created',subject:id,detail:JSON.stringify({asserted_by:capacity})}).execute();
   return id;
@@ -157,10 +187,10 @@ export async function verifyResource(userId:string, serviceId:string, raw:unknow
   await lockCatalog(trx);
   const actor = await actorFor(userId,trx);
   const service = await trx.selectFrom('service').select('organization_id').where('id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
-  const item = await trx.selectFrom('work_item as w').innerJoin('service_area as a','a.service_id','w.service_id').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','a.extent','l.created_by','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
+  const item = await trx.selectFrom('work_item as w').innerJoin('listing_state as l','l.service_id','w.service_id').select(['w.assigned_to','l.created_by','l.revision_id']).where('w.service_id','=',serviceId).forUpdate().executeTakeFirstOrThrow();
   const scope = verifierScope(actor), admin = isAdmin(actor);
   // Nobody, admins included, verifies an organization they are affiliated with; a verifier checks only assigned, in-scope work they did not create.
-  const permitted = !affiliatedOrganizationIds(actor).includes(service.organization_id) && (admin || (!!scope && item.assigned_to === actor.user_id && item.extent === scope.postal_code && item.created_by !== actor.user_id && await serviceHasCategory(trx,serviceId,scope.category_scope)));
+  const permitted = !affiliatedOrganizationIds(actor).includes(service.organization_id) && (admin || (!!scope && item.assigned_to === actor.user_id && item.created_by !== actor.user_id && await serviceInVerifierArea(trx,serviceId,scope.postal_code) && await serviceHasCategory(trx,serviceId,scope.category_scope)));
   if (!permitted) throw new Error('Access denied');
   if (item.revision_id !== input.revision_id) throw new Error('The resource changed; review the current version');
   const now = new Date(), due = new Date(now.getTime()+30*86400000);
