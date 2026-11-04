@@ -7,15 +7,16 @@ export type UsTimeZone = typeof usTimeZones[number];
 export type WeekDay = typeof weekDays[number];
 const locationAccesses = ['physical','remote','phone'] as const;
 export type LocationAccess = typeof locationAccesses[number];
-export const listingOptions = { states: usStates, timeZones: usTimeZones, days: weekDays };
-export type ListingOptions = typeof listingOptions;
 // Pattern sources are anchored, so each works as an HTML `pattern` attribute (which matches the whole value) and with `new RegExp`. `letter` needs the `s` flag in `new RegExp` so a line break does not hide a letter.
 export const partPatterns = { time: '^([01][0-9]|2[0-3]):[0-5][0-9]$', zip: '^[0-9]{5}$', postalCode: '^[0-9]{5}(-[0-9]{4})?$', letter: '^.*\\p{L}.*$' } as const;
 export const partLimits = {
  extension: { min: 1, max: 99999 }, weeklyRows: { min: 1, max: 21 }, exceptions: { max: 20 }, note: { max: 120 }, zipCodes: { min: 1, max: 100 }, areaName: { min: 2, max: 100 },
  address1: { min: 3, max: 150 }, address2: { max: 150 }, city: { min: 2, max: 100 }, locationName: { max: 150 },
- latitude: { min: -90, max: 90 }, longitude: { min: -180, max: 180 }, date: { min: '0001-01-01' },
+ latitude: { min: -90, max: 90 }, longitude: { min: -180, max: 180 }, date: { min: '0001-01-01' }, phones: { max: 10 }, locations: { max: 10 },
 } as const;
+// What the listing form needs from the server: the choices it offers and the limits it enforces in the browser.
+export const listingOptions = { states: usStates, timeZones: usTimeZones, days: weekDays, limits: partLimits };
+export type ListingOptions = typeof listingOptions;
 export const partMessages = {
  phone: 'Use a US phone number', time: 'Use a 24-hour time such as 09:00', date: 'Use a date such as 2026-12-25', sameTimes: 'Opening and closing times must be different',
  endBeforeStart: 'The last date cannot be before the first date', oneTime: 'Give both times, or leave both empty for a closed day', zip: 'Use five-digit ZIP codes', placeName: 'Use the name of a place',
