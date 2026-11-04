@@ -59,6 +59,8 @@ async function neutralSite(page: Page, scripted: boolean): Promise<Visit[]> {
 // Counts the capture listeners for keydown that window holds right now and whose code names Escape. React hydrating the Exit link is
 // not enough to press Esc: the shortcut is added by an effect after hydration, and a key pressed before it is a press nobody sees.
 // The wrapper sits on EventTarget, installed before any page script, and adds nothing to the product.
+// It accepts any capture keydown listener that mentions Escape, which today is only QuickExit's. Tighten it (for example by function name) when
+// dialogs or drawers add their own Esc handlers, or one of theirs would satisfy the wait before QuickExit is installed.
 async function watchEscapeListener(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const live = new Set<unknown>();
@@ -334,12 +336,15 @@ test('the shortcut is off where Exit is hidden', async ({ page }) => {
   await stayed(page, address);
 });
 
+// Order matters in this file: the directory test below publishes the only Safety listing of a run, and it needs a fresh database. This test
+// runs first, so no Safety or Housing & shelter listing exists yet and a Food-only profile has nothing to show Exit for.
 test('Exit follows the saved Safety and Housing & shelter needs', async ({ page }) => {
+  const noSafetyListing = 'no Safety or Housing & shelter listing exists yet (this test runs before the directory test, on a fresh database)';
   await page.clock.install({ time: clockStart });
   const exit = exitLink(page);
   await enterAs(page, 'My profile');
   await saveNeeds(page, ['Food']);
-  await expect(exit).toBeHidden();
+  await expect(exit, noSafetyListing).toBeHidden();
 
   // Safety results: Exit shows, and nothing in the title or the address names the category (§5.6). No crisis card appears (ADR-0007 §2).
   await saveNeeds(page, ['Safety']);
@@ -364,7 +369,7 @@ test('Exit follows the saved Safety and Housing & shelter needs', async ({ page 
   await page.goto('/profile');
   await expect(exit).toBeVisible();
   await saveNeeds(page, ['Food']);
-  await expect(exit).toBeHidden();
+  await expect(exit, noSafetyListing).toBeHidden();
   await saveNeeds(page, ['Housing & shelter']);
   await expect(exit).toBeVisible();
   await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
@@ -372,8 +377,8 @@ test('Exit follows the saved Safety and Housing & shelter needs', async ({ page 
 });
 
 // Publishes a Safety listing the way workflow.spec.ts publishes its first listing: an admin adds it, with a phone call as the source,
-// and records the verification that makes it public. Returns the listing's name.
-async function publishSafetyListing(page: Page): Promise<string> {
+// and records the verification that makes it public. It ticks Safety and any other categories given. Returns the listing's name.
+async function publishSafetyListing(page: Page, alsoIn: readonly string[] = []): Promise<string> {
   const name = 'Synthetic safety listing ' + randomUUID();
   await enterAs(page, 'Admin');
   await expect(page.getByRole('heading', { name: 'Add resource', exact: true })).toBeVisible();
@@ -381,7 +386,8 @@ async function publishSafetyListing(page: Page): Promise<string> {
   await page.getByLabel('Organization name', { exact: true }).fill('Synthetic browser organization');
   await page.getByLabel('Service ZIP code', { exact: true }).fill('98101');
   await page.getByLabel('Website', { exact: true }).fill('https://example.org');
-  await page.locator('form').filter({ has: page.getByLabel('Resource name', { exact: true }) }).getByRole('checkbox', { name: 'Safety', exact: true }).check();
+  const resourceForm = page.locator('form').filter({ has: page.getByLabel('Resource name', { exact: true }) });
+  for (const category of ['Safety', ...alsoIn]) await resourceForm.getByRole('checkbox', { name: category, exact: true }).check();
   await page.getByLabel('Description', { exact: true }).fill('Synthetic browser test listing, not a real assistance service.');
   await page.getByLabel('Who may qualify', { exact: true }).fill('Contact the provider about requirements');
   await page.getByLabel('How to get help', { exact: true }).fill('Contact the provider before visiting');
@@ -401,13 +407,16 @@ async function publishSafetyListing(page: Page): Promise<string> {
   return name;
 }
 
-test('Exit shows on the directory once it lists a Safety listing', async ({ page }) => {
+// Keep this test after the Profile test above. It needs an empty directory, and it publishes the run's only Safety listing, which would
+// make the Profile test's Food-only steps show Exit.
+test('Exit shows on the directory once it lists a Safety listing, and on Profile results that include it', async ({ page }) => {
   const exit = exitLink(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(exit).toBeHidden();
+  await expect(exit, 'the directory lists no Safety or Housing & shelter listing yet (this test needs a fresh database)').toBeHidden();
 
-  const name = await publishSafetyListing(page);
+  // The listing is in Food as well, so a person who saved only Food is shown it. Exit must follow the listing the results show, not only the saved needs.
+  const name = await publishSafetyListing(page, ['Food']);
   await page.goto('/');
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
   await expect(exit).toBeVisible();
@@ -415,6 +424,14 @@ test('Exit shows on the directory once it lists a Safety listing', async ({ page
   expect(page.url()).toBe('http://127.0.0.1:3100/');
   await expect(page.getByRole('main').getByRole('heading', { name: 'Get help now' })).toHaveCount(0);
   await accessible(page);
+
+  // The results half of the Profile scope: the saved need is Food, and the listing shown is also a Safety listing.
+  await enterAs(page, 'My profile');
+  await saveNeeds(page, ['Food']);
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+  await expect(exit).toBeVisible();
+  await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
+  await expect(exit).toBeHidden();
 });
 
 test.describe('without JavaScript', () => {
