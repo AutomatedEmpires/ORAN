@@ -108,6 +108,9 @@ h3 { margin-block:var(--space-4) var(--space-2); font-size:var(--font-size-md); 
 .local-notice button { margin:0; }
 .grid, .stack { display:grid; gap:var(--space-3); }
 .grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }
+.catalog-swatches { display:grid; gap:var(--space-3); margin:0; padding:0; list-style:none; }
+.catalog-swatches li { display:flex; align-items:center; gap:var(--space-3); }
+.catalog-swatch { display:inline-block; flex:none; inline-size:var(--space-7); block-size:var(--space-7); border:1px solid var(--color-border); border-radius:var(--radius-badge); }
 .tag { display:inline; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-text-secondary); }
 .small { font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
 .error { display:flex; align-items:flex-start; gap:var(--space-2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-danger); }
