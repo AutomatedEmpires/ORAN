@@ -333,7 +333,7 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 
 ## 10. Implementation notes
 
-- Tokens become CSS custom properties in `src/app/globals.css` in a later UI PR. The current development styles there (`--ink`, `--accent`, Arial) are bootstrap-only and will be replaced. This document changes no code.
+- Tokens are CSS custom properties in the `:root` block of `src/app/globals.css`; `tests/browser/design-system.spec.ts` keeps them in step with §3.
 - **Framework-agnostic.** Components are specified as semantic HTML plus tokens. The Tailwind and Radix choice is open under D6; whichever is chosen must consume these tokens, and lint must block raw colors, sizes and off-scale spacing.
 - **Icons.** Inline SVG on a 24×24 viewBox, `fill="none"`, `stroke="currentColor"`, stroke 1.8 (default) to 2.1 (active or small), round caps and joins, `aria-hidden="true"`, with the name on the control. Lucide style; no icon fonts.
 - **Fonts.** Self-host Figtree (SIL OFL 1.1). The mockups load Google Fonts; production must not, so seeker IP addresses are not sent to a third party.
