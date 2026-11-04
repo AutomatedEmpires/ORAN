@@ -56,7 +56,8 @@ describe('listing form parsing',()=>{
   expect(listingFromForm(form([...base,...blankName])).locations).toEqual([{access:'remote',confidential:false,name:'',address:null,coordinates:null}]);
  });
  it('reads unknown hours as null and a nationwide area as its kind alone',()=>{
-  const unknown=listingFromForm(form([...scalarEntries,['categories','food'],['area_kind','nationwide'],['area_postal_codes','98101'],['hours_kind','unknown'],['hours_time_zone','America/Los_Angeles'],['hours_MO_opens','09:00'],['hours_MO_closes','17:00']]));
+  // The time zone is a select, not typing; typed times under "Not known yet" are rejected (see the S2-28 test below).
+  const unknown=listingFromForm(form([...scalarEntries,['categories','food'],['area_kind','nationwide'],['area_postal_codes','98101'],['hours_kind','unknown'],['hours_time_zone','America/Los_Angeles'],['hours_MO_opens',''],['hours_MO_closes','']]));
   expect(unknown.hours).toBeNull();
   expect(unknown.service_area).toEqual({kind:'nationwide'});
   for(const kind of ['always_open','by_appointment'])expect(listingFromForm(form([...base,['hours_kind',kind],...weeklyHours.slice(1)])).hours,kind).toEqual({kind});
@@ -177,5 +178,33 @@ describe('listing form parsing',()=>{
   expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_opens',''],['hours_MO_closes','']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'}]);
   expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_opens','13:00'],['hours_MO_closes','']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'},{day:'MO',opens_at:'13:00',closes_at:''}]);
   expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_closes','17:00']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'},{day:'MO',opens_at:'',closes_at:'17:00'}]);
+ });
+ it('rejects typed hours under "Not known yet" instead of dropping them',()=>{
+  const unknown=(entries:[string,string][])=>listingFromForm(form([...base,['hours_kind','unknown'],['hours_time_zone','America/Los_Angeles'],...entries]));
+  // With nothing typed, "Not known yet" is unknown hours.
+  expect(unknown([]).hours).toBeNull();
+  expect(unknown([['hours_MO_opens',''],['hours_MO_closes',' '],['exception_from',''],['exception_to',''],['exception_opens',''],['exception_closes',''],['exception_note','']]).hours).toBeNull();
+  // Any typed weekly time or exception date is sent with the "unknown" kind, which the schema rejects, so the error names Hours.
+  const typed:[string,string][][]=[[['hours_MO_opens','09:00']],[['hours_SU_closes','17:00']],[['hours_MO_opens','09:00'],['hours_MO_closes','17:00']],[['exception_from','2026-12-25']],[['exception_to','2026-12-26']]];
+  for(const entries of typed){
+   const input=unknown(entries),label=JSON.stringify(entries);
+   expect(input.hours,label).toMatchObject({kind:'unknown',time_zone:'America/Los_Angeles'});
+   expect(fieldLabel(resourceInput.safeParse(input).error),label).toEqual({key:'hours'});
+  }
+ });
+ it("rejects a typed location left at \"Don't add a location\" instead of dropping it",()=>{
+  const saved:[string,string][]=[['location_0_id',locationId],['location_0_access','remote']];
+  const posted=(entries:[string,string][])=>form([...base,['hours_kind','unknown'],...saved,['location_1_id',''],...entries]);
+  // An unused slot with nothing typed is skipped. The privacy radio alone does not count, because Safety selects it by itself.
+  expect(listingFromForm(posted([['location_1_access','none']])).locations).toEqual([expect.objectContaining({id:locationId})]);
+  expect(listingFromForm(posted([['location_1_access','none'],['location_1_name',''],['location_1_address_1','  '],['location_1_state',''],['location_1_confidential','private']])).locations).toHaveLength(1);
+  // Any typed name, address, state or coordinate keeps the slot with its access as posted ('none', or missing), so the save is rejected and names the slot the person sees.
+  const typed:[string,string][]=[['name','Main office'],['address_1','1 Main Street'],['address_2','Suite 2'],['city','Seattle'],['state','WA'],['postal_code','98101'],['latitude','47.6'],['longitude','-122.3']];
+  for(const [field,value] of typed)for(const access of [[['location_1_access','none']],[]] as [string,string][][]){
+   const data=posted([...access,[`location_1_${field}`,value]]),input=listingFromForm(data),label=field+(access.length?' none':' missing');
+   expect(input.locations,label).toHaveLength(2);
+   expect((input.locations as {access:string}[])[1].access,label).toBe(access.length?'none':'');
+   expect(fieldLabel(resourceInput.safeParse(input).error,data),label).toEqual({key:'locationN',n:2});
+  }
  });
 });

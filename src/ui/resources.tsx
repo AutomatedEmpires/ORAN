@@ -21,7 +21,8 @@ export async function ListingDetails({parts,level=3}:{parts:ListingParts;level?:
   return [l.name,a&&`${[a.address_1,a.address_2,a.city].filter(Boolean).join(', ')}, ${a.state_province} ${a.postal_code}`].filter(Boolean).join(' · ');
  };
  return <>
-  {phones.map((p,i)=><p key={i}><a href={'tel:'+p.number}>{formatPhone(p.number)}</a>{p.extension!==null?' '+t.phoneExtension.replace('{n}',String(p.extension)):null}</p>)}
+  {/* The link dials the extension too (RFC 3966). */}
+  {phones.map((p,i)=><p key={i}><a href={'tel:'+p.number+(p.extension!==null?';ext='+p.extension:'')}>{formatPhone(p.number)}</a>{p.extension!==null?' '+t.phoneExtension.replace('{n}',String(p.extension)):null}</p>)}
   {locations.map(l=><p key={l.id}>{place(l)}</p>)}
   <Hours>{t.hours}</Hours>
   {!hours?<p>{t.hoursUnknown}</p>:hours.kind==='always_open'?<p>{t.alwaysOpen}</p>:hours.kind==='by_appointment'?<p>{t.byAppointment}</p>:<>
@@ -37,5 +38,5 @@ export async function ResourceCards({resources,editable=false}:{resources:Resour
 }
 export async function VerificationForms({items}:{items:(Resource&{revision_id:string})[]}){
  const {text:t}=await messages();
- return <div className="stack">{items.map(r=><article key={r.id} className="card"><h3>{r.name}</h3><p>{r.description}</p><ListingDetails parts={r} level={4}/><p>{t.eligibility}: {r.eligibility_description}</p><p>{t.intake}: {r.application_process}</p>{r.url?<a href={r.url} rel="noreferrer">{t.contact}</a>:null}<ActionForm action={verificationAction} label={t.verify}><input type="hidden" name="id" value={r.id}/><input type="hidden" name="revision_id" value={r.revision_id}/><label htmlFor={r.id+'method'}>{t.method}</label><select id={r.id+'method'} name="method"><option value="phone">{t.phone}</option><option value="website">{t.webCheck}</option><option value="in_person">{t.inPerson}</option></select><label htmlFor={r.id+'evidence'}>{t.evidence}</label><textarea id={r.id+'evidence'} name="evidence" required minLength={10} maxLength={2000}/><label htmlFor={r.id+'fields'}>{t.fields}</label><input id={r.id+'fields'} name="fields_checked" required minLength={5} maxLength={500}/></ActionForm></article>)}</div>;
+ return <div className="stack">{items.map(r=><article key={r.id} className="card"><h3>{r.name}</h3><p>{r.description}</p><p>{t.eligibility}: {r.eligibility_description}</p><p>{t.intake}: {r.application_process}</p>{r.url?<a href={r.url} rel="noreferrer">{t.contact}</a>:null}<ListingDetails parts={r} level={4}/>{/* The form has its own heading, so it does not read as part of the hours. */}<h4>{t.verify}</h4><ActionForm action={verificationAction} label={t.verify}><input type="hidden" name="id" value={r.id}/><input type="hidden" name="revision_id" value={r.revision_id}/><label htmlFor={r.id+'method'}>{t.method}</label><select id={r.id+'method'} name="method"><option value="phone">{t.phone}</option><option value="website">{t.webCheck}</option><option value="in_person">{t.inPerson}</option></select><label htmlFor={r.id+'evidence'}>{t.evidence}</label><textarea id={r.id+'evidence'} name="evidence" required minLength={10} maxLength={2000}/><label htmlFor={r.id+'fields'}>{t.fields}</label><input id={r.id+'fields'} name="fields_checked" required minLength={5} maxLength={500}/></ActionForm></article>)}</div>;
 }

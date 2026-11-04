@@ -47,18 +47,20 @@ function PhoneFieldset({phones=[],limits}:{phones?:Resource['phones'];limits:Lim
  </fieldset>)}</fieldset>;
 }
 const noRule={opens_at:'',closes_at:''},noException={from:'',to:'',opens_at:null,closes_at:null,note:''};
-function HoursFieldset({hours,options}:{hours?:Resource['hours'];options:ListingOptions}){
+function HoursFieldset({hours,options,kind,onKind}:{hours?:Resource['hours'];options:ListingOptions;kind:string;onKind:(kind:string)=>void}){
  const t=useMessages(),id=useId(),weekly=hours?.kind==='weekly'?hours:null,exceptions=weekly?.exceptions??[],zone=weekly?.time_zone??'';
+ // Typing a weekly time or an exception date while "Not known yet" is chosen switches to weekly hours, so what was typed is saved, or named in an error, and never dropped (S2-28). Clearing a field does not switch.
+ const typed=(e:React.FormEvent)=>{if(kind==='unknown'&&(e.target as HTMLInputElement).value!=='')onKind('weekly');};
  const time=(key:string,label:string,name:string,value:string|null,hint?:string)=><Field key={key} id={id+key} label={label} name={name} type="time" defaultValue={value??''} aria-describedby={hint}/>;
  return <fieldset><legend>{t.hours}</legend>
-  <Radios name="hours_kind" checked={hours?.kind??'unknown'} choices={[['unknown',t.hoursUnknownOption],['weekly',t.hoursWeekly],['always_open',t.alwaysOpen],['by_appointment',t.byAppointment]]}/>
+  {([['unknown',t.hoursUnknownOption],['weekly',t.hoursWeekly],['always_open',t.alwaysOpen],['by_appointment',t.byAppointment]] as const).map(([value,text])=><label key={value}><input type="radio" name="hours_kind" value={value} checked={kind===value} onChange={()=>onKind(value)}/>{text}</label>)}
   {/* Keyed by the stored zone, as StateSelect is. */}
   <div><label htmlFor={id+'zone'}>{t.timeZone}</label><select key={zone} id={id+'zone'} name="hours_time_zone" defaultValue={zone}><option value="">{t.chooseTimeZone}</option>{options.timeZones.map(zone=><option key={zone} value={zone}>{t.timeZones[zone]}</option>)}</select></div>
   <p id={id+'closed'}>{t.closedHint}</p>
   {options.days.map(day=>{
    // One row per stored rule, so a day with two time ranges (a lunch break) keeps both, each in its own numbered group; a day without one gets an empty row.
    const rules=weekly?.weekly.filter(rule=>rule.day===day)??[],rows=rules.length?rules:[noRule];
-   return <fieldset key={day} aria-describedby={id+'closed'}><legend>{t.days[day]}</legend>{rows.map((rule,i)=>{
+   return <fieldset key={day} aria-describedby={id+'closed'} onInput={typed}><legend>{t.days[day]}</legend>{rows.map((rule,i)=>{
     const times=<>{time(`${day}${i}opens`,t.opens,`hours_${day}_opens`,rule.opens_at)}{time(`${day}${i}closes`,t.closes,`hours_${day}_closes`,rule.closes_at)}</>;
     return rows.length>1?<fieldset key={i}><legend>{nth(t.rangeN,i+1)}</legend>{times}</fieldset>:<Fragment key={i}>{times}</Fragment>;
    })}</fieldset>;
@@ -66,8 +68,9 @@ function HoursFieldset({hours,options}:{hours?:Resource['hours'];options:Listing
   {[...exceptions,...(exceptions.length<options.limits.exceptions.max?[noException]:[])].map((exception,i)=>{
    const key=`exception${i}`;
    return <fieldset key={key}><legend>{nth(t.exceptionN,i+1)}</legend>
-    <Field id={id+key+'from'} label={t.dateFrom} name="exception_from" type="date" defaultValue={exception.from}/>
-    <Field id={id+key+'to'} label={t.dateTo} name="exception_to" type="date" defaultValue={exception.to}/>
+    <Field id={id+key+'from'} label={t.dateFrom} name="exception_from" type="date" defaultValue={exception.from} onInput={typed}/>
+    {/* A one-day exception leaves To empty, as it was typed: the parser reads an empty To as From, so moving the day means changing From only. */}
+    <Field id={id+key+'to'} label={t.dateTo} name="exception_to" type="date" defaultValue={exception.to===exception.from?'':exception.to} onInput={typed}/>
     {time(key+'opens',t.opens,'exception_opens',exception.opens_at,id+key+'hint')}{time(key+'closes',t.closes,'exception_closes',exception.closes_at,id+key+'hint')}
     <p id={id+key+'hint'}>{t.exceptionHint}</p>
     <Field id={id+key+'note'} label={t.note} name="exception_note" defaultValue={exception.note} maxLength={options.limits.note.max}/>
@@ -102,20 +105,21 @@ export function ResourceForm({resource={},lockOrganizationName=false,categories,
  // - for any other slot: "private" while Safety is checked;
  // - otherwise nothing. The form then sends no choice and the server decides (S2-24), so a form sent without JavaScript is safe too.
  const startsSafety=Boolean(resource.categories?.includes('safety')),[safety,setSafety]=useState(startsSafety),[chosen,setChosen]=useState<Partial<Record<number,Privacy>>>({}),added=safety&&!startsSafety;
+ const startsHours=resource.hours?.kind??'unknown',[hoursKind,setHoursKind]=useState<string>(startsHours);
  const privacy=(slot:number,location?:Location):Privacy|undefined=>chosen[slot]??(location?.access==='physical'?(added||location.confidential?'private':'public'):safety?'private':undefined);
  // A full listing offers no empty location slot.
  const saved=resource.locations??[],slots=[...saved,...(saved.length<options.limits.locations.max?[undefined]:[])];
  const textareas=[['description',t.description,10,3000],['eligibility_description',t.eligibility,3,2000],['application_process',t.intake,3,2000],['source_note',t.source,10,2000]] as const;
  const textarea=([name,label,min,max]:(typeof textareas)[number])=><div key={name}><label htmlFor={prefix+name}>{label}</label><textarea id={prefix+name} name={name} required minLength={min} maxLength={max} defaultValue={name==='source_note'?'':resource[name]??''}/></div>;
  const fields=[['name',t.name,3,150],['organization_name',t.organizationName,2,150],['url',t.website,0,500]] as const;
- return <ActionForm action={resourceAction} label={resource.id?t.save:t.create} onReset={()=>{setSource(defaultSource);setSafety(startsSafety);setChosen({});}}>
+ return <ActionForm action={resourceAction} label={resource.id?t.save:t.create} onReset={()=>{setSource(defaultSource);setSafety(startsSafety);setChosen({});setHoursKind(startsHours);}}>
   <input type="hidden" name="id" value={resource.id??''}/>
   {fields.map(([name,label,min,max])=>name==='organization_name'&&choose?<div key={name}><label htmlFor={prefix+'organization_id'}>{t.chooseOrganization}</label><select id={prefix+'organization_id'} name="organization_id" value={organizationId} onChange={e=>setOrganizationId(e.target.value)}>{organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select><input type="hidden" name="organization_name" value={organizations.find(o=>o.id===organizationId)?.name??''}/></div>:<div key={name}><label htmlFor={prefix+name}>{label}</label><input id={prefix+name} name={name} defaultValue={resource[name]??''} readOnly={name==='organization_name'&&(lockOrganizationName||Boolean(resource.id))} required={name!=='url'} type={name==='url'?'url':'text'} minLength={min} maxLength={max}/></div>)}
   <CategoryChecks categories={categories} name="categories" selected={resource.categories} required onToggle={(code,checked)=>{if(code==='safety')setSafety(checked);}}/>
   {textareas.slice(0,3).map(textarea)}
   <AreaFieldset area={resource.service_area} options={options}/>
   <PhoneFieldset phones={resource.phones} limits={options.limits}/>
-  <HoursFieldset hours={resource.hours} options={options}/>
+  <HoursFieldset hours={resource.hours} options={options} kind={hoursKind} onKind={setHoursKind}/>
   {slots.map((location,slot)=><LocationFieldset key={location?.id??'new'} slot={slot} location={location} options={options} privacy={privacy(slot,location)} onPrivacy={choice=>setChosen(current=>({...current,[slot]:choice}))}/>)}
   <fieldset><legend>{t.sourceType}</legend>{sources.map(([value,text],i)=><label key={value}><input type="radio" name="source_type" value={value} required={i===0} checked={source===value} onChange={()=>setSource(value)}/>{text}</label>)}</fieldset>
   {source==='url'?<div><label htmlFor={prefix+'source_url'}>{t.sourceUrl}</label><input id={prefix+'source_url'} name="source_url" type="url" maxLength={500} required/></div>:null}

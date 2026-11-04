@@ -31,8 +31,7 @@ function phones(form: FormData): { number: string; extension: number | null }[] 
 }
 function hours(form: FormData): Record<string, unknown> | null {
  const kind = text(form, 'hours_kind');
- if (kind === 'unknown') return null;
- if (kind !== 'weekly') return { kind };
+ if (kind !== 'weekly' && kind !== 'unknown') return { kind };
  const weekly = weekDays.flatMap(day => {
   // A day may have several rules (a lunch break), one per row, paired by position. A row is skipped only when both times are blank. A half-filled row is sent as typed, so the schema rejects it instead of it being saved as closed.
   const [opens, closes] = ['opens', 'closes'].map(edge => column(form, `hours_${day}_${edge}`));
@@ -44,12 +43,20 @@ function hours(form: FormData): Record<string, unknown> | null {
   const last = to[i] ?? '';
   return blank(first) ? [] : [{ from: first, to: blank(last) ? first : last, opens_at: nullIfBlank(opens[i] ?? ''), closes_at: nullIfBlank(closes[i] ?? ''), note: notes[i] ?? '' }];
  });
+ // Typed times or dates are never dropped (S2-28). Under "Not known yet" they are sent with that kind, which the schema rejects, so the error names Hours; with nothing typed, "Not known yet" is unknown hours.
+ if (kind === 'unknown' && !weekly.length && ![...from, ...to].some(date => !blank(date))) return null;
  return { kind, time_zone: text(form, 'hours_time_zone'), weekly, exceptions };
 }
 const privacy = (choice: string): { confidential?: boolean } => (choice === 'private' ? { confidential: true } : choice === 'public' ? { confidential: false } : {});
-// The slots that hold a location. A slot that is unused ('none' or missing) or marked for removal is left out, which drops that location from the listing.
+// The slots that hold a location. A slot marked for removal is left out, which drops that location from the listing, and so is an unused slot ('none' or missing) with nothing typed in it.
+// An unused slot with a typed name, address, state or coordinate is kept, so typing is never dropped (S2-28): its access is sent as posted, which the schema rejects, and the error names the location. The privacy radio does not count, because Safety selects it by itself. Saved slots never offer 'none', so this cannot block an edit.
+const typedLocationFields = ['name', 'address_1', 'address_2', 'city', 'state', 'postal_code', 'latitude', 'longitude'];
 function usedSlots(form: FormData): number[] {
- return locationSlots.filter(i => { const access = text(form, `location_${i}_access`); return access !== '' && access !== 'none' && text(form, `location_${i}_remove`) !== 'on'; });
+ return locationSlots.filter(i => {
+  const field = (name: string) => text(form, `location_${i}_${name}`), access = field('access');
+  if (field('remove') === 'on') return false;
+  return (access !== '' && access !== 'none') || typedLocationFields.some(name => !blank(field(name)));
+ });
 }
 function locations(form: FormData): Record<string, unknown>[] {
  return usedSlots(form).map(i => {
