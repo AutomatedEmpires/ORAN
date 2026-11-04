@@ -336,6 +336,27 @@ describe('per-field assertions and history',()=>{
   expect(rows.length).toBeGreaterThan(0);
   for(const r of rows) expect(r).toMatchObject({source_type:'organization',source_url:null,origin:'organization'});
  });
+ it('adding a website to a listing without one records one accepted assertion',async()=>{
+  const id=await acceptResource(user.admin,{...input,url:''});
+  expect((await assertions(id)).filter(r=>r.field_path==='url')).toEqual([]);
+  await acceptResource(user.admin,input,id);
+  expect((await assertions(id)).filter(r=>r.field_path==='url').map(r=>[r.status,r.value])).toEqual([['accepted','https://example.org']]);
+  expect((await database().selectFrom('service').select('url').where('id','=',id).executeTakeFirstOrThrow()).url).toBe('https://example.org');
+ });
+ it('normalizes web addresses before storing them',async()=>{
+  const id=await acceptResource(user.admin,{...input,url:'Https://Example.org/a',source_url:'Https://Example.org/b'}),rows=await assertions(id);
+  expect(rows.find(r=>r.field_path==='url')?.value).toBe('https://example.org/a');
+  expect((await database().selectFrom('service').select('url').where('id','=',id).executeTakeFirstOrThrow()).url).toBe('https://example.org/a');
+  for(const r of rows) expect(r.source_url).toBe('https://example.org/b');
+  // A single slash or no slashes still names a web address; a well-formed one is kept exactly as typed.
+  const other=await acceptResource(user.admin,{...input,url:'https:/example.org',source_url:'http:example.org'});
+  expect((await assertions(other)).filter(r=>r.field_path==='url').map(r=>[r.value,r.source_url])).toEqual([['https://example.org/','http://example.org/']]);
+  const same=await acceptResource(user.admin,{...input,url:'https://example.org',source_url:'https://example.org'});
+  expect((await assertions(same)).filter(r=>r.field_path==='url').map(r=>[r.value,r.source_url])).toEqual([['https://example.org','https://example.org']]);
+  const long='https://example.org/'+'a'.repeat(481);
+  await expect(acceptResource(user.admin,{...input,url:long})).rejects.toThrow();
+  await expect(acceptResource(user.admin,{...input,source_url:long})).rejects.toThrow();
+ });
  it('resubmitting the same categories in another order records no category assertion',async()=>{
   const id=await acceptResource(user.admin,{...input,categories:['health','food']});
   // Categories are stored in display order (food before health), as the legacy backfill stored them.

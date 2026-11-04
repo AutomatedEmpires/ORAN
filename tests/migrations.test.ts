@@ -2,6 +2,8 @@ import { describe,it,expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { migrate } from '../scripts/database';
+import { closeDatabase } from '../src/modules/platform/index';
+import { acceptResource } from '../src/modules/catalog/index';
 import { disposableDatabase } from './support/disposable-database';
 async function withDatabase(fn:(client:Client,url:string)=>Promise<void>) {
  const db=await disposableDatabase(),client=new Client({connectionString:db.url});
@@ -136,6 +138,37 @@ describe('taxonomy migration',()=>{
    for(const r of mixedRows) expect(r).toMatchObject({origin:'organization',source_note:'Middle note',decided_by:'legacy-staff',revision_id:mid});
    const org=(await client.query("SELECT f.value,f.revision_id,f.origin,f.source_type,f.source_note,f.decided_by,f.status,f.observed_at=r.created_at AS observed_at_revision,f.decided_at=r.created_at AS decided_at_revision FROM oran.field_assertion f JOIN oran.revision r ON r.id=f.revision_id WHERE f.entity_type='organization' AND f.entity_id=$1",[oa])).rows;
    expect(org).toEqual([{value:'Skip provider',revision_id:early,origin:'admin',source_type:'legacy',source_note:'Earliest note',decided_by:'legacy-admin',status:'accepted',observed_at_revision:true,decided_at_revision:true}]);
+  });
+ },120000);
+ it('a backfilled legacy listing resubmitted unchanged records no assertions',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103100100_membership_organization_scope.sql'});
+   const o=randomUUID(),s=randomUUID(),r=randomUUID();
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('legacy-admin','Legacy admin')");
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Legacy provider')",[o]);
+   // The values are exactly what the resource form submits when it prefills and re-saves this listing: a bare-host website stays as stored, and one ZIP code.
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description,url,eligibility_description,application_process) VALUES ($1,$2,'Legacy pantry','Synthetic legacy listing','https://example.org','Anyone nearby','Walk in during open hours')",[s,o]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'ZIP 98101','98101')",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.attribute(id,link_id,link_entity,link_type,taxonomy_term_id) SELECT $1,$2,'service','category',id FROM oran.taxonomy_term WHERE code='food'",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status) VALUES ($1,$2,'legacy-admin','admin',$3,'accepted')",[r,s,'{"input":{"source_note":"Legacy note"}}']);
+   await client.query("INSERT INTO oran.listing_state(service_id,created_by,revision_id,state,checked_at,next_review_due) VALUES ($1,'legacy-admin',$2,'checked',now(),now()+interval '30 days')",[s,r]);
+   await migrate(url);
+   await client.query("INSERT INTO oran.membership(user_id,role,approved) VALUES ('legacy-admin','admin',true)");
+   const saved={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
+   process.env.DATABASE_URL=url;process.env.ORAN_ENV='test';process.env.ORAN_DATABASE_HOST=new URL(url).hostname;
+   try {
+    await closeDatabase();
+    await acceptResource('legacy-admin',{name:'Legacy pantry',description:'Synthetic legacy listing',organization_name:'Legacy provider',categories:['food'],postal_code:'98101',eligibility_description:'Anyone nearby',application_process:'Walk in during open hours',url:'https://example.org',source_type:'phone_call',source_url:'',source_note:'Resubmitted without changes'},s);
+   } finally {
+    await closeDatabase();
+    for(const [key,value] of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+   }
+   const state=(await client.query('SELECT revision_id,state FROM oran.listing_state WHERE service_id=$1',[s])).rows[0];
+   expect(state.revision_id).not.toBe(r);
+   expect(state.state).toBe('unreviewed');
+   expect((await client.query('SELECT id FROM oran.field_assertion WHERE revision_id=$1',[state.revision_id])).rows).toEqual([]);
+   const rows=(await client.query("SELECT DISTINCT status,revision_id FROM oran.field_assertion WHERE entity_id=$1",[s])).rows;
+   expect(rows).toEqual([{status:'accepted',revision_id:r}]);
   });
  },120000);
  it('allows one accepted value per field and enforces decision and source shapes',async()=>{

@@ -48,7 +48,8 @@ export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:
  return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
 }
 const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
-const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
+// A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds.
+const optionalUrl = z.union([z.literal(''),z.url().max(500).refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address').transform(v=>/^https?:\/\//.test(v)?v:new URL(v).href)]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
  organization_name:z.string().trim().min(2).max(150), organization_id:z.uuid().optional(), categories:categoryCodeList,

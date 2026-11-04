@@ -21,6 +21,9 @@ test('admin entry → approved scoped community verification → personalized di
  await page.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');
  await page.getByRole('button',{name:'Add resource',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Saved. This resource needs'})).toBeVisible();
+ // The form resets after a save, and the source question resets with it.
+ await expect(page.getByRole('radio',{name:'A website',exact:true})).not.toBeChecked();
+ await expect(page.getByLabel('Source web address',{exact:true})).toHaveCount(0);
  await page.goto('/');
  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
  await page.goto('/admin');
@@ -97,7 +100,24 @@ test('an admin who belongs to no organization has no source preselected',async({
  await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
  await page.goto('/organization');
  await expect(page.getByRole('heading',{name:'Resources you maintain',exact:true})).toBeVisible();
- for(const name of ['A website','A phone call','The organization itself'])await expect(page.getByRole('radio',{name,exact:true})).not.toBeChecked();
+ for(const name of ['A website','A phone call'])await expect(page.getByRole('radio',{name,exact:true})).not.toBeChecked();
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toHaveCount(0);
+});
+test('the source question offers only answers the server accepts',async({page})=>{
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toHaveCount(0);
+ const address=page.getByLabel('Source web address',{exact:true});
+ await expect(address).toHaveCount(0);
+ await page.getByRole('radio',{name:'A website',exact:true}).check();
+ await expect(address).toHaveAttribute('required','');
+ await accessible(page);
+ await page.getByRole('radio',{name:'A phone call',exact:true}).check();
+ await expect(address).toHaveCount(0);
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Organization',exact:true}).click();
+ await expect(page.getByLabel('Organization name',{exact:true})).toHaveValue('Development organization');
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toBeChecked();
+ await expect(address).toHaveCount(0);
 });
 test('a signed-in user with no memberships is denied staff workspaces',async({page})=>{
  await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as My profile',exact:true}).click();
