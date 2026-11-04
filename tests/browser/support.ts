@@ -1,5 +1,16 @@
 import { readFileSync } from 'node:fs';
-import type { Page } from '@playwright/test';
+import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+// `test` for specs that read a page right after it loads. Next's dev server keeps a Fast Refresh socket open to every
+// page, and on this setup it can start a reload loop (it logs the browser's console to a file it also watches), which
+// destroys any evaluate in flight. These specs want a static page, so their pages get no Fast Refresh channel.
+export const test = base.extend({
+  page: async ({ page }, provide) => {
+    await page.routeWebSocket(/\/_next\//, () => undefined);
+    await provide(page);
+  },
+});
 
 // The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
 // The path is relative to the working directory, which is the repository root for Playwright.
@@ -83,4 +94,31 @@ function luminance(color: string): number {
 export function contrast(foreground: string, background: string): number {
   const [first, second] = [luminance(foreground), luminance(background)];
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+// Fails on any serious or critical WCAG 2.0 A/AA or 2.1 AA violation, as workflow.spec.ts does.
+export async function accessible(page: Page): Promise<void> {
+  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(result.violations.filter((violation) => violation.impact === 'critical' || violation.impact === 'serious')).toEqual([]);
+}
+
+// True when the page does not scroll sideways (WCAG 1.4.10 reflow).
+export async function fitsWidth(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+}
+
+// Moves focus the way a keyboard user does, so :focus-visible matches: focus the target, step away, and step back.
+export async function focusByKeyboard(page: Page, target: Locator): Promise<void> {
+  await target.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(target).toBeFocused();
+}
+
+// The computed focus ring of an element.
+export async function ring(target: Locator): Promise<{ style: string; width: string; color: string; offset: string }> {
+  return target.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return { style: computed.outlineStyle, width: computed.outlineWidth, color: computed.outlineColor, offset: computed.outlineOffset };
+  });
 }

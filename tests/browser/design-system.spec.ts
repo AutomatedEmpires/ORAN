@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { test, expect } from '@playwright/test';
-import { contrast, documentedColors, documentedTokenNames, enterAs, normalized, readTokens, resolveAs } from './support';
+import { expect } from '@playwright/test';
+import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, normalized, readTokens, resolveAs, ring, test } from './support';
 
 // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
 const blendTokens: Record<string, string> = {
@@ -192,11 +192,150 @@ test('seeker pages load self-hosted Figtree and never contact Google Fonts', asy
 
 test('text renders in the fallback stack when font files fail', async ({ page }) => {
   const requested: string[] = [];
+  let aborted = 0;
   page.on('request', (request) => requested.push(request.url()));
-  await page.route(/\.woff2?(\?.*)?$/, (route) => route.abort());
+  await page.route(/\.woff2?(\?.*)?$/, (route) => {
+    aborted += 1;
+    return route.abort();
+  });
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(figtreeStack);
   expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
+
+  // The failure was real: font requests were intercepted, and the browser gave up on the regular face.
+  await page.evaluate(() => document.fonts.ready);
+  expect(aborted).toBeGreaterThan(0);
+  const regular = await page.evaluate(() =>
+    [...document.fonts].find((face) => face.family.replace(/["']/g, '') === 'Figtree' && face.weight === '400')?.status,
+  );
+  expect(regular).toBe('error');
+});
+
+test('existing pages pass axe and reflow at phone and desktop widths', async ({ page }) => {
+  test.setTimeout(180_000);
+  // The first dev-server compile of a route streams a "Loading…" shell, so wait for the real page before measuring it.
+  const open = async (path: string) => {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 }).or(page.getByRole('main').getByRole('alert'))).toBeVisible();
+  };
+  const check = async (path: string) => {
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      await open(path);
+      await accessible(page);
+    }
+    await page.setViewportSize({ width: 320, height: 800 });
+    await open(path);
+    expect(await fitsWidth(page), path + ' fits 320px').toBe(true);
+  };
+
+  for (const path of ['/', '/sign-in', '/no-such-page']) await check(path);
+  await enterAs(page, 'Admin');
+  for (const path of ['/admin', '/organization', '/community', '/profile']) await check(path);
+});
+
+test('controls follow the Blend button and field specs', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await enterAs(page, 'Admin');
+  await page.goto('/admin');
+  const primary = page.getByRole('button', { name: 'Add resource', exact: true });
+  await expect(primary).toBeVisible();
+  await expect(primary).toHaveCSS('background-color', 'rgb(23, 89, 107)');
+  await expect(primary).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(primary).toHaveCSS('border-radius', '12px');
+  await expect(primary).toHaveCSS('font-weight', '700');
+  await expect(primary).toHaveCSS('font-size', '16px');
+  await expect(primary).toHaveCSS('border-top-style', 'solid');
+
+  // The border width is not asserted: browsers snap 1.5px to a device pixel.
+  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
+  await expect(field).toHaveCSS('font-size', '16px');
+  await expect(field).toHaveCSS('border-top-style', 'solid');
+  await expect(field).toHaveCSS('border-top-color', 'rgb(128, 140, 153)');
+  await expect(field).toHaveCSS('border-radius', '12px');
+  await expect(field).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+
+  const secondary = page.getByRole('button', { name: 'Sign out', exact: true });
+  await expect(secondary).toHaveCSS('background-color', 'rgb(226, 238, 240)');
+  await expect(secondary).toHaveCSS('color', 'rgb(23, 89, 107)');
+
+  const body = page.locator('body');
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(body, colorScheme + ' background').toHaveCSS('background-color', 'rgb(242, 244, 245)');
+    await expect(body, colorScheme + ' text').toHaveCSS('color', 'rgb(28, 39, 51)');
+  }
+
+  const title = page.getByRole('heading', { level: 1 });
+  await expect(title).toHaveCSS('font-size', '24px');
+  await expect(title).toHaveCSS('line-height', '30px');
+  await expect(title).toHaveCSS('font-weight', '700');
+
+  const main = page.getByRole('main');
+  for (const role of ['button', 'combobox', 'textbox'] as const) {
+    const controls = await main.getByRole(role).all();
+    if (role !== 'combobox') expect(controls.length, role + ' count').toBeGreaterThan(0);
+    for (const control of controls) {
+      const box = await control.boundingBox();
+      if (!box) continue;
+      expect(box.height, role + ' height').toBeGreaterThanOrEqual(44);
+      if (role === 'button') expect(box.width, role + ' width').toBeGreaterThanOrEqual(44);
+    }
+  }
+  const checkboxes = await main.getByRole('checkbox').all();
+  expect(checkboxes.length, 'checkbox count').toBeGreaterThan(0);
+  for (const checkbox of checkboxes) {
+    const box = await checkbox.locator('..').boundingBox();
+    expect(box?.height, 'checkbox label height').toBeGreaterThanOrEqual(44);
+  }
+});
+
+const focusRing = { style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' };
+
+test('keyboard focus shows the Blend focus ring', async ({ page }) => {
+  await page.goto('/sign-in');
+  await expect(page.getByRole('button', { name: 'Enter as Admin', exact: true })).toBeVisible();
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to content', exact: true });
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeInViewport({ ratio: 1 });
+  expect(await ring(skip), 'skip link').toEqual(focusRing);
+
+  const enter = page.getByRole('button', { name: 'Enter as Admin', exact: true });
+  await focusByKeyboard(page, enter);
+  expect(await ring(enter), 'filled button').toEqual(focusRing);
+
+  await enterAs(page, 'Admin');
+  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
+  await expect(field).toBeVisible();
+  await focusByKeyboard(page, field);
+  expect(await ring(field), 'text field').toEqual(focusRing);
+  const checkbox = page.getByRole('checkbox', { name: 'Food', exact: true }).first();
+  await focusByKeyboard(page, checkbox);
+  expect(await ring(checkbox), 'checkbox').toEqual(focusRing);
+});
+
+test('honours reduced motion and keeps control boundaries under forced colors', async ({ page }) => {
+  await page.goto('/sign-in');
+  const enter = page.getByRole('button', { name: 'Enter as Admin', exact: true });
+  await expect(enter).toBeVisible();
+  expect(await enter.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.12s');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await enter.evaluate((element) => getComputedStyle(element).transitionDuration)).toMatch(/^0s(, 0s)*$/);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  await page.emulateMedia({ forcedColors: 'active' });
+  await expect(enter).toHaveCSS('border-top-style', 'solid');
+  await expect(enter).toHaveCSS('border-top-width', '1px');
+  await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveCSS('border-top-style', 'solid');
+});
+
+test('rules use tokens instead of raw colors', () => {
+  const rules = readFileSync('src/app/globals.css', 'utf8').replace(/:root\s*\{[^}]*\}/g, '');
+  expect(rules).toContain('.card');
+  expect(rules.match(/#[0-9a-f]{3,8}\b/i)).toBeNull();
+  expect(rules.match(/rgba?\(/i)).toBeNull();
 });
