@@ -1,8 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
+import ErrorPage from '@/app/error';
 import en from '@/ui/en.json';
 import es from '@/ui/es.json';
+import { OutageState } from '@/ui/get-help-now';
 import { QuickExit } from '@/ui/quick-exit';
 import { quickExitCategories, quickExitScope, quickExitUrl, quickExitWindowMs, showsQuickExit } from '@/ui/safety';
 
@@ -60,5 +62,46 @@ describe('QuickExit markup', () => {
 describe('language catalogs', () => {
   it('keep identical key sets in English and Spanish', () => {
     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
+  });
+});
+
+describe('Get help now', () => {
+  const keys = ['988', '911', 'dv', '211'] as const;
+
+  it('gives every help number English and Spanish text', () => {
+    for (const text of [en, es]) {
+      expect(text.call).toContain('{phone}');
+      for (const key of keys) expect(text.helpLines[key], key).toContain('{phone}');
+    }
+    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
+    expect(Object.keys(es.helpLines).sort()).toEqual(Object.keys(en.helpLines).sort());
+    expect('crisis' in en).toBe(false);
+    expect('crisis' in es).toBe(false);
+  });
+
+  it('renders the outage state with the crisis numbers in order', () => {
+    const html = renderToStaticMarkup(createElement(OutageState, { text: en }));
+    expect(html).toContain('role="status"');
+    expect(html).toContain(en.unavailable);
+    expect(html).toContain('Suicide &amp; Crisis Lifeline: call or text 988');
+    expect(html).toContain('>Call 1-800-799-7233<');
+    const order = ['href="tel:988"', 'href="tel:911"', 'href="tel:+18007997233"', 'href="tel:211"'].map((link) => html.indexOf(link));
+    expect(order.every((index) => index >= 0), 'every call link is present').toBe(true);
+    expect(order, 'the links are in the §5.6 order').toEqual([...order].sort((a, b) => a - b));
+    expect(html).not.toContain('{phone}');
+    expect(html).not.toContain('<details');
+
+    const spanish = renderToStaticMarkup(createElement(OutageState, { text: es }));
+    expect(spanish).toContain('Obtén ayuda ahora');
+    expect(spanish).toContain('>Llamar al 988<');
+  });
+
+  it('keeps the crisis numbers outside the error alert', () => {
+    const html = renderToStaticMarkup(createElement(ErrorPage, { reset() {} }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('Try again');
+    expect(html).toContain('href="tel:988"');
+    expect(html.indexOf('</section>')).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf('</section>')).toBeLessThan(html.indexOf('Get help now'));
   });
 });

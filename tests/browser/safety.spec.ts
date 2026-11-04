@@ -3,7 +3,7 @@ import { expect, type BrowserContext, type Locator, type Page } from '@playwrigh
 import { accessible, enterAs, fitsWidth, focusByKeyboard, hydrated, ring, saveNeeds, test } from './support';
 
 const exitName = 'Quick exit to a neutral website';
-const exitLink = (page: Page) => page.getByRole('banner').getByRole('link', { name: exitName, exact: true, includeHidden: true });
+const exitLink = (page: Page, name = exitName) => page.getByRole('banner').getByRole('link', { name, exact: true, includeHidden: true });
 
 // What a visit records instead of a flag when the browser has no Navigation API, so the failure names its cause.
 const noNavigationApi = 'window.navigation is missing, so the hidden check cannot run';
@@ -374,6 +374,182 @@ test('Exit follows the saved Safety and Housing & shelter needs', async ({ page 
   await expect(exit).toBeVisible();
   await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
   await expect(exit).toBeHidden();
+});
+
+// Get help now (§5.6, ADR-0007 §2): a collapsed disclosure ends every page, the Profile row and the outage and error cards list the numbers.
+const callNames = ['Call 988', 'Call 911', 'Call 1-800-799-7233', 'Call 211'];
+const callHrefs = ['tel:988', 'tel:911', 'tel:+18007997233', 'tel:211'];
+const footerHelp = (page: Page, text = 'Get help now') => page.getByRole('contentinfo').locator('summary', { hasText: text });
+
+test('every page ends with a closed Get help now in the footer', async ({ page }) => {
+  async function closedInFooter(): Promise<void> {
+    const footer = page.getByRole('contentinfo');
+    const summary = footerHelp(page);
+    await expect(summary).toBeVisible();
+    expect((await summary.boundingBox())?.height, 'summary height').toBeGreaterThanOrEqual(44);
+    await expect(footer.locator('details')).toHaveJSProperty('open', false);
+    await expect(footer.getByRole('link', { name: 'Call 988', exact: true })).toBeHidden();
+    await expect(page.getByText('If you are in immediate danger')).toHaveCount(0);
+    await expect(page.getByRole('banner').getByText('Get help now')).toHaveCount(0);
+  }
+  for (const path of ['/', '/sign-in', '/no-such-page']) {
+    await page.goto(path);
+    await closedInFooter();
+  }
+  await enterAs(page, 'My profile');
+  await page.goto('/profile');
+  await closedInFooter();
+});
+
+test('the footer panel lists the four numbers as text and call buttons', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/sign-in');
+  const footer = page.getByRole('contentinfo');
+  const details = footer.locator('details');
+  const summary = footerHelp(page);
+
+  await focusByKeyboard(page, summary);
+  expect(await ring(summary), 'focus ring').toEqual({ style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' });
+  await page.keyboard.press('Enter');
+  await expect(details).toHaveJSProperty('open', true);
+
+  const links = footer.getByRole('link');
+  await expect(links).toHaveText(callNames);
+  expect(await links.evaluateAll((elements) => elements.map((element) => element.getAttribute('href')))).toEqual(callHrefs);
+  for (const name of callNames) {
+    const link = footer.getByRole('link', { name, exact: true });
+    expect((await link.boundingBox())?.height, name + ' height').toBeGreaterThanOrEqual(44);
+    await expect(link).toHaveCSS('background-color', 'rgb(226, 238, 240)');
+  }
+
+  // The number is plain text a person can select and copy, next to its button.
+  const lines = footer.locator('li > span');
+  await expect(lines).toHaveText([/\b988\b/, /\b911\b/, /1-800-799-7233/, /\b211\b/]);
+  expect(await lines.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).userSelect))).not.toContain('none');
+
+  expect(await details.evaluate((element) => element.getAnimations({ subtree: true }).length), 'running animations').toBe(0);
+  await accessible(page);
+  await page.keyboard.press('Enter');
+  await expect(details).toHaveJSProperty('open', false);
+});
+
+test('Profile has a Get help now row before Delete', async ({ page }) => {
+  await enterAs(page, 'My profile');
+  await saveNeeds(page, ['Food']);
+  const row = page.getByRole('main').locator('details', { has: page.locator('summary', { hasText: 'Get help now' }) });
+  const summary = row.locator('summary');
+  await expect(row).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+
+  // §4 puts the row after the saved preferences and before Delete.
+  const save = await page.getByRole('button', { name: 'Save', exact: true }).boundingBox();
+  const remove = await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).boundingBox();
+  const box = await summary.boundingBox();
+  if (!save || !remove || !box) throw new Error('Save, Delete or the Get help now row has no box.');
+  expect(box.y, 'the row is below Save').toBeGreaterThanOrEqual(save.y + save.height);
+  expect(box.y + box.height, 'the row is above Delete').toBeLessThanOrEqual(remove.y);
+
+  await summary.click();
+  const links = row.getByRole('link');
+  await expect(links).toHaveText(callNames);
+  for (const name of callNames) await expect(row.getByRole('link', { name, exact: true })).toBeVisible();
+  await accessible(page);
+  await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
+});
+
+test('the outage card keeps visible edges and stays still', async ({ page }) => {
+  await page.goto('/dev/components');
+  const card = page.getByRole('main').getByRole('heading', { name: 'Get help now', level: 2 }).locator('..');
+  const links = card.getByRole('link');
+  await expect(links).toHaveText(callNames);
+  await expect(card).toHaveCSS('background-color', 'rgb(226, 238, 240)');
+  await expect(card).toHaveCSS('border-radius', '14px');
+  for (const name of callNames) {
+    const link = card.getByRole('link', { name, exact: true });
+    // The call buttons are white on the tint card, so each one has an edge to find.
+    await expect(link).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(link).toHaveCSS('color', 'rgb(23, 89, 107)');
+    expect((await link.boundingBox())?.height, name + ' height').toBeGreaterThanOrEqual(44);
+  }
+
+  await page.emulateMedia({ forcedColors: 'active' });
+  await expect(card).toHaveCSS('border-top-style', 'solid');
+  await expect(card).toHaveCSS('border-top-width', '1px');
+  await page.emulateMedia({ forcedColors: 'none' });
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const duration of await links.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).transitionDuration))) expect(duration).toMatch(/^0s(, 0s)*$/);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  await page.getByRole('main').locator('summary', { hasText: 'Get help now' }).click();
+  await accessible(page);
+});
+
+test('Exit and Get help now reflow at 320px in English and Spanish', async ({ page }) => {
+  await enterAs(page, 'My profile');
+  await saveNeeds(page, ['Safety']);
+  await page.setViewportSize({ width: 320, height: 800 });
+
+  async function reflows(help: string, exit: string): Promise<void> {
+    const main = page.getByRole('main');
+    await main.locator('summary', { hasText: help }).click();
+    await footerHelp(page, help).click();
+    expect(await fitsWidth(page), 'fits 320px').toBe(true);
+    const calls = main.locator('details').getByRole('link');
+    await expect(calls).toHaveCount(4);
+    for (const box of await Promise.all((await calls.all()).map((call) => call.boundingBox()))) {
+      if (!box) throw new Error('A call link in the main row has no box.');
+      expect(box.x + box.width, 'call link right edge').toBeLessThanOrEqual(320);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(exitLink(page, exit)).toBeInViewport();
+  }
+  await reflows('Get help now', exitName);
+  await expect(page.getByRole('main').getByRole('link', { name: 'Call 1-800-799-7233', exact: true })).toBeVisible();
+
+  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
+  await page.goto('/profile');
+  await reflows('Obtén ayuda ahora', 'Salir rápido a un sitio web neutral');
+  await expect(page.getByRole('main').getByRole('link', { name: 'Llamar al 1-800-799-7233', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Borrar mis preferencias guardadas', exact: true }).click();
+});
+
+// The values a select holds on each of the next frames. React resets a form after the paint that shows the action's result, so one read
+// made as soon as the new language appears can see the right value just before it is lost.
+async function valuesOverFrames(select: Locator): Promise<string[]> {
+  return select.evaluate((element) => new Promise<string[]>((resolve) => {
+    const values: string[] = [];
+    const sample = () => {
+      values.push((element as HTMLSelectElement).value);
+      if (values.length < 20) requestAnimationFrame(sample);
+      else resolve(values);
+    };
+    sample();
+  }));
+}
+
+test('the language select shows the chosen language after Apply, without a reload', async ({ page }) => {
+  await page.goto('/sign-in');
+  const english = page.getByRole('combobox', { name: 'Language', exact: true });
+  await hydrated(english);
+  await expect(english).toHaveValue('en');
+  await english.selectOption('es');
+  await page.evaluate(() => { (window as unknown as { sameDocument: boolean }).sameDocument = true; });
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+
+  // The layout persists across the action's redirect, so a select that only sets defaultValue is reset to the language it was first drawn in.
+  // A reload would draw the select afresh and hide that, so the test also checks that this is the same document.
+  const spanish = page.getByRole('combobox', { name: 'Idioma', exact: true });
+  await expect(spanish).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument), 'the page was not reloaded').toBe(true);
+  expect(new Set(await valuesOverFrames(spanish)), 'the select value on the frames after the change').toEqual(new Set(['es']));
+
+  await spanish.selectOption('en');
+  await page.getByRole('button', { name: 'Aplicar', exact: true }).click();
+  const back = page.getByRole('combobox', { name: 'Language', exact: true });
+  await expect(back).toBeVisible();
+  expect(new Set(await valuesOverFrames(back)), 'the select value on the frames after switching back').toEqual(new Set(['en']));
 });
 
 // Publishes a Safety listing the way workflow.spec.ts publishes its first listing: an admin adds it, with a phone call as the source,

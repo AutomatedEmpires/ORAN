@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Button, buttonClassName } from '@/ui/button';
+import en from '@/ui/en.json';
+import { GetHelpNow } from '@/ui/get-help-now';
 import { quickExitScope } from '@/ui/safety';
 import { catalogAllowed } from '../guard';
 
@@ -124,7 +126,9 @@ export default async function ComponentCatalog() {
 
     <section aria-labelledby="catalog-safety" {...quickExitScope(true)}>
       <h2 id="catalog-safety">Safety</h2>
-      <p className="small">This section marks the page as Safety results, so the top bar shows Exit and pressing Esc twice leaves for the neutral site.</p>
+      <p className="small">This section marks the page as Safety results, so the top bar shows Exit and pressing Esc twice leaves for the neutral site. Get help now appears as a menu row and as the card for outage and error screens.</p>
+      <GetHelpNow text={en} variant="row" />
+      <GetHelpNow text={en} variant="inline" />
     </section>
   </section>;
 }

@@ -235,8 +235,9 @@ ORAN is a resource guide, not crisis care. Crisis help is always available, but 
   - a row in the ChatHistoryDrawer and on the Profile screen on phones;
   - a row in the SideNav footer on desktop.
   - It never appears in a TopBar.
-- **Panel:** static crisis numbers (988, 911, the domestic violence hotline and the local 211). No classifier is involved.
-- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Use it only:
+- **Interim:** until the SideNav and ChatHistoryDrawer exist, a collapsed "Get help now" disclosure ends the footer of every page, so help stays in one place (§9, WCAG 3.2.6). It moves into those menus when they ship.
+- **Panel:** static crisis numbers (988, 911, the domestic violence hotline and the local 211). No classifier is involved. Each line gives the number as text and a "Call {phone}" secondary button (`tel:`).
+- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Inside the card the call buttons use `--color-surface`, so their edges show against the tint. Use it only:
   - inside the assistant's reply when someone in a chat shows signs of immediate danger (never as a modal);
   - in OutageState and Offline, which C19 requires.
   - Never use it on category results or searches.
@@ -293,6 +294,7 @@ All seeker strings live in the EN and ES message catalogs (`src/ui/en.json`, `sr
 | FlagForm reasons | "Closed", "Wrong phone", "Wrong hours", "Wrong address", "Not as described", "Other" | ADR-0006 §4 |
 | Follow-up | "Did it help?"; the answer "It was closed" creates a Closed flag | ADR-0005, ADR-0006 §4 |
 | Features | "Helping someone else"; "Share this list"; "Get help now" | ADR-0005 |
+| GetHelpNow panel | "Suicide & Crisis Lifeline: call or text {phone}"; "In immediate danger: call {phone}"; "National Domestic Violence Hotline: {phone}"; "Local help with food, housing and bills: {phone}"; "Call {phone}" | This document |
 | HoursTable | "24/7"; "By appointment"; "Today"; "Closed" | ADR-0006 §1; mockup |
 | Composer | "ORAN can make mistakes. Confirm details with the provider."; placeholder "Type what you need…"; label "Message ORAN" | Mockup |
 | MemoryNote | "Remembered: {items}" · "Undo" (name: "Undo remembering {items}") | Mockup |
@@ -340,13 +342,14 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 - **Component catalog.** A development-only route renders every component in every state, with Playwright visual tests and axe (BLUEPRINT §12.3).
 - Server-render seeker pages. Seek search and Detail work without client JavaScript. Chat streaming and the map are enhancements.
 - Force `color-scheme: light` until a dark theme is designed.
+- QuickExit renders in every TopBar and shows only while the page holds an element with `data-quick-exit` (CSS `:has()`; browsers without it show it everywhere). Seeker pages add it with `quickExitScope(showsQuickExit(…))` from `src/ui/safety.ts`.
 
 ## 11. Open items
 
 **Not designed yet:**
 - **Themes and layouts:** the dark theme; the tablet layout, collapsed SideNav and desktop Seek, Map, Profile and Detail; the Filters panel and expanded BottomSheet; staff workspace layouts.
 - **Flows:** the chat welcome (BLUEPRINT proposes "What would help today?"); the "Did it help?" follow-up; the "Share this list" output; the "Helping someone else" indicator in Chat and Seek; delete confirmations; how a saved but permanently closed listing appears.
-- **Copy:** the anonymous drawer and sidebar; the GetHelpNow panel; FlagForm buttons, warning and confirmation; remote, phone-only and service-area listings; holiday exceptions.
+- **Copy:** the anonymous drawer and sidebar; FlagForm buttons, warning and confirmation; remote, phone-only and service-area listings; holiday exceptions.
 - **Policy:** whether chat may show unpublished web discoveries, and with what label (D21).
 
 **Decisions:**
