@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { weekDays } from '@/modules/catalog';
+import { partLimits, weekDays } from '@/modules/catalog';
 // Reads the long listing form into the input that resourceInput validates. Text is passed through as posted ('' stays ''): resourceInput trims it and turns empty optional text into null, and it decides what is valid. The parser only shapes the input, so a value it cannot read becomes one the schema rejects (an unknown kind, a lone coordinate as NaN) instead of being repaired here.
 // Every part is always sent, and an empty one says "none", so a form must render each section on every edit: a form that left one out would clear that part.
 const scalars = ['name', 'description', 'organization_name', 'url', 'eligibility_description', 'application_process', 'source_type', 'source_url', 'source_note'] as const;
-const locationSlots = Array.from({ length: 10 }, (_, i) => i);
+// One slot per location a listing may hold.
+const locationSlots = Array.from({ length: partLimits.locations.max }, (_, i) => i);
 const text = (form: FormData, name: string): string => String(form.get(name) ?? '');
 const column = (form: FormData, name: string): string[] => form.getAll(name).map(String);
 const blank = (value: string): boolean => value.trim() === '';
@@ -73,10 +74,11 @@ export function listingFromForm(form: FormData): Record<string, unknown> {
  };
 }
 // The field a rejection names: the top-level field of the first validation issue, as the form labels it. Any other error names no field.
+// `organization_id` comes only from the "Organization" select. An extension error names its phone row's "Phone number": the extension's own pattern already stops out-of-range values in the browser.
 // A location is numbered as the form shows it (its slot, counting removed ones) when the form is given, and by its place in the list otherwise. An issue about the list as a whole names no location.
-export type FieldLabel = { key: 'name' | 'organizationName' | 'description' | 'categories' | 'website' | 'eligibility' | 'intake' | 'sourceType' | 'sourceUrl' | 'source' | 'serviceArea' | 'phoneNumber' | 'hours' | 'locationN'; n?: number };
+export type FieldLabel = { key: 'name' | 'organizationName' | 'chooseOrganization' | 'description' | 'categories' | 'website' | 'eligibility' | 'intake' | 'sourceType' | 'sourceUrl' | 'source' | 'serviceArea' | 'phoneNumber' | 'hours' | 'locationN'; n?: number };
 const labels = new Map<PropertyKey, FieldLabel['key']>([
- ['name', 'name'], ['organization_name', 'organizationName'], ['organization_id', 'organizationName'], ['description', 'description'], ['categories', 'categories'], ['url', 'website'],
+ ['name', 'name'], ['organization_name', 'organizationName'], ['organization_id', 'chooseOrganization'], ['description', 'description'], ['categories', 'categories'], ['url', 'website'],
  ['eligibility_description', 'eligibility'], ['application_process', 'intake'], ['source_type', 'sourceType'], ['source_url', 'sourceUrl'], ['source_note', 'source'],
  ['service_area', 'serviceArea'], ['phones', 'phoneNumber'], ['hours', 'hours'], ['locations', 'locationN'],
 ]);

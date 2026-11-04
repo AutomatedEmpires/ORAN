@@ -154,7 +154,7 @@ describe('listing form parsing',()=>{
   expect(fieldLabel(undefined)).toBeNull();
   // Every top-level field the form shows maps to the label the person sees.
   const cases:[Record<string,unknown>,string][]=[
-   [{name:''},'name'],[{organization_name:''},'organizationName'],[{organization_id:'not-an-id'},'organizationName'],[{description:''},'description'],[{categories:[]},'categories'],
+   [{name:''},'name'],[{organization_name:''},'organizationName'],[{organization_id:'not-an-id'},'chooseOrganization'],[{description:''},'description'],[{categories:[]},'categories'],
    [{url:'ftp://example.org'},'website'],[{eligibility_description:''},'eligibility'],[{application_process:''},'intake'],[{source_type:'rumor'},'sourceType'],[{source_url:'ftp://example.org/listing'},'sourceUrl'],[{source_note:''},'source'],
    [{service_area:{kind:'zip',postal_codes:[]}},'serviceArea'],[{phones:[{number:'988',extension:0}]},'phoneNumber'],[{hours:{kind:'weekly',time_zone:'Mars/Olympus',weekly:[],exceptions:[]}},'hours'],
   ];

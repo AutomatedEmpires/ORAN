@@ -1,12 +1,13 @@
 import { test,expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import pg from 'pg';
+import { testDatabaseUrl } from '../../scripts/test-database';
 import { hydrated } from './support';
 async function accessible(page:import('@playwright/test').Page){const result=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(result.violations.filter(v=>v.impact==='critical'||v.impact==='serious')).toEqual([]);}
 type Page=import('@playwright/test').Page;
 type Locator=import('@playwright/test').Locator;
-// The browser launcher's in-memory database (scripts/dev.ts --test), read to check what a save recorded.
-async function query<T>(text:string,values:unknown[]):Promise<T[]>{const client=new pg.Client({connectionString:'postgresql://postgres:postgres@127.0.0.1:3101/postgres'});await client.connect();try{return (await client.query(text,values)).rows as T[];}finally{await client.end();}}
+// The browser launcher's in-memory database (scripts/test-database.ts), read to check what a save recorded.
+async function query<T>(text:string,values:unknown[]):Promise<T[]>{const client=new pg.Client({connectionString:testDatabaseUrl});await client.connect();try{return (await client.query(text,values)).rows as T[];}finally{await client.end();}}
 // The fields the listing's latest submission asserted, as entity:field.
 async function lastRecorded(serviceId:string){return (await query<{field:string}>("SELECT f.entity_type||':'||f.field_path AS field FROM oran.field_assertion f JOIN oran.listing_state l ON l.revision_id=f.revision_id WHERE l.service_id=$1 ORDER BY 1",[serviceId])).map(r=>r.field);}
 const resourceForm=(page:Page)=>page.locator('form').filter({has:page.getByLabel('Resource name',{exact:true})});
@@ -270,7 +271,7 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await group(form,'Monday').getByLabel('Closes',{exact:true}).fill('17:00');
  await group(form,'Friday').getByLabel('Opens',{exact:true}).fill('19:00');
  await group(form,'Friday').getByLabel('Closes',{exact:true}).fill('07:00');
- await group(form,'A date with different hours').first().getByLabel('From',{exact:true}).fill('2026-12-25');
+ await group(form,'Date with different hours 1').getByLabel('From',{exact:true}).fill('2026-12-25');
  await save(form,'Add resource');
  // An edit that changes only the description, the source and its note records the description and nothing else (Review Focus 2).
  const id=await editDescription(page,name,'Updated synthetic safety listing, not a real assistance service.');
@@ -283,7 +284,7 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(group(edit,'Monday').getByLabel('Opens',{exact:true})).toHaveValue('09:00');
  await expect(group(edit,'Friday').getByLabel('Opens',{exact:true})).toHaveValue('19:00');
  await expect(group(edit,'Friday').getByLabel('Closes',{exact:true})).toHaveValue('07:00');
- await expect(group(edit,'A date with different hours').first().getByLabel('From',{exact:true})).toHaveValue('2026-12-25');
+ await expect(group(edit,'Date with different hours 1').getByLabel('From',{exact:true})).toHaveValue('2026-12-25');
  await expect(saved.getByLabel('Street address',{exact:true})).toHaveValue('1 Hidden Way');
  await expect(saved.getByRole('radio',{name:keepPrivate,exact:true})).toBeChecked();
  await expect(edit.getByLabel('Phone number',{exact:true}).first()).toHaveValue('+12065550100');
@@ -324,7 +325,7 @@ test('an edit keeps every other part as stored',async({page})=>{
    await group(form,'Monday').evaluate(day=>{for(const [name,value] of [['hours_MO_opens','13:00'],['hours_MO_closes','17:00']]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;day.append(input);}});
    await group(form,'Saturday').getByLabel('Opens',{exact:true}).fill('22:00');
    await group(form,'Saturday').getByLabel('Closes',{exact:true}).fill('06:00');
-   const exception=group(form,'A date with different hours').first();
+   const exception=group(form,'Date with different hours 1');
    await exception.getByLabel('From',{exact:true}).fill('2026-11-26');
    await exception.getByLabel('To (optional)',{exact:true}).fill('2026-11-27');
    await exception.getByLabel('Opens',{exact:true}).fill('10:00');
@@ -344,26 +345,82 @@ test('an edit keeps every other part as stored',async({page})=>{
    await form.getByLabel('Phone number',{exact:true}).fill('1-800-555-0199');
   }},
   {name:'Synthetic nationwide listing '+run,fill:async form=>{await form.getByRole('radio',{name:'Nationwide',exact:true}).check();}},
+  // A private address in a listing without Safety: only its stored value keeps it private through an edit (S2-18).
+  {name:'Synthetic private listing '+run,fill:async form=>{
+   await form.getByLabel('Service ZIP codes',{exact:true}).fill('98103');
+   const location=group(form,'Location 1');
+   await location.getByRole('radio',{name:'At a physical place',exact:true}).check();
+   await location.getByLabel('Street address',{exact:true}).fill('3 Quiet Lane');
+   await location.getByLabel('City',{exact:true}).fill('Seattle');
+   await location.getByLabel('State',{exact:true}).selectOption('WA');
+   await location.getByLabel('ZIP code',{exact:true}).fill('98103');
+   await location.getByRole('radio',{name:keepPrivate,exact:true}).check();
+  }},
  ];
  for(const listing of listings){const form=await startListing(page,listing.name);await listing.fill(form);await save(form,'Add resource');}
- // The state listing gains a second phone with an extension, a second exception and a second location, so its edit form shows several saved rows of each.
- const {form}=await openEdit(page,listings[2].name);
- await expect(group(form,'Monday').getByLabel('Opens',{exact:true})).toHaveCount(2);
- await expect(group(form,'Monday').getByLabel('Closes',{exact:true}).nth(1)).toHaveValue('17:00');
- await form.getByLabel('Phone number',{exact:true}).nth(1).fill('(206) 555-0123');
- await form.getByLabel('Extension (optional)',{exact:true}).nth(1).fill('305');
- await group(form,'A date with different hours').nth(1).getByLabel('From',{exact:true}).fill('2026-12-25');
+ // The state listing gains a second phone with an extension, a second exception and a second location, so its edit form shows several saved rows of each. It also changes its time zone and its location's state.
+ const {id,form}=await openEdit(page,listings[2].name);
+ const monday=group(form,'Monday');
+ await expect(monday.getByLabel('Opens',{exact:true})).toHaveCount(2);
+ await expect(group(monday,'Time range 2').getByLabel('Closes',{exact:true})).toHaveValue('17:00');
+ await group(form,'Phone 2').getByLabel('Phone number',{exact:true}).fill('(206) 555-0123');
+ await group(form,'Phone 2').getByLabel('Extension (optional)',{exact:true}).fill('305');
+ await group(form,'Date with different hours 2').getByLabel('From',{exact:true}).fill('2026-12-25');
  await group(form,'Location 2').getByRole('radio',{name:'Online or remote',exact:true}).check();
+ await form.getByLabel('Time zone',{exact:true}).selectOption('America/Denver');
+ await group(form,'Location 1').getByLabel('State',{exact:true}).selectOption('OR');
  await form.getByRole('radio',{name:'A phone call',exact:true}).check();
  await form.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');
  await save(form,'Save');
- // The save refreshes the form from what was stored: the new rows are saved rows now, so saving again without reloading keeps them.
+ // The save refreshes the form from what was stored, without a reload: the new rows are saved rows now, and the selects show the new values.
  await expect(group(form,'Location 2').getByRole('checkbox',{name:'Remove this location',exact:true})).toBeVisible();
  await expect(group(form,'Location 3').getByRole('radio',{name:"Don't add a location",exact:true})).toBeChecked();
  await expect(form.getByLabel('Phone number',{exact:true})).toHaveCount(3);
- await expect(form.getByLabel('Phone number',{exact:true}).nth(1)).toHaveValue('+12065550123');
+ await expect(group(form,'Phone 2').getByLabel('Phone number',{exact:true})).toHaveValue('+12065550123');
+ await expect(form.getByLabel('Time zone',{exact:true})).toHaveValue('America/Denver');
+ await expect(group(form,'Location 1').getByLabel('State',{exact:true})).toHaveValue('OR');
+ // So a second save in the same view, of the description only, asserts the description and nothing else.
+ await form.getByLabel('Description',{exact:true}).fill('Synthetic state listing saved twice in one view, not a real assistance service.');
+ await form.getByRole('radio',{name:'A phone call',exact:true}).check();
+ await form.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');
+ await save(form,'Save');
+ expect(await lastRecorded(id)).toEqual(['service:description']);
  for(const listing of listings){
   const id=await editDescription(page,listing.name,'Updated synthetic listing, not a real assistance service.');
   expect(await lastRecorded(id),listing.name).toEqual(['service:description']);
  }
+ const {form:reopened}=await openEdit(page,listings[4].name);
+ await expect(group(reopened,'Location 1').getByRole('radio',{name:keepPrivate,exact:true})).toBeChecked();
+});
+test('adding Safety on an edit makes a saved public address private',async({page})=>{
+ const name='Synthetic Safety added on edit '+Date.now();
+ const form=await startListing(page,name);
+ await form.getByLabel('Service ZIP codes',{exact:true}).fill('98101');
+ const location=form.getByRole('group',{name:'Location 1',exact:true});
+ await location.getByRole('radio',{name:'At a physical place',exact:true}).check();
+ await location.getByLabel('Street address',{exact:true}).fill('4 Harbor Road');
+ await location.getByLabel('City',{exact:true}).fill('Seattle');
+ await location.getByLabel('State',{exact:true}).selectOption('WA');
+ await location.getByLabel('ZIP code',{exact:true}).fill('98104');
+ await location.getByRole('radio',{name:'Show this address publicly',exact:true}).check();
+ await save(form,'Add resource');
+ const {id,form:edit}=await openEdit(page,name),saved=edit.getByRole('group',{name:'Location 1',exact:true});
+ const [keep,show,safety]=[saved.getByRole('radio',{name:keepPrivate,exact:true}),saved.getByRole('radio',{name:'Show this address publicly',exact:true}),edit.getByRole('checkbox',{name:'Safety',exact:true})];
+ const resubmit=async()=>{await edit.getByRole('radio',{name:'A phone call',exact:true}).check();await edit.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');await save(edit,'Save');};
+ await expect(show).toBeChecked();
+ // Adding Safety makes the untouched saved address private (S2-26); removing it again shows the stored choice.
+ await safety.check();await expect(keep).toBeChecked();
+ await safety.uncheck();await expect(show).toBeChecked();
+ await safety.check();await expect(keep).toBeChecked();
+ await resubmit();
+ expect(await lastRecorded(id)).toEqual(['location:confidential','service:categories']);
+ await page.reload();
+ await hydrated(edit);
+ await expect(keep).toBeChecked();
+ // In a listing that already has Safety, a saved address shows its stored choice: staff may show it publicly, and a later edit leaves that alone.
+ await show.check();
+ await resubmit();
+ expect(await lastRecorded(id)).toEqual(['location:confidential']);
+ expect(await lastRecorded(await editDescription(page,name,'Updated synthetic Safety listing, not a real assistance service.'))).toEqual(['service:description']);
+ await expect(show).toBeChecked();
 });

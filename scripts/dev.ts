@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { localDatabase } from './local-database';
+import { testDatabasePort } from './test-database';
 import { migrate } from './database';
 import { seed } from './seed';
 import { closeDatabase } from '../src/modules/platform/index';
@@ -9,7 +10,7 @@ if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw new Error
 if (process.env.DATABASE_URL || process.env.ORAN_ENV === 'production' || process.env.ORAN_ENV === 'preview') throw new Error('Use dev:remote for an explicitly configured remote environment');
 const test = process.argv.includes('--test'), port = test ? 3100 : 3000;
 if (!test) await mkdir('.local', { recursive: true });
-const local = await localDatabase(test ? undefined : '.local/postgres', test ? 3101 : 0);
+const local = await localDatabase(test ? undefined : '.local/postgres', test ? testDatabasePort : 0);
 Object.assign(process.env, { DATABASE_URL: local.url, ORAN_LOCAL_DEV: '1', ORAN_TEST_RUN: test ? '1' : '0', ORAN_ENV: 'development', ORAN_SESSION_SECRET: randomBytes(32).toString('hex'), ORAN_APP_ORIGIN: 'http://127.0.0.1:' + port });
 await migrate(local.url);
 await seed();

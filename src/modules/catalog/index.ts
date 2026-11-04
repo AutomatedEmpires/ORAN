@@ -5,7 +5,7 @@ import { database, lockCatalog, type DB } from '@/modules/platform';
 import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
 import { acceptedValues, changedFields, fieldKey, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
 import { applyFields, idList } from './apply';
-import { hoursValue, locationInput, phoneValue, serviceAreaValue } from './parts';
+import { hoursValue, locationInput, partLimits, phoneValue, serviceAreaValue } from './parts';
 import { listingParts, type ListingParts } from './projection';
 export { fieldKey, changedFields } from './assertions';
 export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
@@ -76,7 +76,7 @@ export const resourceInput = z.object({
  eligibility_description:freeText(3,2000), application_process:freeText(3,2000),
  url:optionalUrl, source_type:z.enum(['url','phone_call','organization']), source_url:optionalUrl, source_note:freeText(10,2000),
  // Parts left out are not asserted and stay as they are; an empty list or null asserts "none" or "unknown".
- phones:z.array(phoneValue).max(10).optional(), hours:hoursValue.optional(), locations:z.array(locationInput).max(10).optional(),
+ phones:z.array(phoneValue).max(partLimits.phones.max).optional(), hours:hoursValue.optional(), locations:z.array(locationInput).max(partLimits.locations.max).optional(),
 }).strict().superRefine((v,ctx)=>{
  if ((v.source_type === 'url') !== (v.source_url !== '')) ctx.addIssue({code:'custom',path:['source_url'],message:'Give a source web address only for a website source'});
  const ids = (v.locations ?? []).flatMap(l=>l.id ? [l.id] : []);
