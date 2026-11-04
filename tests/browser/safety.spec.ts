@@ -590,7 +590,7 @@ async function publishSafetyListing(page: Page, alsoIn: readonly string[] = []):
   await expect(page.getByRole('heading', { name: 'Add resource', exact: true })).toBeVisible();
   await page.getByLabel('Resource name', { exact: true }).fill(name);
   await page.getByLabel('Organization name', { exact: true }).fill('Synthetic browser organization');
-  await page.getByLabel('Service ZIP code', { exact: true }).fill('98101');
+  await page.getByLabel('Service ZIP codes', { exact: true }).fill('98101');
   await page.getByLabel('Website', { exact: true }).fill('https://example.org');
   const resourceForm = page.locator('form').filter({ has: page.getByLabel('Resource name', { exact: true }) });
   for (const category of ['Safety', ...alsoIn]) await resourceForm.getByRole('checkbox', { name: category, exact: true }).check();

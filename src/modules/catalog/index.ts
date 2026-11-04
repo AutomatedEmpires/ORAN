@@ -5,7 +5,7 @@ import { database, lockCatalog, type DB } from '@/modules/platform';
 import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
 import { acceptedValues, changedFields, fieldKey, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
 import { applyFields, idList } from './apply';
-import { hoursValue, locationInput, phoneValue, serviceAreaValue } from './parts';
+import { hoursValue, locationInput, partLimits, phoneValue, serviceAreaValue } from './parts';
 import { listingParts, type ListingParts } from './projection';
 export { fieldKey, changedFields } from './assertions';
 export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
@@ -65,16 +65,18 @@ export async function serviceInVerifierArea(db:Kysely<DB>, serviceId:string, pos
  return !!(await areasCovering(db as never,postalCode,'verifier').select('a.id').where('a.service_id','=',serviceId).executeTakeFirst());
 }
 const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
-// A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds.
-const optionalUrl = z.union([z.literal(''),z.url().max(500).refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address').transform(v=>/^https?:\/\//.test(v)?v:new URL(v).href)]);
+// A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds. Text that is not an address fails the check; refinements still run after z.url() fails, so the parse is guarded.
+const optionalUrl = z.union([z.literal(''),z.url().max(500).refine(v=>URL.canParse(v)&&['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address').transform(v=>/^https?:\/\//.test(v)?v:new URL(v).href)]);
+// Free text is stored with LF line endings. A browser posts a textarea with CRLF, and a lone CR is an old line break, so the same text from any writer is the same value and an unchanged resubmission asserts nothing. Trim and the limits then apply to the stored text.
+const freeText = (min:number,max:number) => z.string().overwrite(v=>v.replace(/\r\n?/g,'\n')).trim().min(min).max(max);
 export const resourceInput = z.object({
- name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
- organization_name:z.string().trim().min(2).max(150), organization_id:z.uuid().optional(), categories:categoryCodeList,
+ name:freeText(3,150), description:freeText(10,3000),
+ organization_name:freeText(2,150), organization_id:z.uuid().optional(), categories:categoryCodeList,
  service_area:serviceAreaValue,
- eligibility_description:z.string().trim().min(3).max(2000), application_process:z.string().trim().min(3).max(2000),
- url:optionalUrl, source_type:z.enum(['url','phone_call','organization']), source_url:optionalUrl, source_note:z.string().trim().min(10).max(2000),
+ eligibility_description:freeText(3,2000), application_process:freeText(3,2000),
+ url:optionalUrl, source_type:z.enum(['url','phone_call','organization']), source_url:optionalUrl, source_note:freeText(10,2000),
  // Parts left out are not asserted and stay as they are; an empty list or null asserts "none" or "unknown".
- phones:z.array(phoneValue).max(10).optional(), hours:hoursValue.optional(), locations:z.array(locationInput).max(10).optional(),
+ phones:z.array(phoneValue).max(partLimits.phones.max).optional(), hours:hoursValue.optional(), locations:z.array(locationInput).max(partLimits.locations.max).optional(),
 }).strict().superRefine((v,ctx)=>{
  if ((v.source_type === 'url') !== (v.source_url !== '')) ctx.addIssue({code:'custom',path:['source_url'],message:'Give a source web address only for a website source'});
  const ids = (v.locations ?? []).flatMap(l=>l.id ? [l.id] : []);

@@ -66,7 +66,8 @@ describe('options',()=>{
  it('exposes the time zones, days and the combined option set',()=>{
   expect(usTimeZones).toEqual(['America/New_York','America/Chicago','America/Denver','America/Phoenix','America/Los_Angeles','America/Anchorage','Pacific/Honolulu','America/Puerto_Rico','Pacific/Guam','Pacific/Pago_Pago']);
   expect(weekDays).toEqual(['MO','TU','WE','TH','FR','SA','SU']);
-  expect(listingOptions).toEqual({states:usStates,timeZones:usTimeZones,days:weekDays});
+  expect(listingOptions).toEqual({states:usStates,timeZones:usTimeZones,days:weekDays,limits:partLimits});
+  expect([partLimits.phones,partLimits.locations]).toEqual([{max:10},{max:10}]);
   for (const day of weekDays) expect(migration).toContain(`'${day}'`);
  });
 });
