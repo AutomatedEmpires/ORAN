@@ -149,6 +149,12 @@
   "confidential": "Keep this address private. People will see “Call for location”.",
   "addressPublic": "Show this address publicly",
   "invalidField": "Please check “{field}” and try again.",
+  "callForLocation": "Call for location",
+  "hoursUnknown": "Hours not listed. Call ahead.",
+  "closed": "Closed",
+  "timesIn": "Times are in {zone}.",
+  "exceptionsHeading": "Dates with different hours",
+  "phoneExtension": "ext. {n}",
   "days": {
     "MO": "Monday",
     "TU": "Tuesday",

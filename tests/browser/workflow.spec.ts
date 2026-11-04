@@ -251,6 +251,7 @@ test('the address privacy choice follows Safety until someone chooses',async({pa
  await expect(show).toBeChecked();await expect(keep).not.toBeChecked();
 });
 test('a Safety listing keeps its private address through an edit',async({page})=>{
+ test.setTimeout(120000);
  const name='Synthetic safety resource '+Date.now();
  const form=await startListing(page,name,'Safety');
  const location=form.getByRole('group',{name:'Location 1',exact:true});
@@ -258,6 +259,7 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(location.getByRole('radio',{name:keepPrivate,exact:true})).toBeChecked();
  await form.getByLabel('Service ZIP codes',{exact:true}).fill('98102, 98101');
  await location.getByRole('radio',{name:'At a physical place',exact:true}).check();
+ await location.getByLabel('Location name (optional)',{exact:true}).fill('Hidden Haven Shelter');
  await location.getByLabel('Street address',{exact:true}).fill('1 Hidden Way');
  await location.getByLabel('City',{exact:true}).fill('Seattle');
  await location.getByLabel('State',{exact:true}).selectOption('WA');
@@ -286,11 +288,43 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(group(edit,'Friday').getByLabel('Closes',{exact:true})).toHaveValue('07:00');
  await expect(group(edit,'Date with different hours 1').getByLabel('From',{exact:true})).toHaveValue('2026-12-25');
  await expect(saved.getByLabel('Street address',{exact:true})).toHaveValue('1 Hidden Way');
+ await expect(saved.getByLabel('Location name (optional)',{exact:true})).toHaveValue('Hidden Haven Shelter');
  await expect(saved.getByRole('radio',{name:keepPrivate,exact:true})).toBeChecked();
  await expect(edit.getByLabel('Phone number',{exact:true}).first()).toHaveValue('+12065550100');
  await expect(edit.getByLabel('Extension (optional)',{exact:true}).first()).toHaveValue('12');
  await accessible(page);
  await page.setViewportSize({width:375,height:812});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ // Neither the verification task nor the listing's card shows the private address, its ZIP or the location's name, only "Call for location" (Review Focus 5).
+ const hidden=['1 Hidden Way','98109','Hidden Haven'],titled=page.getByRole('heading',{name,exact:true});
+ await page.goto('/admin');
+ const mine=page.locator('article').filter({has:page.getByRole('link',{name:'Edit resource',exact:true})}).filter({has:titled});
+ const task=page.locator('article').filter({has:page.getByRole('button',{name:'Record verification',exact:true})}).filter({has:titled});
+ for(const article of [mine,task]){
+  await expect(article).toContainText('Call for location');
+  for(const text of hidden)await expect(article).not.toContainText(text);
+ }
+ await hydrated(task.locator('form'));
+ await task.getByLabel('Method',{exact:true}).selectOption('website');
+ await task.getByLabel('Evidence and source reference').fill('Synthetic evidence from example.org used only in browser testing');
+ await task.getByLabel('Fields checked').fill('phone, hours and location');
+ await task.getByRole('button',{name:'Record verification',exact:true}).click();
+ await expect(task).toHaveCount(0);
+ // Phones, weekly hours with an overnight interval, and a closure on a holiday read as stored, whatever the server's time zone (Review Focus 4).
+ await page.goto('/');
+ const card=page.locator('article').filter({has:titled});
+ await expect(card).toContainText('Call for location');
+ await expect(card).toContainText('(206) 555-0100');
+ await expect(card.getByRole('link',{name:'(206) 555-0100',exact:true})).toHaveAttribute('href','tel:+12065550100');
+ await expect(card).toContainText('ext. 12');
+ await expect(card).toContainText(/9:00\sAM – 5:00\sPM/);
+ await expect(card).toContainText(/7:00\sPM – 7:00\sAM/);
+ await expect(card).toContainText('Closed');
+ await expect(card).toContainText(/Dec 25, 2026/);
+ await expect(card).toContainText('Times are in Pacific (Los Angeles).');
+ await expect(card.getByRole('listitem').filter({hasText:'Dec 25, 2026'})).toContainText('Closed');
+ for(const text of hidden)await expect(card).not.toContainText(text);
+ await accessible(page);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 test('an edit keeps every other part as stored',async({page})=>{
