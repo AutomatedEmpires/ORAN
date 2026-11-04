@@ -272,7 +272,7 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   const b=await acceptResource(user.admin,input);
   await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'}]},b)).rejects.toThrow('Access denied');
   await expect(acceptResource(user.admin,{...input,locations:[{id:randomUUID(),access:'phone'}]})).rejects.toThrow('Access denied');
-  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'},{id:aLocation,access:'remote'}]},a)).rejects.toThrow();
+  await expect(acceptResource(user.admin,{...input,locations:[{id:aLocation,access:'phone'},{id:aLocation,access:'remote'}]},a)).rejects.toThrow('List each location once');
   // Nothing was written: B keeps its one revision, and A's location is linked only to A.
   expect(await database().selectFrom('revision').select('id').where('service_id','=',b).execute()).toHaveLength(1);
   expect(await database().selectFrom('service_at_location').select('service_id').where('location_id','=',aLocation).execute()).toEqual([{service_id:a}]);
@@ -300,6 +300,41 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   await expect(acceptResource(user.community,{...input,service_area:zip('98101','98102')})).rejects.toThrow('Access denied');
   await expect(acceptResource(user.community,{...input,service_area:{kind:'state',state:'WA'}})).rejects.toThrow('Access denied');
   await expect(acceptResource(user.community,{...input,service_area:zip('98101')})).resolves.toBeTruthy();
+ });
+ // S2-16: leaving the privacy flag out of an edit never makes a private address public.
+ const privateLocation=async(id:string)=>{
+  const location=((await accepted(id,'locations')) as string[])[0];
+  const access=await database().selectFrom('location_access').select(['mode','confidential']).where('location_id','=',location).executeTakeFirstOrThrow();
+  const flags=(await assertions(location)).filter(r=>r.field_path==='confidential').map(r=>[r.status,r.value]);
+  const address=await database().selectFrom('address').select('id').where('location_id','=',location).execute();
+  return {location,...access,flags,addresses:address.length};
+ };
+ it('an edit that omits the privacy flag keeps a confidential address private',async()=>{
+  const place={access:'physical' as const,address:{address_1:'12 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,locations:[{...place,confidential:true}]});
+  const {location}=await privateLocation(id);
+  // The edit renames the location, so the location is written again, with the flag left out.
+  await acceptResource(user.admin,{...input,locations:[{...place,id:location,name:'Front office'}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'physical',confidential:true,flags:[['accepted',true]],addresses:1});
+  expect(await accepted(location,'name')).toBe('Front office');
+ });
+ it('an edit that drops Safety keeps a confidential address private',async()=>{
+  const place={access:'physical' as const,address:{address_1:'34 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,categories:['safety'],locations:[place]});
+  const {location,confidential}=await privateLocation(id);
+  expect(confidential).toBe(true);
+  await acceptResource(user.admin,{...input,categories:['food'],locations:[{...place,id:location}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'physical',confidential:true,flags:[['accepted',true]],addresses:1});
+  expect(await accepted(id,'categories')).toEqual(['food']);
+ });
+ it('turning a private physical location into a phone line clears the flag',async()=>{
+  const place={access:'physical' as const,address:{address_1:'56 Private Row',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98104'}};
+  const id=await acceptResource(user.admin,{...input,categories:['safety'],locations:[place]});
+  const {location}=await privateLocation(id);
+  await acceptResource(user.admin,{...input,categories:['safety'],locations:[{id:location,access:'phone'}]},id);
+  expect(await privateLocation(id)).toMatchObject({mode:'phone',confidential:false,flags:[['superseded',true],['accepted',false]],addresses:0});
+  expect((await database().selectFrom('location').select('location_type').where('id','=',location).executeTakeFirstOrThrow()).location_type).toBe('virtual');
+  expect(await accepted(location,'address')).toBeNull();
  });
 });
 

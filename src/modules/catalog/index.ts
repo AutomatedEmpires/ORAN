@@ -71,8 +71,8 @@ export const resourceInput = z.object({
  if (new Set(ids).size !== ids.length) ctx.addIssue({code:'custom',path:['locations'],message:'List each location once'});
 });
 type ResourceInput = z.infer<typeof resourceInput>;
-// The facts a submission states. `codes` are the listing's categories in display order; `location_ids` give each submitted location its id, in entry order.
-function listingFields(input:ResourceInput, ids:{service_id:string;organization_id:string;new_organization:boolean;location_ids:string[]}, codes:string[]):FieldValue[] {
+// The facts a submission states. `codes` are the listing's categories in display order; `location_ids` give each submitted location its id, in entry order; `current` holds the accepted values of the listing and its locations.
+function listingFields(input:ResourceInput, ids:{service_id:string;organization_id:string;new_organization:boolean;location_ids:string[]}, codes:string[], current:ReadonlyMap<string,JsonValue>):FieldValue[] {
  const service = (field_path:string, value:JsonValue):FieldValue => ({entity_type:'service',entity_id:ids.service_id,field_path,value});
  const fields:FieldValue[] = [
   service('name',input.name), service('description',input.description), service('url',input.url || null),
@@ -86,8 +86,9 @@ function listingFields(input:ResourceInput, ids:{service_id:string;organization_
   fields.push(service('locations',ids.location_ids.length ? ids.location_ids : null));
   input.locations.forEach((loc,i)=>{
    const location = (field_path:string, value:JsonValue):FieldValue => ({entity_type:'location',entity_id:ids.location_ids[i],field_path,value});
-   // Safety makes a physical location confidential unless the input says otherwise (ADR-0006 §1).
-   const confidential = loc.confidential ?? (codes.includes('safety') && loc.access === 'physical');
+   // Safety makes a physical location confidential unless the input says otherwise (ADR-0006 §1), and leaving the flag out never makes a private address public (S2-16). Only a physical location can be confidential.
+   const currentConfidential = current.get(fieldKey({entity_type:'location',entity_id:ids.location_ids[i],field_path:'confidential'}));
+   const confidential = loc.confidential ?? (loc.access === 'physical' && (currentConfidential === true || codes.includes('safety')));
    fields.push(location('access',loc.access), location('confidential',confidential), location('name',loc.name), location('address',loc.address), location('coordinates',loc.coordinates));
   });
  }
@@ -138,7 +139,7 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   const kept = (input.locations ?? []).flatMap(l=>l.id ? [l.id] : []);
   if (kept.some(k=>!currentLocations.includes(k))) throw new Error('Access denied');
   if (kept.length && await trx.selectFrom('location').select('id').where('id','in',kept).where('organization_id','!=',organizationId).executeTakeFirst()) throw new Error('Access denied');
-  const desired = listingFields(input,{...listing,location_ids:(input.locations ?? []).map(l=>l.id ?? randomUUID())},codes);
+  const desired = listingFields(input,{...listing,location_ids:(input.locations ?? []).map(l=>l.id ?? randomUUID())},codes,current);
   const changed = changedFields(current,desired);
   await applyFields(trx,listing,desired,changed);
   const revisionId = await recordRevision(trx,{service_id:id,actor_id:actor.user_id,origin:origins[capacity],source:{source_type:input.source_type,source_url:input.source_url || null,source_note:input.source_note},current,changed});
