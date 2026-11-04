@@ -100,5 +100,7 @@
   "sourcePhoneCall": "A phone call",
   "sourceOrganization": "The organization itself",
   "sourceUrl": "Source web address",
-  "areaNationwide": "Nationwide"
+  "areaNationwide": "Nationwide",
+  "exit": "Exit",
+  "quickExitName": "Quick exit to a neutral website"
 }
