@@ -186,4 +186,4 @@ Within each group, Safety and Housing & shelter come first.
   - the background-work service for monitoring at national scale (D6);
   - the exact HSDS field names;
   - the content of the D21 kill switch and rollback.
-- **Not implemented:** this ADR adds no code, route, table, dependency or environment variable. Each slice updates DATA_MODEL and ARCHITECTURE when it lands.
+- **Implementation status (2026-11-04, `main` `d3e8080`):** slices 1 and 2 are in the app: categories as data, several memberships per account, the self-verification ban, listing parts, and per-field assertions. Slices 3–6 are not: automatic publication, trust labels, expiry that keeps a listing visible, duplicate matching, flags, and the source registry. Accepting this ADR added no code; slices 1 and 2 did. Checked-only publication and the fixed 30-day review are still what runs.
