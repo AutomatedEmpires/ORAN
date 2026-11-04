@@ -99,5 +99,6 @@
   "sourceWebsite": "A website",
   "sourcePhoneCall": "A phone call",
   "sourceOrganization": "The organization itself",
-  "sourceUrl": "Source web address"
+  "sourceUrl": "Source web address",
+  "areaNationwide": "Nationwide"
 }

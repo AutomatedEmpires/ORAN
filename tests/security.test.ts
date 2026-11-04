@@ -20,16 +20,21 @@ describe('environment and session boundaries',()=>{
 });
 describe('grounded matching',()=>{
  it('does not match outside stated coverage or need',()=>{
-  expect(explainMatch({postal_code:'98102',categories:['food']},{postal_code:'98101',needs:['food']})).toBeNull();
-  expect(explainMatch({postal_code:'98101',categories:['health']},{postal_code:'98101',needs:['food']})).toBeNull();
+  expect(explainMatch({service_area:{kind:'zip',postal_codes:['98102']},categories:['food']},{postal_code:'98101',needs:['food']})).toBeNull();
+  expect(explainMatch({service_area:{kind:'zip',postal_codes:['98101']},categories:['health']},{postal_code:'98101',needs:['food']})).toBeNull();
  });
  it('matches when any resource category overlaps a need',()=>{
-  expect(explainMatch({postal_code:'98101',categories:['health','food']},{postal_code:'98101',needs:['food']})).not.toBeNull();
+  expect(explainMatch({service_area:{kind:'zip',postal_codes:['98101']},categories:['health','food']},{postal_code:'98101',needs:['food']})).not.toBeNull();
  });
  it('explains evidence and keeps qualification/capacity unknown',()=>{
-  const match=explainMatch({postal_code:'98101',categories:['food']},{postal_code:'98101',needs:['food']});
+  const match=explainMatch({service_area:{kind:'zip',postal_codes:['98101']},categories:['food']},{postal_code:'98101',needs:['food']});
   expect(match?.reasons).toHaveLength(2);
   expect(match?.unknowns.join(' ')).toContain('not been determined');
   expect(match?.unknowns.join(' ')).toContain('capacity is unknown');
+ });
+ it('matches a nationwide listing for any ZIP',()=>{
+  const match=explainMatch({service_area:{kind:'nationwide'},categories:['food']},{postal_code:'10001',needs:['food']});
+  expect(match).not.toBeNull();
+  expect(match?.reasons).toContain('Published coverage is nationwide');
  });
 });

@@ -6,10 +6,13 @@ import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationId
 import { acceptedValues, changedFields, fieldKey, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
 import { applyFields, idList } from './apply';
 import { hoursValue, locationInput, phoneValue, serviceAreaValue } from './parts';
+import { listingParts, type ListingParts } from './projection';
 export { fieldKey, changedFields } from './assertions';
 export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
 export { usStates, usTimeZones, weekDays, listingOptions, partPatterns, partLimits, partMessages, normalizePhone, formatPhone, phoneValue, hoursValue, serviceAreaValue, addressValue, locationInput, areaRows } from './parts';
 export type { UsTimeZone, WeekDay, LocationAccess, ListingOptions, PhoneValue, HoursValue, ServiceAreaValue, AddressValue, LocationValue } from './parts';
+// listingParts stays inside the module: its 'editor' audience is unauthorized, so editableResource is the only exported read that returns a confidential address (D5).
+export type { ListingLocation, ListingParts } from './projection';
 export type Category = { code: string; label: string };
 export async function listCategories(locale:'en'|'es', db:Kysely<DB> = database()):Promise<Category[]> {
  const rows = await db.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select(['t.code','d.label_en','d.label_es']).orderBy('d.sort_order').execute();
@@ -50,9 +53,16 @@ function hasCategory(eb:AnyBuilder, serviceRef:string, codes:readonly string[]) 
 export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:readonly string[]) {
  return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
 }
-// A verifier's geography is one ZIP: a service is in their area when one of its ZIP areas is that ZIP (city, county, state and nationwide areas are not).
+// The service-area rows that cover a ZIP code: a ZIP area for that code and, for discovery, a nationwide area. City, county and state areas match no ZIP yet (D4).
+function areasCovering(eb:AnyBuilder, postalCode:string, scope:'discovery'|'verifier') {
+ return eb.selectFrom('service_area as a').innerJoin('service_area_kind as k','k.service_area_id','a.id').where(e=>{const zip=e.and([e('k.kind','=','zip'),e('a.extent','=',postalCode)]);return scope==='verifier'?zip:e.or([zip,e('k.kind','=','nationwide')]);});
+}
+function coversPostalCode(eb:AnyBuilder, serviceRef:string, postalCode:string, scope:'discovery'|'verifier'='discovery') {
+ return eb.exists(areasCovering(eb,postalCode,scope).select('a.id').whereRef('a.service_id','=',serviceRef));
+}
+// A verifier's geography is one ZIP: a service is in their area when one of its ZIP areas is that ZIP (city, county, state and nationwide areas are not). The queue uses the same predicate, so it never lists work that verification would reject.
 export async function serviceInVerifierArea(db:Kysely<DB>, serviceId:string, postalCode:string):Promise<boolean> {
- return !!(await db.selectFrom('service_area as a').innerJoin('service_area_kind as k','k.service_area_id','a.id').select('a.id').where('a.service_id','=',serviceId).where('k.kind','=','zip').where('a.extent','=',postalCode).executeTakeFirst());
+ return !!(await areasCovering(db as never,postalCode,'verifier').select('a.id').where('a.service_id','=',serviceId).executeTakeFirst());
 }
 const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
 // A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds.
@@ -152,35 +162,52 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   return id;
  });
 }
+// Each row with its listing parts, as `audience` may see them.
+async function withParts<T extends {id:string}>(rows:T[], audience:'public'|'editor'):Promise<(T & ListingParts)[]> {
+ const parts = await listingParts(database(),rows.map(r=>r.id),audience);
+ return rows.map(r=>({...r,...parts.get(r.id)!}));
+}
+// Public discovery, resource cards and verification tasks are public reads: a confidential location's address and coordinates are never selected.
 export async function publicResources(filters?:{postal_code:string;needs:readonly string[]}) {
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id')
- .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.checked_at','l.next_review_due','a.extent as postal_code'])
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id')
+ .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.checked_at','l.next_review_due'])
  .select(eb=>[categoryCodes(eb),eb.selectFrom('verification_event as v').select('v.method').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('check_method'),eb.selectFrom('verification_event as v').select('v.fields_checked').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('fields_checked')])
  .where('s.status','=','active').where('l.state','=','checked').where('l.next_review_due','>',new Date());
- if(filters){if(!filters.needs.length)return [];query=query.where('a.extent','=',filters.postal_code).where(eb=>hasCategory(eb,'s.id',filters.needs));}
- return query.orderBy('s.name').limit(100).execute();
+ if(filters){if(!filters.needs.length)return [];query=query.where(eb=>coversPostalCode(eb,'s.id',filters.postal_code)).where(eb=>hasCategory(eb,'s.id',filters.needs));}
+ return withParts(await query.orderBy('s.name').limit(100).execute(),'public');
 }
-export async function ownedResources(userId:string,resourceId?:string) {
+// The listings a user may edit: every listing for an admin and their organizations' listings for staff. Anyone else gets 'Access denied', and an invalid id gives none.
+async function editableRows(userId:string,resourceId?:string) {
  const actor = await actorFor(userId), admin = isAdmin(actor), orgs = organizationIds(actor);
  if (!admin && !orgs.length) throw new Error('Access denied');
  if(resourceId&&!z.uuid().safeParse(resourceId).success)return [];
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name','s.organization_id']);
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','o.name as organization_name','s.organization_id']);
  if (!admin) query = query.where('s.organization_id','in',orgs);
  if(resourceId)query=query.where('s.id','=',resourceId);
  return query.orderBy('s.name').limit(100).execute();
 }
+// Editors' resource cards are public reads too; only editableResource returns a confidential location's address.
+export async function ownedResources(userId:string,resourceId?:string) {return withParts(await editableRows(userId,resourceId),'public');}
 export async function ownedResource(userId:string,resourceId:string){return (await ownedResources(userId,resourceId))[0];}
+export type EditableResource = ListingParts & { id:string; organization_id:string; organization_name:string; name:string; description:string; url:string|null; eligibility_description:string; application_process:string; categories:string[] };
+// The edit view, authorized like ownedResource, and the only read that returns a confidential location's address and coordinates.
+export async function editableResource(userId:string,serviceId:string):Promise<EditableResource|undefined> {
+ const [row] = await editableRows(userId,serviceId);
+ if (!row) return undefined;
+ const parts = (await listingParts(database(),[row.id],'editor')).get(row.id)!;
+ return {id:row.id,organization_id:row.organization_id,organization_name:row.organization_name,name:row.name,description:row.description,url:row.url,eligibility_description:row.eligibility_description,application_process:row.application_process,categories:row.categories,...parts};
+}
 export async function verificationQueue(userId:string) {
  const actor = await actorFor(userId), affiliated = affiliatedOrganizationIds(actor);
- let query = database().selectFrom('work_item as w').innerJoin('service as s','s.id','w.service_id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('listing_state as l','l.service_id','s.id').select(['s.id','s.name','s.description','s.eligibility_description','s.application_process','s.url','w.due_at','a.extent as postal_code','l.revision_id']).where('w.due_at','<=',new Date());
+ let query = database().selectFrom('work_item as w').innerJoin('service as s','s.id','w.service_id').innerJoin('listing_state as l','l.service_id','s.id').select(['s.id','s.name','s.description','s.eligibility_description','s.application_process','s.url','w.due_at','l.revision_id']).where('w.due_at','<=',new Date());
  if (!isAdmin(actor)) {
   const scope = verifierScope(actor);
   if (!scope) throw new Error('Access denied');
-  query = query.where('w.assigned_to','=',actor.user_id).where('a.extent','=',scope.postal_code).where(eb=>hasCategory(eb,'s.id',scope.category_scope));
+  query = query.where('w.assigned_to','=',actor.user_id).where(eb=>coversPostalCode(eb,'s.id',scope.postal_code,'verifier')).where(eb=>hasCategory(eb,'s.id',scope.category_scope));
  }
  // Ownership is never independent verification, for admins too: hide every affiliated organization's work.
  if (affiliated.length) query = query.where('s.organization_id','not in',affiliated);
- return query.orderBy('w.due_at').limit(100).execute();
+ return withParts(await query.orderBy('w.due_at').limit(100).execute(),'public');
 }
 export async function verifyResource(userId:string, serviceId:string, raw:unknown) {
  const input = z.object({revision_id:z.uuid(),method:z.enum(['phone','website','in_person']),evidence:z.string().trim().min(10).max(2000),fields_checked:z.string().trim().min(5).max(500)}).parse(raw);

@@ -2,10 +2,15 @@ import Link from 'next/link';
 import { messages } from '@/server/language';
 import { verificationAction } from '@/server/actions';
 import { ActionForm } from './forms';
-type Resource={id:string;name:string;description:string;url?:string|null;eligibility_description:string;application_process:string;postal_code:string;checked_at?:Date|null;next_review_due?:Date|null;check_method?:string|null;fields_checked?:string|null};
+import type { ServiceAreaValue } from '@/modules/catalog';
+type Resource={id:string;name:string;description:string;url?:string|null;eligibility_description:string;application_process:string;service_area:ServiceAreaValue|null;checked_at?:Date|null;next_review_due?:Date|null;check_method?:string|null;fields_checked?:string|null};
+// The published service area as the card's tag.
+function areaLabel(area:ServiceAreaValue,nationwide:string){
+ switch(area.kind){case 'zip':return area.postal_codes.join(', ');case 'city':case 'county':return `${area.name}, ${area.state}`;case 'state':return area.state;case 'nationwide':return nationwide;}
+}
 export async function ResourceCards({resources,editable=false}:{resources:Resource[];editable?:boolean}){
  const {text:t,locale}=await messages();
- return <div className="grid">{resources.map(r=><article className="card" key={r.id}><span className="tag">{r.postal_code}</span><h2>{r.name}</h2><p>{r.description}</p><h3>{t.eligibility}</h3><p>{r.eligibility_description}</p><h3>{t.intake}</h3><p>{r.application_process}</p><p className="small">{t.unknown}</p>{r.checked_at?<p className="small">{t.detailsChecked}: {r.checked_at.toLocaleDateString(locale)} · {t.due}: {r.next_review_due?.toLocaleDateString(locale)}</p>:<p className="small">{t.awaiting}</p>}{r.check_method?<p className="small">{t.method}: {r.check_method==='phone'?t.phone:r.check_method==='website'?t.webCheck:t.inPerson}. {t.fields}: {r.fields_checked}</p>:null}{r.url?<p><a href={r.url} rel="noreferrer">{t.contact}</a></p>:null}{editable?<Link href={'/resources/'+r.id+'/edit'}>{t.edit}</Link>:null}</article>)}</div>;
+ return <div className="grid">{resources.map(r=><article className="card" key={r.id}>{r.service_area?<span className="tag">{areaLabel(r.service_area,t.areaNationwide)}</span>:null}<h2>{r.name}</h2><p>{r.description}</p><h3>{t.eligibility}</h3><p>{r.eligibility_description}</p><h3>{t.intake}</h3><p>{r.application_process}</p><p className="small">{t.unknown}</p>{r.checked_at?<p className="small">{t.detailsChecked}: {r.checked_at.toLocaleDateString(locale)} · {t.due}: {r.next_review_due?.toLocaleDateString(locale)}</p>:<p className="small">{t.awaiting}</p>}{r.check_method?<p className="small">{t.method}: {r.check_method==='phone'?t.phone:r.check_method==='website'?t.webCheck:t.inPerson}. {t.fields}: {r.fields_checked}</p>:null}{r.url?<p><a href={r.url} rel="noreferrer">{t.contact}</a></p>:null}{editable?<Link href={'/resources/'+r.id+'/edit'}>{t.edit}</Link>:null}</article>)}</div>;
 }
 export async function VerificationForms({items}:{items:(Resource&{revision_id:string})[]}){
  const {text:t}=await messages();
