@@ -399,3 +399,102 @@ test('rules use tokens instead of raw colors', () => {
   }
   expect(withoutTokenBlocks(':root{color:#fff}\n:root { color:rgb(0,0,0) }').match(rawColor)).toBeNull();
 });
+
+test('the header is a Blend top bar with domain navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  const banner = page.getByRole('banner');
+  await expect(banner).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(banner).toHaveCSS('border-bottom-width', '1px');
+  await expect(banner).toHaveCSS('border-bottom-style', 'solid');
+  await expect(banner).toHaveCSS('border-bottom-color', 'rgb(225, 230, 234)');
+  await expect(page.getByRole('link', { name: 'ORAN Open Resource Access Network', exact: true })).toBeVisible();
+
+  const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
+  const links = nav.getByRole('link');
+  const names = ['Find support', 'My profile', 'Organization', 'Community', 'Admin'];
+  await expect(links).toHaveText(names);
+  const find = nav.getByRole('link', { name: 'Find support', exact: true });
+  await expect(find).toHaveAttribute('aria-current', 'page');
+  await expect(find).toHaveCSS('background-color', 'rgb(211, 230, 234)');
+  await expect(find).toHaveCSS('color', 'rgb(23, 89, 107)');
+  await expect(find).toHaveCSS('font-weight', '800');
+  for (const name of names.slice(1)) await expect(nav.getByRole('link', { name, exact: true }), name).not.toHaveAttribute('aria-current');
+
+  // On another page, no domain is current.
+  await page.goto('/sign-in');
+  await expect(links).toHaveText(names);
+  for (const name of names) await expect(nav.getByRole('link', { name, exact: true }), name + ' on /sign-in').not.toHaveAttribute('aria-current');
+
+  // Every header and notice control is a 44px target.
+  await page.goto('/');
+  const apply = page.getByRole('button', { name: 'Apply', exact: true });
+  const targets = [...(await links.all()), apply, page.getByRole('button', { name: 'Sign out', exact: true }), page.getByRole('link', { name: 'Switch identity', exact: true })];
+  for (const target of targets) {
+    const box = await target.boundingBox();
+    expect(box?.height, ((await target.textContent()) ?? '') + ' height').toBeGreaterThanOrEqual(44);
+  }
+  await expect(apply).toHaveCSS('font-size', '14px');
+  await expect(apply).toHaveCSS('background-color', 'rgb(226, 238, 240)');
+
+  // The development notice is as wide as the chat column and aligned with the page content, not the whole viewport (M6).
+  const [notice, main] = [await page.getByRole('complementary').boundingBox(), await page.getByRole('main').boundingBox()];
+  // 760px (--size-chat-column) plus 16px (--space-4) of padding on each side of main.
+  expect(notice?.width, 'notice width').toBeLessThanOrEqual(760 + 2 * 16);
+  expect(notice?.x, 'notice left edge').toBeCloseTo((main?.x ?? 0) + 16, 0);
+
+  // The bootstrap custom properties are gone, and every property the stylesheet declares is documented or derived.
+  expect([...(await readTokens(page, ['--ink', '--accent', '--paper'])).values()]).toEqual(['', '', '']);
+  const declared = new Set([...readFileSync('src/app/globals.css', 'utf8').matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]));
+  expect(declared.size, 'declared custom properties').toBeGreaterThan(50);
+  const documented = documentedTokenNames();
+  expect([...declared].filter((name) => !documented.has(name) && !derivedTokens.includes(name))).toEqual([]);
+});
+
+test('Spanish header reflows at 320 and 360 pixels', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
+
+  for (const width of [320, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const path of ['/', '/sign-in']) {
+      await page.goto(path);
+      await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
+      expect(await fitsWidth(page), path + ' fits ' + width + 'px').toBe(true);
+      const reachable = [
+        page.getByRole('combobox', { name: 'Idioma', exact: true }),
+        page.getByRole('button', { name: 'Aplicar', exact: true }),
+        ...['Buscar apoyo', 'Mi perfil', 'Organización', 'Comunidad', 'Administración'].map((name) => page.getByRole('link', { name, exact: true })),
+      ];
+      for (const control of reachable) await expect(control, path + ' at ' + width + 'px').toBeInViewport();
+    }
+  }
+});
+
+test('the server marks the current domain without JavaScript and respects path boundaries', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
+    const marked = async (path: string) => {
+      await page.goto(path);
+      const names = await nav.getByRole('link').allTextContents();
+      expect(names, path + ' links').toHaveLength(5);
+      const current: string[] = [];
+      for (const name of names) if ((await nav.getByRole('link', { name, exact: true }).getAttribute('aria-current')) === 'page') current.push(name);
+      return current;
+    };
+    expect(await marked('/')).toEqual(['Find support']);
+    expect(await marked('/sign-in')).toEqual([]);
+    // A nested path belongs to its domain; a path that only starts with the same letters does not.
+    expect(await marked('/admin/anything')).toEqual(['Admin']);
+    expect(await marked('/adminx')).toEqual([]);
+    await enterAs(page, 'Admin');
+    expect(await marked('/admin')).toEqual(['Admin']);
+    expect(await marked('/organization')).toEqual(['Organization']);
+  } finally {
+    await context.close();
+  }
+});
