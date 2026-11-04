@@ -1,5 +1,6 @@
 import { test,expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { hydrated } from './support';
 async function accessible(page:import('@playwright/test').Page){const result=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(result.violations.filter(v=>v.impact==='critical'||v.impact==='serious')).toEqual([]);}
 test('admin entry → approved scoped community verification → personalized discovery',async({page})=>{
  const name='Synthetic browser resource '+Date.now();
@@ -24,6 +25,7 @@ test('admin entry → approved scoped community verification → personalized di
  // The form resets after a save, and the source question resets with it.
  await expect(page.getByRole('radio',{name:'A website',exact:true})).not.toBeChecked();
  await expect(page.getByLabel('Source web address',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Resource name',{exact:true})).toHaveValue('');
  await page.goto('/');
  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
  await page.goto('/admin');
@@ -94,6 +96,52 @@ test('organization staff maintain their own unpublished resources',async({page})
  await expect(page.getByRole('status').filter({hasText:'Saved. This resource needs'})).toBeVisible();
  await page.goto('/organization');await expect(page.getByText('Updated synthetic organization fixture.',{exact:true})).toBeVisible();
  await page.goto('/');await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+});
+test('a rejected resource form keeps what was typed',async({page})=>{
+ const name='Synthetic rejected resource '+Date.now();
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
+ const form=page.locator('form').filter({has:page.getByLabel('Resource name',{exact:true})}),add=form.getByRole('button',{name:'Add resource',exact:true}),status=form.getByRole('status');
+ await hydrated(form);
+ // The status region is in the page before anything is submitted, so a screen reader hears what is put in it.
+ await expect(status).toHaveCount(1);
+ await expect(status).toBeEmpty();
+ await page.getByLabel('Resource name',{exact:true}).fill(name);
+ await page.getByLabel('Organization name',{exact:true}).fill('Synthetic rejected organization');
+ await page.getByLabel('Service ZIP code',{exact:true}).fill('98101');
+ await form.getByRole('checkbox',{name:'Food',exact:true}).check();
+ await page.getByLabel('Description',{exact:true}).fill('Synthetic rejected-form test listing, not a real assistance service.');
+ await page.getByLabel('Who may qualify',{exact:true}).fill('Contact the provider about requirements');
+ await page.getByLabel('How to get help',{exact:true}).fill('Contact the provider before visiting');
+ await page.getByRole('radio',{name:'A website',exact:true}).check();
+ // The browser accepts any absolute address in a web-address field; the server accepts only http and https, so this is a rejection the form cannot catch itself. An admin is never offered "The organization itself".
+ await page.getByLabel('Source web address',{exact:true}).fill('ftp://example.org/synthetic-source');
+ await page.getByLabel('Source and permission note',{exact:true}).fill('Synthetic rejected-form fixture for testing only');
+ // Hold the server's answer so the busy state can be read without racing it.
+ let answer:()=>void=()=>{};
+ const held=new Promise<void>(resolve=>{answer=resolve;});
+ await page.route('**/admin',async route=>{if(route.request().headers()['next-action'])await held;await route.continue();});
+ await add.click();
+ await expect(add).toHaveAttribute('aria-busy','true');
+ await expect(add).toHaveAttribute('aria-disabled','true');
+ await expect(status).toHaveText('Saving…');
+ answer();
+ await expect(status).toHaveText('Please check the required fields and try again.');
+ await expect(add).not.toHaveAttribute('aria-busy');
+ await expect(page.getByLabel('Resource name',{exact:true})).toHaveValue(name);
+ await expect(page.getByLabel('Organization name',{exact:true})).toHaveValue('Synthetic rejected organization');
+ await expect(page.getByLabel('Service ZIP code',{exact:true})).toHaveValue('98101');
+ await expect(form.getByRole('checkbox',{name:'Food',exact:true})).toBeChecked();
+ await expect(page.getByLabel('Description',{exact:true})).toHaveValue('Synthetic rejected-form test listing, not a real assistance service.');
+ await expect(page.getByRole('radio',{name:'A website',exact:true})).toBeChecked();
+ await expect(page.getByLabel('Source web address',{exact:true})).toHaveValue('ftp://example.org/synthetic-source');
+ await expect(page.getByLabel('Source and permission note',{exact:true})).toHaveValue('Synthetic rejected-form fixture for testing only');
+ // Fixing the one field and sending again saves, and a save still clears the form.
+ await page.getByLabel('Source web address',{exact:true}).fill('https://example.org/synthetic-source');
+ await add.click();
+ await expect(status).toHaveText(/^Saved\. This resource needs/);
+ await expect(page.getByLabel('Resource name',{exact:true})).toHaveValue('');
+ await expect(page.getByRole('radio',{name:'A website',exact:true})).not.toBeChecked();
 });
 test('an admin who belongs to no organization has no source preselected',async({page})=>{
  await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();

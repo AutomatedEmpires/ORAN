@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
-import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,editableResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { listCategories,addCategory,acceptResource,resourceInput,publicResources,ownedResources,ownedResource,editableResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
 import { locationAssertions,type Audience } from '../src/modules/catalog/projection';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
@@ -655,6 +655,27 @@ describe('per-field assertions and history',()=>{
   const long='https://example.org/'+'a'.repeat(481);
   await expect(acceptResource(user.admin,{...input,url:long})).rejects.toThrow();
   await expect(acceptResource(user.admin,{...input,source_url:long})).rejects.toThrow();
+ });
+ it('treats browser line endings as the same text',async()=>{
+  // Browsers post a textarea with CRLF. The schema stores LF, so resubmitting unchanged text from a form asserts nothing.
+  const text='First line of the description.\nSecond line of the description.',eligibility='Who may qualify.\nSee the provider.';
+  const id=await acceptResource(user.admin,{...input,description:text,eligibility_description:eligibility});
+  await acceptResource(user.admin,{...input,description:text.replaceAll('\n','\r\n'),eligibility_description:eligibility.replaceAll('\n','\r')},id);
+  const state=await currentRevision(id);
+  expect((await assertions(id)).filter(r=>r.revision_id===state.revision_id)).toEqual([]);
+  const crlf=await acceptResource(user.admin,{...input,name:'  Synthetic\r\nprogram  ',description:text.replaceAll('\n','\r\n')});
+  expect(await accepted(crlf,'description')).toBe(text);
+  expect(await accepted(crlf,'name')).toBe('Synthetic\nprogram');
+  expect((await database().selectFrom('service').select('description').where('id','=',crlf).executeTakeFirstOrThrow()).description).toBe(text);
+ });
+ it('rejects text that is not a web address with a validation error, not a thrown TypeError',()=>{
+  for(const field of ['url','source_url'] as const){
+   const result=resourceInput.safeParse({...input,[field]:'not a url'});
+   expect(result.success,field).toBe(false);
+   expect(result.error?.issues.some(i=>i.path[0]===field),field).toBe(true);
+  }
+  expect(resourceInput.safeParse({...input,url:'ftp://example.org'}).success).toBe(false);
+  expect(resourceInput.safeParse(input).success).toBe(true);
  });
  it('resubmitting the same categories in another order records no category assertion',async()=>{
   const id=await acceptResource(user.admin,{...input,categories:['health','food']});
