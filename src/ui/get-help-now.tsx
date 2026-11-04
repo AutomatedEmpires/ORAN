@@ -2,6 +2,7 @@
 import type en from './en.json';
 import { buttonClassName } from './button';
 
+// TODO(slice 3): switch to the shared Messages type once src/ui/listing-text.ts lands on main.
 export type Messages = typeof en;
 export type HelpNumber = { key: '988' | '911' | 'dv' | '211'; phone: string; tel: string };
 
@@ -22,13 +23,21 @@ const icon = (
   </svg>
 );
 
+// One line of the panel. A phone number with a hyphen is wrapped so a narrow phone cannot break 1-800-799-7233 at a hyphen (see .help-lines .phone).
+// Only the number is kept together, not the call button, which would overflow at 320px in Spanish.
+function Line({ template, phone }: { template: string; phone: string }): React.JSX.Element {
+  if (!phone.includes('-')) return <span>{template.replace('{phone}', phone)}</span>;
+  const [before, after] = template.split('{phone}');
+  return <span>{before}<span className="phone">{phone}</span>{after}</span>;
+}
+
 // Each number is plain text a person can select and copy, next to a 44px button that calls it.
 function Lines({ text }: { text: Messages }): React.JSX.Element {
   return (
     <ul className="help-lines">
       {helpNumbers.map(({ key, phone, tel }) => (
         <li key={key}>
-          <span>{text.helpLines[key].replace('{phone}', phone)}</span>
+          <Line template={text.helpLines[key]} phone={phone} />
           <a className={buttonClassName('secondary')} href={tel}>{text.call.replace('{phone}', phone)}</a>
         </li>
       ))}

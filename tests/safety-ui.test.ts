@@ -103,5 +103,16 @@ describe('Get help now', () => {
     expect(html).toContain('href="tel:988"');
     expect(html.indexOf('</section>')).toBeGreaterThanOrEqual(0);
     expect(html.indexOf('</section>')).toBeLessThan(html.indexOf('Get help now'));
+    // Retry is the Button primitive: a plain action, not a submit.
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*>Try again<\/button>/);
+    expect(html).toMatch(/<button[^>]*class="button"[^>]*>Try again/);
+  });
+
+  it('keeps a hyphenated number on one line and wraps no other number', () => {
+    for (const text of [en, es]) {
+      const html = renderToStaticMarkup(createElement(OutageState, { text }));
+      expect(html).toContain(text.helpLines.dv.replace('{phone}', '<span class="phone">1-800-799-7233</span>'));
+      expect(html.match(/class="phone"/g)).toHaveLength(1);
+    }
   });
 });

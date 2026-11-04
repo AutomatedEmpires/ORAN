@@ -433,6 +433,34 @@ test('the footer panel lists the four numbers as text and call buttons', async (
   await expect(details).toHaveJSProperty('open', false);
 });
 
+test('the hotline number stays on one line on a phone, in English and Spanish', async ({ page }) => {
+  // The number is 1-800-799-7233. Wrapped lines of its text give an inline element one client rect per line fragment, so one rect means no break.
+  async function oneLine(help: string): Promise<void> {
+    const summary = footerHelp(page, help);
+    if (!(await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open))) await summary.click();
+    await page.evaluate(() => document.fonts.ready);
+    const number = page.getByRole('contentinfo').locator('.phone');
+    await expect(number).toHaveCount(1);
+    await expect(number).toHaveText('1-800-799-7233');
+    expect(await number.evaluate((element) => element.getClientRects().length), help + ' number line fragments').toBe(1);
+    expect(await fitsWidth(page), help + ' fits the width').toBe(true);
+  }
+  await page.goto('/sign-in');
+  for (const width of [360, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await oneLine('Get help now');
+  }
+  const english = page.getByRole('combobox', { name: 'Language', exact: true });
+  await hydrated(english);
+  await english.selectOption('es');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
+  for (const width of [360, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await oneLine('Obtén ayuda ahora');
+  }
+});
+
 test('Profile has a Get help now row before Delete', async ({ page }) => {
   await enterAs(page, 'My profile');
   await saveNeeds(page, ['Food']);
@@ -538,8 +566,10 @@ test('the language select shows the chosen language after Apply, without a reloa
   await page.evaluate(() => { (window as unknown as { sameDocument: boolean }).sameDocument = true; });
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
 
-  // The layout persists across the action's redirect, so a select that only sets defaultValue is reset to the language it was first drawn in.
-  // A reload would draw the select afresh and hide that, so the test also checks that this is the same document.
+  // A regression guard, not a reproduction of one mechanism: after Apply the select must show the language just chosen, on every
+  // following frame. A probe showed that the dev server remounts the header after the action's redirect, so a stale defaultValue
+  // is not what this exercises. A reload would draw the select afresh and hide any stale value, so the test also checks that this
+  // is the same document.
   const spanish = page.getByRole('combobox', { name: 'Idioma', exact: true });
   await expect(spanish).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument), 'the page was not reloaded').toBe(true);
