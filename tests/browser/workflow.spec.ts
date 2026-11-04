@@ -264,6 +264,8 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await location.getByLabel('City',{exact:true}).fill('Seattle');
  await location.getByLabel('State',{exact:true}).selectOption('WA');
  await location.getByLabel('ZIP code',{exact:true}).fill('98109');
+ await location.getByLabel('Latitude (optional)',{exact:true}).fill('47.6311');
+ await location.getByLabel('Longitude (optional)',{exact:true}).fill('-122.3101');
  await form.getByLabel('Phone number',{exact:true}).fill('(206) 555-0100');
  await form.getByLabel('Extension (optional)',{exact:true}).fill('12');
  await form.getByRole('radio',{name:'Weekly hours',exact:true}).check();
@@ -289,14 +291,16 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await expect(group(edit,'Date with different hours 1').getByLabel('From',{exact:true})).toHaveValue('2026-12-25');
  await expect(saved.getByLabel('Street address',{exact:true})).toHaveValue('1 Hidden Way');
  await expect(saved.getByLabel('Location name (optional)',{exact:true})).toHaveValue('Hidden Haven Shelter');
+ await expect(saved.getByLabel('Latitude (optional)',{exact:true})).toHaveValue('47.6311');
+ await expect(saved.getByLabel('Longitude (optional)',{exact:true})).toHaveValue('-122.3101');
  await expect(saved.getByRole('radio',{name:keepPrivate,exact:true})).toBeChecked();
  await expect(edit.getByLabel('Phone number',{exact:true}).first()).toHaveValue('+12065550100');
  await expect(edit.getByLabel('Extension (optional)',{exact:true}).first()).toHaveValue('12');
  await accessible(page);
  await page.setViewportSize({width:375,height:812});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
- // Neither the verification task nor the listing's card shows the private address, its ZIP or the location's name, only "Call for location" (Review Focus 5).
- const hidden=['1 Hidden Way','98109','Hidden Haven'],titled=page.getByRole('heading',{name,exact:true});
+ // Neither the verification task nor the listing's card shows the private address, its ZIP, its coordinates or the location's name, only "Call for location" (Review Focus 5).
+ const hidden=['1 Hidden Way','98109','Hidden Haven','47.6311','-122.3101'],titled=page.getByRole('heading',{name,exact:true});
  await page.goto('/admin');
  const mine=page.locator('article').filter({has:page.getByRole('link',{name:'Edit resource',exact:true})}).filter({has:titled});
  const task=page.locator('article').filter({has:page.getByRole('button',{name:'Record verification',exact:true})}).filter({has:titled});
@@ -304,6 +308,10 @@ test('a Safety listing keeps its private address through an edit',async({page})=
   await expect(article).toContainText('Call for location');
   for(const text of hidden)await expect(article).not.toContainText(text);
  }
+ // Headings nest under the title: Hours is an h3 under a card's h2 and an h4 under a task's h3 (axe cannot tell).
+ await expect(mine.getByRole('heading',{level:3,name:'Hours',exact:true})).toBeVisible();
+ await expect(task.getByRole('heading',{level:4,name:'Hours',exact:true})).toBeVisible();
+ await expect(task.getByRole('heading',{level:5,name:'Dates with different hours',exact:true})).toBeVisible();
  await hydrated(task.locator('form'));
  await task.getByLabel('Method',{exact:true}).selectOption('website');
  await task.getByLabel('Evidence and source reference').fill('Synthetic evidence from example.org used only in browser testing');
@@ -314,6 +322,8 @@ test('a Safety listing keeps its private address through an edit',async({page})=
  await page.goto('/');
  const card=page.locator('article').filter({has:titled});
  await expect(card).toContainText('Call for location');
+ await expect(card.getByRole('heading',{level:3,name:'Hours',exact:true})).toBeVisible();
+ await expect(card.getByRole('heading',{level:4,name:'Dates with different hours',exact:true})).toBeVisible();
  await expect(card).toContainText('(206) 555-0100');
  await expect(card.getByRole('link',{name:'(206) 555-0100',exact:true})).toHaveAttribute('href','tel:+12065550100');
  await expect(card).toContainText('ext. 12');
