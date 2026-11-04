@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect } from '@playwright/test';
-import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, normalized, readTokens, resolveAs, ring, test } from './support';
+import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, hydratedTest, normalized, readTokens, resolveAs, ring, test } from './support';
 
 // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
 const blendTokens: Record<string, string> = {
@@ -236,7 +236,8 @@ test('existing pages pass axe and reflow at phone and desktop widths', async ({ 
   for (const path of ['/admin', '/organization', '/community', '/profile']) await check(path);
 });
 
-test('controls follow the Blend button and field specs', async ({ page }) => {
+// Uses the hydrated `test`: choosing "A website" runs React state, which the blocked Fast Refresh socket would prevent.
+hydratedTest('controls follow the Blend button and field specs', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await enterAs(page, 'Admin');
   await page.goto('/admin');
@@ -273,6 +274,16 @@ test('controls follow the Blend button and field specs', async ({ page }) => {
   await expect(title).toHaveCSS('line-height', '30px');
   await expect(title).toHaveCSS('font-weight', '700');
 
+  // Choosing "A website" shows the Source web address field, so it joins the 44px textbox check below.
+  const radio = page.getByRole('radio', { name: 'A website', exact: true });
+  const address = page.getByRole('textbox', { name: 'Source web address', exact: true });
+  // A radio clicked before React hydrates the form changes no state, so the answer is chosen again until the field appears.
+  await expect(async () => {
+    await page.getByRole('radio', { name: 'A phone call', exact: true }).check();
+    await radio.check();
+    await expect(address).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+
   const main = page.getByRole('main');
   for (const role of ['button', 'combobox', 'textbox'] as const) {
     const controls = await main.getByRole(role).all();
@@ -291,20 +302,7 @@ test('controls follow the Blend button and field specs', async ({ page }) => {
     expect(box?.height, 'checkbox label height').toBeGreaterThanOrEqual(44);
   }
 
-  // Radios get the same 44px row and teal accent as checkboxes. No page here has one yet, so a minimal fieldset is added.
-  await page.evaluate(() => {
-    const fieldset = document.createElement('fieldset');
-    const legend = document.createElement('legend');
-    legend.textContent = 'Test';
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 't';
-    label.append(input, ' Option');
-    fieldset.append(legend, label);
-    document.querySelector('main')?.append(fieldset);
-  });
-  const radio = page.getByRole('radio', { name: 'Option', exact: true });
+  // Radios get the same 44px row and teal accent as checkboxes. This is the real source-type radio on /admin.
   await expect(radio).toBeVisible();
   expect((await radio.locator('..').boundingBox())?.height, 'radio label height').toBeGreaterThanOrEqual(44);
   await expect(radio).toHaveCSS('accent-color', 'rgb(23, 89, 107)');
@@ -324,6 +322,16 @@ test('keyboard focus shows the Blend focus ring', async ({ page }) => {
   const enter = page.getByRole('button', { name: 'Enter as Admin', exact: true });
   await focusByKeyboard(page, enter);
   expect(await ring(enter), 'filled button').toEqual(focusRing);
+
+  // The header links: the brand, and the current domain, whose tint sits behind the ring.
+  await page.goto('/');
+  const brand = page.getByRole('link', { name: 'ORAN Open Resource Access Network', exact: true });
+  await focusByKeyboard(page, brand);
+  expect(await ring(brand), 'brand link').toEqual(focusRing);
+  const current = page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('link', { name: 'Find support', exact: true });
+  await expect(current).toHaveAttribute('aria-current', 'page');
+  await focusByKeyboard(page, current);
+  expect(await ring(current), 'current nav link').toEqual(focusRing);
 
   await enterAs(page, 'Admin');
   const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
@@ -358,6 +366,12 @@ test('honours reduced motion and keeps control boundaries under forced colors', 
   const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
   await expect(field).toBeVisible();
   await expect(field).toHaveCSS('border-top-style', 'solid');
+
+  // The tint that marks the current domain is dropped, so it keeps an underline as its cue.
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
+  await expect(nav.getByRole('link', { name: 'Find support', exact: true })).toHaveCSS('text-decoration-line', 'underline');
+  await expect(nav.getByRole('link', { name: 'My profile', exact: true })).toHaveCSS('text-decoration-line', 'none');
 });
 
 test('the error glyph is not painted in the page background under forced colors', async ({ page }) => {
@@ -439,8 +453,8 @@ test('the header is a Blend top bar with domain navigation', async ({ page }) =>
 
   // The development notice is as wide as the chat column and aligned with the page content, not the whole viewport (M6).
   const [notice, main] = [await page.getByRole('complementary').boundingBox(), await page.getByRole('main').boundingBox()];
-  // 760px (--size-chat-column) plus 16px (--space-4) of padding on each side of main.
-  expect(notice?.width, 'notice width').toBeLessThanOrEqual(760 + 2 * 16);
+  // As wide as the 760px chat column (--size-chat-column), inside main's 16px (--space-4) gutters.
+  expect(notice?.width, 'notice width').toBeCloseTo(760, 0);
   expect(notice?.x, 'notice left edge').toBeCloseTo((main?.x ?? 0) + 16, 0);
 
   // The bootstrap custom properties are gone, and every property the stylesheet declares is documented or derived.
@@ -497,4 +511,39 @@ test('the server marks the current domain without JavaScript and respects path b
   } finally {
     await context.close();
   }
+});
+
+test('the brand link keeps its name and a 44px target at 320 and 360 pixels, in English and Spanish', async ({ page }) => {
+  const check = async (name: string) => {
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+      const brand = page.getByRole('link', { name, exact: true });
+      await expect(brand, name + ' at ' + width + 'px').toBeVisible();
+      const box = await brand.boundingBox();
+      expect(box?.width, name + ' width at ' + width + 'px').toBeGreaterThanOrEqual(44);
+      expect(box?.height, name + ' height at ' + width + 'px').toBeGreaterThanOrEqual(44);
+    }
+  };
+  await check('ORAN Open Resource Access Network');
+  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
+  await check('ORAN Red de Acceso a Recursos');
+});
+
+test('the consent row is set apart from the category options', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await enterAs(page, 'My profile');
+  await page.goto('/profile');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const options = page.getByRole('group', { name: 'Support categories', exact: true }).getByRole('checkbox');
+  expect(await options.count(), 'category options').toBeGreaterThan(1);
+  const row = async (index: number) => options.nth(index).locator('..').boundingBox();
+  const [first, second, last] = [await row(0), await row(1), await row(-1)];
+  const consent = await page.getByRole('checkbox', { name: /^I agree to store these preferences/ }).locator('..').boundingBox();
+  if (!first || !second || !last || !consent) throw new Error('A checkbox row has no box.');
+  // Options inside the group stay tight; the standalone consent row is one --space-4 (16px) below the last of them.
+  expect(second.y - (first.y + first.height), 'gap between two options').toBeLessThan(1);
+  expect(consent.y - (last.y + last.height), 'gap before the consent row').toBeGreaterThanOrEqual(16);
 });
