@@ -90,11 +90,11 @@ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Ro
 
 | Token | Size / line height | Use | Mockup sizes merged |
 |---|---|---|---|
-| `--font-size-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
-| `--font-size-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
-| `--font-size-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
-| `--font-size-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
-| `--font-size-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
+| `--font-size-xs` / `--line-height-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
+| `--font-size-sm` / `--line-height-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
+| `--font-size-md` / `--line-height-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
+| `--font-size-lg` / `--line-height-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
+| `--font-size-xl` / `--line-height-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
 
 - That is five steps. A sixth step is reserved and needs approval.
 - Body text and all inputs use 16px. Inputs under 16px make iOS zoom on focus.
@@ -111,7 +111,7 @@ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Ro
 - **Shadow:** `--shadow-1` `0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05)` for cards and grouped lists on `--color-bg`, raised buttons, the composer and the switch thumb. `--shadow-2` `0 4px 14px rgba(28,39,51,.16)` for controls over the map, the drawer and the bottom sheet, with the offset pointing away from the attached edge. Bars use a 1px `--color-border` hairline instead; cards on white use a 1px `--color-border` border and no shadow.
 - **Focus:** `:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px }` on every interactive element. Never remove it without an equal replacement. The offset keeps the ring visible around teal fills. Use `:focus-within` on the composer pill.
 - **Motion:** `--motion-fast` 120ms (hover, press), `--motion-base` 200ms (drawer, sheet, toast), `--motion-easing` `cubic-bezier(.2, 0, 0, 1)`. Under `prefers-reduced-motion: reduce`, transitions are instant, nothing slides or scales, scrolling is not smooth and skeleton shimmer is off. Never use fake typing, bouncing, auto-playing animation or pulsing crisis content.
-- **Layers:** bars 10, map overlays 20, sheet 30, drawer and scrim 40, dialog 50, toast 60.
+- **Layers:** bars `--layer-bar` 10, map overlays `--layer-map-overlay` 20, sheet `--layer-sheet` 30, drawer and scrim `--layer-drawer` 40, dialog `--layer-dialog` 50, toast `--layer-toast` 60.
 
 ## 4. Layout
 
@@ -333,7 +333,7 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
 
 ## 10. Implementation notes
 
-- Tokens become CSS custom properties in `src/app/globals.css` in a later UI PR. The current development styles there (`--ink`, `--accent`, Arial) are bootstrap-only and will be replaced. This document changes no code.
+- Tokens are CSS custom properties in the `:root` block of `src/app/globals.css`; `tests/browser/design-system.spec.ts` keeps them in step with §3.
 - **Framework-agnostic.** Components are specified as semantic HTML plus tokens. The Tailwind and Radix choice is open under D6; whichever is chosen must consume these tokens, and lint must block raw colors, sizes and off-scale spacing.
 - **Icons.** Inline SVG on a 24×24 viewBox, `fill="none"`, `stroke="currentColor"`, stroke 1.8 (default) to 2.1 (active or small), round caps and joins, `aria-hidden="true"`, with the name on the control. Lucide style; no icon fonts.
 - **Fonts.** Self-host Figtree (SIL OFL 1.1). The mockups load Google Fonts; production must not, so seeker IP addresses are not sent to a third party.

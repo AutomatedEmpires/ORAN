@@ -17,14 +17,15 @@ The target blueprint is implemented incrementally under ADR-0003. The developmen
 | eslint, eslint-config-next | Framework, React, accessibility and TypeScript checks |
 | vitest | Domain/data tests added with the resource workflow |
 | @playwright/test, @axe-core/playwright | Browser workflow and accessibility verification; development only |
+| @fontsource/figtree | Self-hosted Figtree (SIL OFL 1.1): Latin files for weights 400, 600, 700 and 800, bundled at build; no runtime third-party font requests |
 
-Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. System fonts avoid build-time font downloads. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
+Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. Figtree is self-hosted from the pinned @fontsource/figtree package (Latin, four weights, font-display: swap), so neither the build nor the browser contacts a font service. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
 
 ## Current routes and checks
 
 Public / exposes current checked resources or an honest empty/outage state. /profile requires identity and accesses only that user's preferences. /organization and /resources/[id]/edit require scoped organization/admin control. /community requires approved geographic/category membership for verification; /admin requires the database admin role, and category creation there is admin-only. Server actions independently authenticate and recheck authorization inside the catalog services. Resource creation, edits, category creation, approval, verification and profile deletion refresh affected views. No role or profile-user ID is trusted from form input.
 
-Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. PR check results are authoritative for each commit. No production deployment is configured.
+Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. PR check results are authoritative for each commit. No production deployment is configured.
 
 ## Identity and route contract
 
