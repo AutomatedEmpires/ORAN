@@ -2,15 +2,21 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { Button, buttonClassName } from '@/ui/button';
 import { catalogAllowed } from '../guard';
 
 export const dynamic = 'force-dynamic';
 const metadata: Metadata = { title: 'Component catalog', robots: { index: false, follow: false } };
 
+// The one place that asks the guard, for this request's environment and host. The page and its metadata both use it.
+async function allowed(): Promise<boolean> {
+  return catalogAllowed(process.env, (await headers()).get('host'));
+}
+
 // Metadata is still rendered when the page then calls notFound(), so the title and robots tag are given only to an
 // allowed request. A denied request gets the not-found page with Next's own noindex, as an unknown route would.
 export async function generateMetadata(): Promise<Metadata> {
-  return catalogAllowed(process.env, (await headers()).get('host')) ? metadata : {};
+  return (await allowed()) ? metadata : {};
 }
 
 // The §3.1 colors of docs/DESIGN_SYSTEM.md, in table order. The browser spec compares this list with the document.
@@ -24,21 +30,40 @@ const colors = [
 
 const sizes = [['xs', '12px', '16px'], ['sm', '14px', '20px'], ['md', '16px', '24px'], ['lg', '18px', '24px'], ['xl', '24px', '30px']] as const;
 const weights = ['regular', 'semibold', 'bold', 'heavy'] as const;
+const buttons = [['Primary', 'primary'], ['Secondary', 'secondary'], ['Quiet', 'quiet'], ['Destructive', 'destructive'], ['Destructive confirm', 'destructive-confirm']] as const;
 
 export default async function ComponentCatalog() {
-  if (!catalogAllowed(process.env, (await headers()).get('host'))) notFound();
+  if (!(await allowed())) notFound();
   return <section lang="en" aria-labelledby="catalog-title">
     <h1 id="catalog-title">Component catalog</h1>
     <p className="small">Development only. This page is not available in production or preview.</p>
 
     <h2 id="catalog-colors">Color tokens</h2>
-    <ul className="catalog-swatches" aria-labelledby="catalog-colors">
+    <ul className="catalog-swatches" role="list" aria-labelledby="catalog-colors">
       {colors.map((name) => <li key={name}><span className="catalog-swatch" aria-hidden="true" style={{ background: `var(${name})` }} /><code>{name}</code></li>)}
     </ul>
 
     <h2>Typography</h2>
     {sizes.map(([step, size, lineHeight]) => <p key={step} style={{ fontSize: `var(--font-size-${step})`, lineHeight: `var(--line-height-${step})` }}>{`Size ${step}: ${size}/${lineHeight}`}</p>)}
     {weights.map((name) => <p key={name} style={{ fontWeight: `var(--font-weight-${name})` }}>{`Weight ${name}`}</p>)}
+
+    <section id="buttons" aria-labelledby="catalog-buttons">
+      <h2 id="catalog-buttons">Buttons</h2>
+      <form action="/dev/components">
+        <input type="hidden" name="submitted" value="1" />
+        {buttons.map(([label, variant]) => <section key={variant} aria-labelledby={`catalog-buttons-${variant}`}>
+          <h3 id={`catalog-buttons-${variant}`}>{label}</h3>
+          <div className="catalog-row">
+            <Button variant={variant}>{label}</Button>
+            <Button variant={variant} size="large">{label + ' large'}</Button>
+            <Button variant={variant} size="compact">{label + ' compact'}</Button>
+            <Button variant={variant} disabled>{label + ' disabled'}</Button>
+            <Button variant={variant} busy>{label + ' busy'}</Button>
+          </div>
+        </section>)}
+        <div className="catalog-row"><a className={buttonClassName('secondary')} href="#buttons">Secondary link</a></div>
+      </form>
+    </section>
 
     <h2>Form controls</h2>
     <form action="/dev/components">
