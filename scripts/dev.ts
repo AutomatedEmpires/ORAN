@@ -9,7 +9,7 @@ if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw new Error
 if (process.env.DATABASE_URL || process.env.ORAN_ENV === 'production' || process.env.ORAN_ENV === 'preview') throw new Error('Use dev:remote for an explicitly configured remote environment');
 const test = process.argv.includes('--test'), port = test ? 3100 : 3000;
 if (!test) await mkdir('.local', { recursive: true });
-const local = await localDatabase(test ? undefined : '.local/postgres');
+const local = await localDatabase(test ? undefined : '.local/postgres', test ? 3101 : 0);
 Object.assign(process.env, { DATABASE_URL: local.url, ORAN_LOCAL_DEV: '1', ORAN_TEST_RUN: test ? '1' : '0', ORAN_ENV: 'development', ORAN_SESSION_SECRET: randomBytes(32).toString('hex'), ORAN_APP_ORIGIN: 'http://127.0.0.1:' + port });
 await migrate(local.url);
 await seed();

@@ -4,15 +4,19 @@ import { acceptResource,addCategory,verifyResource } from '@/modules/catalog';
 import { approveContributor } from '@/modules/community';
 import { saveProfile,deleteProfile } from '@/modules/profiles';
 import { requireActor } from '@/server/session';
+import { fieldLabel,listingFromForm } from '@/server/listing-form';
 import { messages } from '@/server/language';
 export type ActionState={message:string;ok?:boolean};
 const values=(form:FormData,names:string[])=>Object.fromEntries(names.map(n=>[n,String(form.get(n)??'')]));
 function refresh(){for(const path of ['/','/admin','/organization','/community','/profile'])revalidatePath(path);}
 export async function resourceAction(_:ActionState,form:FormData):Promise<ActionState>{
- const actor=await requireActor(),{text:t}=await messages(),organization_id=String(form.get('organization_id')??'');
- // Leave the field out when no organization was chosen: an empty string is not a valid id. Until the form sends a service area (PR 2c), its one ZIP field is a ZIP area.
- try {await acceptResource(actor.user_id,{...values(form,['name','description','organization_name','eligibility_description','application_process','url','source_type','source_url','source_note']),service_area:{kind:'zip',postal_codes:[String(form.get('postal_code')??'')]},...(organization_id?{organization_id}:{}),categories:form.getAll('categories').map(String)},String(form.get('id')??'')||undefined);refresh();return {message:t.saved,ok:true};}
- catch{return {message:t.invalid};}
+ const actor=await requireActor(),{text:t}=await messages();
+ try {await acceptResource(actor.user_id,listingFromForm(form),String(form.get('id')??'')||undefined);refresh();return {message:t.saved,ok:true};}
+ catch(error){
+  // Name the first field the server rejected, numbering a location as the form does; any other failure keeps the general message.
+  const field=fieldLabel(error,form);
+  return {message:field?t.invalidField.replace('{field}',field.key==='locationN'?t.locationN.replace('{n}',String(field.n)):t[field.key]):t.invalid};
+ }
 }
 export async function addCategoryAction(_:ActionState,form:FormData):Promise<ActionState>{
  const actor=await requireActor(),{text:t}=await messages();

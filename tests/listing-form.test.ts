@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe,it,expect } from 'vitest';
 import { resourceInput } from '@/modules/catalog';
-import { listingFromForm } from '@/server/listing-form';
+import { fieldLabel,listingFromForm } from '@/server/listing-form';
 // Pure value tests: no database. The parser reads the posted form into the input resourceInput validates; resourceInput stays the authority.
 const form=(entries:[string,string][])=>{const data=new FormData();for(const [name,value] of entries)data.append(name,value);return data;};
 const scalars={name:'Synthetic food program',description:'Synthetic test record, not a real assistance resource.',organization_name:'Synthetic test organization',url:'https://example.org',eligibility_description:'Contact the provider about requirements',application_process:'Contact the provider',source_type:'url',source_url:'https://example.org/listing',source_note:'Synthetic test fixture, permitted for tests only'};
@@ -143,5 +143,39 @@ describe('listing form parsing',()=>{
   expect(fresh).not.toHaveProperty('id');
   const [kept]=listingFromForm(form([...base,...remote(0),['location_0_id',locationId]])).locations as object[];
   expect(kept).toHaveProperty('id',locationId);
+ });
+ it('names the first invalid field of a rejected listing',()=>{
+  const valid={...scalars,categories:['food'],service_area:{kind:'nationwide'}};
+  const label=(input:Record<string,unknown>,form?:FormData)=>fieldLabel(resourceInput.safeParse(input).error,form);
+  expect(resourceInput.safeParse(valid).success).toBe(true);
+  expect(label({...valid,phones:[{number:'555',extension:null}]})).toEqual({key:'phoneNumber'});
+  expect(label({...valid,locations:[{access:'remote'},{access:'physical'}]})).toEqual({key:'locationN',n:2});
+  expect(fieldLabel(new Error('Access denied'))).toBeNull();
+  expect(fieldLabel(undefined)).toBeNull();
+  // Every top-level field the form shows maps to the label the person sees.
+  const cases:[Record<string,unknown>,string][]=[
+   [{name:''},'name'],[{organization_name:''},'organizationName'],[{organization_id:'not-an-id'},'organizationName'],[{description:''},'description'],[{categories:[]},'categories'],
+   [{url:'ftp://example.org'},'website'],[{eligibility_description:''},'eligibility'],[{application_process:''},'intake'],[{source_type:'rumor'},'sourceType'],[{source_url:'ftp://example.org/listing'},'sourceUrl'],[{source_note:''},'source'],
+   [{service_area:{kind:'zip',postal_codes:[]}},'serviceArea'],[{phones:[{number:'988',extension:0}]},'phoneNumber'],[{hours:{kind:'weekly',time_zone:'Mars/Olympus',weekly:[],exceptions:[]}},'hours'],
+  ];
+  for(const [change,key] of cases)expect(label({...valid,...change}),key).toEqual({key});
+  // A rule that is not about one location (each location listed once) names no location.
+  const repeated=randomUUID();
+  expect(label({...valid,locations:[{id:repeated,access:'remote'},{id:repeated,access:'remote'}]})).toBeNull();
+  // Given the form, a location is numbered as the form shows it: a removed slot before it still counts.
+  const posted=form([...base,['hours_kind','unknown'],['location_0_id',locationId],['location_0_access','remote'],['location_0_remove','on'],['location_1_access','physical']]);
+  expect(label(listingFromForm(posted))).toEqual({key:'locationN',n:1});
+  expect(label(listingFromForm(posted),posted)).toEqual({key:'locationN',n:2});
+ });
+ it('reads every rule a day has, in order',()=>{
+  const weekly=(entries:[string,string][])=>(listingFromForm(form([...base,['hours_kind','weekly'],['hours_time_zone','America/Los_Angeles'],...entries])).hours as {weekly:unknown[]}).weekly;
+  // A day with a lunch break has two rules; the edit form shows one row per stored rule, so none is dropped.
+  expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_opens','13:00'],['hours_MO_closes','17:00'],['hours_TU_opens','10:00'],['hours_TU_closes','14:00']])).toEqual([
+   {day:'MO',opens_at:'09:00',closes_at:'12:00'},{day:'MO',opens_at:'13:00',closes_at:'17:00'},{day:'TU',opens_at:'10:00',closes_at:'14:00'},
+  ]);
+  // A blank row is skipped; a half-filled one, or a lone time without its pair, is sent so the validator rejects it.
+  expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_opens',''],['hours_MO_closes','']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'}]);
+  expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_opens','13:00'],['hours_MO_closes','']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'},{day:'MO',opens_at:'13:00',closes_at:''}]);
+  expect(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','12:00'],['hours_MO_closes','17:00']])).toEqual([{day:'MO',opens_at:'09:00',closes_at:'12:00'},{day:'MO',opens_at:'',closes_at:'17:00'}]);
  });
 });
