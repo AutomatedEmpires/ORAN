@@ -40,6 +40,26 @@ export async function enterAs(page: Page, identity: 'Admin' | 'Organization' | '
   await page.waitForURL((url) => !url.href.includes('/sign-in'));
 }
 
+// On /profile, in English: saves ZIP 98101 and exactly the categories with these labels as the person's needs, and waits for the save.
+// The checkboxes are read from the page, so a label that the page does not offer fails here instead of being skipped.
+export async function saveNeeds(page: Page, labels: readonly string[]): Promise<void> {
+  const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'Save', exact: true }) });
+  await form.getByLabel('Service ZIP code', { exact: true }).fill('98101');
+  const group = form.getByRole('group', { name: 'Support categories', exact: true });
+  const offered = (await group.locator('label').allInnerTexts()).map((text) => text.trim());
+  const missing = labels.filter((label) => !offered.includes(label));
+  if (missing.length) throw new Error('The profile form offers no category named ' + missing.join(', ') + '. It offers: ' + offered.join(', ') + '.');
+  for (const label of offered) await group.getByRole('checkbox', { name: label, exact: true }).setChecked(labels.includes(label));
+  const consent = form.getByRole('checkbox', { name: 'I agree to store these preferences for personalized matching.', exact: true });
+  await consent.check();
+  const saved = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/profile');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await saved;
+  // The form is rebuilt from the saved profile, which clears the consent box. Waiting for that keeps the next call from filling a form that is about to be replaced.
+  await expect(consent).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Delete my saved preferences', exact: true })).toBeVisible();
+}
+
 export async function readTokens(page: Page, names: Iterable<string>): Promise<Map<string, string>> {
   const list = [...names];
   const values = await page.evaluate(

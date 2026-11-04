@@ -1,10 +1,13 @@
-import { expect, type Page } from '@playwright/test';
-import { accessible, fitsWidth, focusByKeyboard, hydrated, ring, test } from './support';
+import { randomUUID } from 'node:crypto';
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { accessible, enterAs, fitsWidth, focusByKeyboard, hydrated, ring, saveNeeds, test } from './support';
 
 const exitName = 'Quick exit to a neutral website';
 const exitLink = (page: Page) => page.getByRole('banner').getByRole('link', { name: exitName, exact: true, includeHidden: true });
 
-type Visit = { referer: string | undefined; hidden: boolean | null };
+// What a visit records instead of a flag when the browser has no Navigation API, so the failure names its cause.
+const noNavigationApi = 'window.navigation is missing, so the hidden check cannot run';
+type Visit = { referer: string | undefined; hidden: boolean | string | null };
 
 // Stands in for the neutral site, so no run contacts the real host. For every request it records the Referer header and
 // whether the ORAN page was hidden at the moment it started to leave (null without JavaScript, where nothing can hide it).
@@ -17,25 +20,31 @@ type Visit = { referer: string | undefined; hidden: boolean | null };
 // later than that (after the call, after a timer, after weather.gov answers) is recorded as not hidden. It sends the value
 // through a binding, which is a one-way message that is still delivered. The handler holds the response until that report
 // arrives (or two seconds pass), only to absorb the order in which the report and the request reach this side.
+// A browser without the Navigation API would never report. Each document then reports the noNavigationApi sentinel when it starts,
+// so the visit carries that cause and the strict comparison fails with it, instead of with an unexplained null.
 async function neutralSite(page: Page, scripted: boolean): Promise<Visit[]> {
   const visits: Visit[] = [];
-  let reported: boolean | null = null;
+  let reported: boolean | string | null = null;
   let wake: (() => void) | undefined;
   if (scripted) {
-    await page.exposeFunction('oranBodyHidden', (hidden: boolean) => {
+    await page.exposeFunction('oranBodyHidden', (hidden: boolean | string) => {
       reported = hidden;
       wake?.();
     });
-    await page.addInitScript(() => {
+    await page.addInitScript((missing: string) => {
       // The installed TypeScript DOM library does not describe the Navigation API yet.
       const scope = window as unknown as {
-        oranBodyHidden(hidden: boolean): void;
+        oranBodyHidden(hidden: boolean | string): void;
         navigation?: { addEventListener(type: 'navigate', listener: (event: { destination: { url: string } }) => void): void };
       };
-      scope.navigation?.addEventListener('navigate', (event) => {
+      if (!('navigation' in window) || !scope.navigation) {
+        scope.oranBodyHidden(missing);
+        return;
+      }
+      scope.navigation.addEventListener('navigate', (event) => {
         if (new URL(event.destination.url).hostname === 'www.weather.gov') scope.oranBodyHidden(document.body.hidden);
       });
-    });
+    }, noNavigationApi);
   }
   await page.context().route(/^https:\/\/www\.weather\.gov\//, async (route) => {
     if (scripted && reported === null) await new Promise<void>((resolve) => { wake = resolve; setTimeout(resolve, 2000); });
@@ -47,9 +56,36 @@ async function neutralSite(page: Page, scripted: boolean): Promise<Visit[]> {
   return visits;
 }
 
+// Counts the capture listeners for keydown that window holds right now and whose code names Escape. React hydrating the Exit link is
+// not enough to press Esc: the shortcut is added by an effect after hydration, and a key pressed before it is a press nobody sees.
+// The wrapper sits on EventTarget, installed before any page script, and adds nothing to the product.
+async function watchEscapeListener(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const live = new Set<unknown>();
+    (window as unknown as { oranEscapeListeners(): number }).oranEscapeListeners = () => live.size;
+    const add = EventTarget.prototype.addEventListener;
+    const remove = EventTarget.prototype.removeEventListener;
+    const captures = (options: unknown) => options === true || (typeof options === 'object' && options !== null && (options as AddEventListenerOptions).capture === true);
+    EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+      if (this === window && type === 'keydown' && captures(options) && String(listener).includes('Escape')) live.add(listener);
+      return add.call(this, type, listener, options);
+    };
+    EventTarget.prototype.removeEventListener = function (this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions) {
+      if (this === window && type === 'keydown' && captures(options)) live.delete(listener);
+      return remove.call(this, type, listener, options);
+    };
+  });
+}
+
+// Waits until the Esc shortcut is on window. Call it before any Esc press.
+async function shortcutInstalled(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => (window as unknown as { oranEscapeListeners(): number }).oranEscapeListeners()), { message: 'the Esc shortcut is installed on window' }).toBeGreaterThan(0);
+}
+
 let visits: Visit[] = [];
 test.beforeEach(async ({ page, javaScriptEnabled }) => {
   visits = await neutralSite(page, javaScriptEnabled);
+  if (javaScriptEnabled) await watchEscapeListener(page);
 });
 
 test('Exit is a 44px neutral link on the right of the top bar on Safety results', async ({ page }) => {
@@ -147,44 +183,70 @@ test('clicking Exit replaces the page and hides it at once', async ({ page }) =>
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test('a middle click on Exit leaves in this tab and opens no other', async ({ page, context }) => {
-  const opened: Page[] = [];
-  context.on('page', (other) => opened.push(other));
+// Clicks Exit a given way and checks that it leaves in this tab and starts nothing else: no second tab or window, and no download.
+// Two checks, because neither covers every way: Chromium opens a stray tab late, after the page has left, so a check made at once can pass
+// for the wrong reason; and under Playwright an Alt-click starts no download that can be seen, so only the link's own handler shows that it
+// cancelled the default action.
+async function clickLeaves(page: Page, context: BrowserContext, click: Parameters<Locator['click']>[0]): Promise<void> {
+  const strays: string[] = [];
+  context.on('page', () => strays.push('a second tab or window'));
+  page.on('download', () => strays.push('a download'));
   await page.goto('/dev/components');
   const exit = exitLink(page);
   await hydrated(exit);
-  await exit.click({ button: 'middle' });
+
+  // A window listener runs after React's handler, in the bubble phase, so it sees the cancel. The binding is a one-way message that
+  // reaches this side even though the page is leaving.
+  const prevented: boolean[] = [];
+  await page.exposeFunction('oranDefaultPrevented', (value: boolean) => { prevented.push(value); });
+  await page.evaluate(() => {
+    const scope = window as unknown as { oranDefaultPrevented(value: boolean): void };
+    for (const type of ['click', 'auxclick']) {
+      window.addEventListener(type, (event) => {
+        if (event.target instanceof Element && event.target.closest('a.quick-exit')) scope.oranDefaultPrevented(event.defaultPrevented);
+      });
+    }
+  });
+
+  await exit.click(click);
   await page.waitForURL('https://www.weather.gov/');
   expect(visits).toEqual([{ referer: undefined, hidden: true }]);
+  await expect.poll(() => prevented, { message: 'the link cancelled the default action of the click' }).toEqual([true]);
+
+  // The wait ends as soon as a tab or a download shows up, and is expected to run out.
+  await Promise.race([context.waitForEvent('page', { timeout: 1000 }), page.waitForEvent('download', { timeout: 1000 })]).catch(() => undefined);
+  expect(strays, 'what the click started besides the visit').toEqual([]);
   expect(context.pages()).toHaveLength(1);
-  expect(opened).toHaveLength(0);
+}
+
+test('a middle click on Exit leaves in this tab and opens no other', async ({ page, context }) => {
+  await clickLeaves(page, context, { button: 'middle' });
 });
 
 // The link's own click handler runs whatever keys are held, so a held key cannot turn the click into a new tab, a new window or a download.
 for (const modifier of ['Control', 'Shift', 'Alt'] as const) {
   test(`${modifier}-click on Exit still leaves in this tab and opens no other`, async ({ page, context }) => {
-    const opened: Page[] = [];
-    context.on('page', (other) => opened.push(other));
-    await page.goto('/dev/components');
-    const exit = exitLink(page);
-    await hydrated(exit);
-    await exit.click({ modifiers: [modifier] });
-    await page.waitForURL('https://www.weather.gov/');
-    expect(visits).toEqual([{ referer: undefined, hidden: true }]);
-    expect(context.pages()).toHaveLength(1);
-    expect(opened).toHaveLength(0);
+    await clickLeaves(page, context, { modifiers: [modifier] });
   });
 }
+
+const clockStart = new Date('2026-11-04T08:00:00Z');
 
 // Time is controlled with page.clock, never with real sleeps. The listener reads performance.now(), which the clock owns.
 // Installs the clock before the first visit, opens the paths in turn, waits for React, and freezes time an hour later.
 // Returns the address of the last page.
 async function frozenAt(page: Page, ...paths: string[]): Promise<string> {
-  await page.clock.install({ time: new Date('2026-11-04T08:00:00Z') });
+  await page.clock.install({ time: clockStart });
   for (const path of paths) await page.goto(path);
   await hydrated(exitLink(page));
-  await page.clock.pauseAt(new Date('2026-11-04T09:00:00Z'));
+  await freezeClock(page);
   return page.url();
+}
+
+// Stops time once the shortcut is installed, so two presses are exactly as far apart as the test says, however slow the machine is.
+async function freezeClock(page: Page): Promise<void> {
+  await shortcutInstalled(page);
+  await page.clock.pauseAt(new Date('2026-11-04T09:00:00Z'));
 }
 
 // The page is still shown, still at the same address, and the neutral site was never asked for.
@@ -270,6 +332,89 @@ test('the shortcut is off where Exit is hidden', async ({ page }) => {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await stayed(page, address);
+});
+
+test('Exit follows the saved Safety and Housing & shelter needs', async ({ page }) => {
+  await page.clock.install({ time: clockStart });
+  const exit = exitLink(page);
+  await enterAs(page, 'My profile');
+  await saveNeeds(page, ['Food']);
+  await expect(exit).toBeHidden();
+
+  // Safety results: Exit shows, and nothing in the title or the address names the category (§5.6). No crisis card appears (ADR-0007 §2).
+  await saveNeeds(page, ['Safety']);
+  await expect(exit).toBeVisible();
+  await expect(page).toHaveTitle('ORAN');
+  expect(new URL(page.url()).search).toBe('');
+  expect(page.url()).not.toMatch(/safety|housing|seguridad|vivienda/i);
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Get help now' })).toHaveCount(0);
+
+  // Client-side navigation keeps the layout, so the link and the shortcut stay mounted. Both must go quiet on a page that is not a result.
+  await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('link', { name: 'Organization', exact: true }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText('You do not have access to this workspace.');
+  await expect(exit).toBeHidden();
+  await expect(page).toHaveURL(/\/organization$/);
+  const address = page.url();
+  await freezeClock(page);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await stayed(page, address);
+  await page.clock.resume();
+
+  await page.goto('/profile');
+  await expect(exit).toBeVisible();
+  await saveNeeds(page, ['Food']);
+  await expect(exit).toBeHidden();
+  await saveNeeds(page, ['Housing & shelter']);
+  await expect(exit).toBeVisible();
+  await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
+  await expect(exit).toBeHidden();
+});
+
+// Publishes a Safety listing the way workflow.spec.ts publishes its first listing: an admin adds it, with a phone call as the source,
+// and records the verification that makes it public. Returns the listing's name.
+async function publishSafetyListing(page: Page): Promise<string> {
+  const name = 'Synthetic safety listing ' + randomUUID();
+  await enterAs(page, 'Admin');
+  await expect(page.getByRole('heading', { name: 'Add resource', exact: true })).toBeVisible();
+  await page.getByLabel('Resource name', { exact: true }).fill(name);
+  await page.getByLabel('Organization name', { exact: true }).fill('Synthetic browser organization');
+  await page.getByLabel('Service ZIP code', { exact: true }).fill('98101');
+  await page.getByLabel('Website', { exact: true }).fill('https://example.org');
+  await page.locator('form').filter({ has: page.getByLabel('Resource name', { exact: true }) }).getByRole('checkbox', { name: 'Safety', exact: true }).check();
+  await page.getByLabel('Description', { exact: true }).fill('Synthetic browser test listing, not a real assistance service.');
+  await page.getByLabel('Who may qualify', { exact: true }).fill('Contact the provider about requirements');
+  await page.getByLabel('How to get help', { exact: true }).fill('Contact the provider before visiting');
+  await page.getByRole('radio', { name: 'A phone call', exact: true }).check();
+  await page.getByLabel('Source and permission note', { exact: true }).fill('Synthetic browser fixture for testing only');
+  await page.getByRole('button', { name: 'Add resource', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved. This resource needs' })).toBeVisible();
+
+  const task = page.locator('article')
+    .filter({ has: page.getByRole('heading', { name, level: 3, exact: true }) })
+    .filter({ has: page.getByRole('button', { name: 'Record verification', exact: true }) });
+  await task.getByLabel('Method', { exact: true }).selectOption({ label: 'Phone call' });
+  await task.getByLabel('Evidence and source reference').fill('Synthetic evidence from a phone call used only in browser testing');
+  await task.getByLabel('Fields checked').fill('name, description, published eligibility and intake');
+  await task.getByRole('button', { name: 'Record verification', exact: true }).click();
+  await expect(task).toHaveCount(0);
+  return name;
+}
+
+test('Exit shows on the directory once it lists a Safety listing', async ({ page }) => {
+  const exit = exitLink(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(exit).toBeHidden();
+
+  const name = await publishSafetyListing(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+  await expect(exit).toBeVisible();
+  await expect(page).toHaveTitle('ORAN');
+  expect(page.url()).toBe('http://127.0.0.1:3100/');
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Get help now' })).toHaveCount(0);
+  await accessible(page);
 });
 
 test.describe('without JavaScript', () => {
