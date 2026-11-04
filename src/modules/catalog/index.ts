@@ -11,7 +11,7 @@ export { fieldKey, changedFields } from './assertions';
 export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
 export { usStates, usTimeZones, weekDays, listingOptions, partPatterns, partLimits, partMessages, normalizePhone, formatPhone, phoneValue, hoursValue, serviceAreaValue, addressValue, locationInput, areaRows } from './parts';
 export type { UsTimeZone, WeekDay, LocationAccess, ListingOptions, PhoneValue, HoursValue, ServiceAreaValue, AddressValue, LocationValue } from './parts';
-// listingParts stays inside the module: its 'editor' audience is unauthorized, so editableResource is the only exported read that returns a confidential address (D5).
+// listingParts stays inside the module: its editor audience is unauthorized, so editableResource is the only exported read that returns a confidential location's private fields (D5, S2-19).
 export type { ListingLocation, ListingParts } from './projection';
 export type Category = { code: string; label: string };
 export async function listCategories(locale:'en'|'es', db:Kysely<DB> = database()):Promise<Category[]> {
@@ -162,19 +162,19 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   return id;
  });
 }
-// Each row with its listing parts, as `audience` may see them.
-async function withParts<T extends {id:string}>(rows:T[], audience:'public'|'editor'):Promise<(T & ListingParts)[]> {
- const parts = await listingParts(database(),rows.map(r=>r.id),audience);
+// Each row with its listing parts as the public may see them; editableResource is the only editor read.
+async function withParts<T extends {id:string}>(rows:T[]):Promise<(T & ListingParts)[]> {
+ const parts = await listingParts(database(),rows.map(r=>r.id),{kind:'public'});
  return rows.map(r=>({...r,...parts.get(r.id)!}));
 }
-// Public discovery, resource cards and verification tasks are public reads: a confidential location's address and coordinates are never selected.
+// Public discovery, resource cards and verification tasks are public reads: a confidential location's address, coordinates and name are never selected.
 export async function publicResources(filters?:{postal_code:string;needs:readonly string[]}) {
  let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id')
  .select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.checked_at','l.next_review_due'])
  .select(eb=>[categoryCodes(eb),eb.selectFrom('verification_event as v').select('v.method').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('check_method'),eb.selectFrom('verification_event as v').select('v.fields_checked').whereRef('v.service_id','=','s.id').orderBy('v.observed_at','desc').orderBy('v.id','desc').limit(1).as('fields_checked')])
  .where('s.status','=','active').where('l.state','=','checked').where('l.next_review_due','>',new Date());
  if(filters){if(!filters.needs.length)return [];query=query.where(eb=>coversPostalCode(eb,'s.id',filters.postal_code)).where(eb=>hasCategory(eb,'s.id',filters.needs));}
- return withParts(await query.orderBy('s.name').limit(100).execute(),'public');
+ return withParts(await query.orderBy('s.name').limit(100).execute());
 }
 // The listings a user may edit: every listing for an admin and their organizations' listings for staff. Anyone else gets 'Access denied', and an invalid id gives none.
 async function editableRows(userId:string,resourceId?:string) {
@@ -186,15 +186,15 @@ async function editableRows(userId:string,resourceId?:string) {
  if(resourceId)query=query.where('s.id','=',resourceId);
  return query.orderBy('s.name').limit(100).execute();
 }
-// Editors' resource cards are public reads too; only editableResource returns a confidential location's address.
-export async function ownedResources(userId:string,resourceId?:string) {return withParts(await editableRows(userId,resourceId),'public');}
+// Editors' resource cards are public reads too; only editableResource returns a confidential location's private fields.
+export async function ownedResources(userId:string,resourceId?:string) {return withParts(await editableRows(userId,resourceId));}
 export async function ownedResource(userId:string,resourceId:string){return (await ownedResources(userId,resourceId))[0];}
 export type EditableResource = ListingParts & { id:string; organization_id:string; organization_name:string; name:string; description:string; url:string|null; eligibility_description:string; application_process:string; categories:string[] };
-// The edit view, authorized like ownedResource, and the only read that returns a confidential location's address and coordinates.
+// The edit view, authorized like ownedResource, and the only read that returns a confidential location's address, coordinates and name, for the listing's own organization's locations only.
 export async function editableResource(userId:string,serviceId:string):Promise<EditableResource|undefined> {
  const [row] = await editableRows(userId,serviceId);
  if (!row) return undefined;
- const parts = (await listingParts(database(),[row.id],'editor')).get(row.id)!;
+ const parts = (await listingParts(database(),[row.id],{kind:'editor',organization_id:row.organization_id})).get(row.id)!;
  return {id:row.id,organization_id:row.organization_id,organization_name:row.organization_name,name:row.name,description:row.description,url:row.url,eligibility_description:row.eligibility_description,application_process:row.application_process,categories:row.categories,...parts};
 }
 export async function verificationQueue(userId:string) {
@@ -207,7 +207,7 @@ export async function verificationQueue(userId:string) {
  }
  // Ownership is never independent verification, for admins too: hide every affiliated organization's work.
  if (affiliated.length) query = query.where('s.organization_id','not in',affiliated);
- return withParts(await query.orderBy('w.due_at').limit(100).execute(),'public');
+ return withParts(await query.orderBy('w.due_at').limit(100).execute());
 }
 export async function verifyResource(userId:string, serviceId:string, raw:unknown) {
  const input = z.object({revision_id:z.uuid(),method:z.enum(['phone','website','in_person']),evidence:z.string().trim().min(10).max(2000),fields_checked:z.string().trim().min(5).max(500)}).parse(raw);

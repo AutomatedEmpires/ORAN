@@ -1,10 +1,11 @@
-import { beforeAll,afterAll,describe,it,expect } from 'vitest';
+import { beforeAll,afterAll,describe,it,expect,vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { localDatabase } from '../scripts/local-database';
 import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
 import { listCategories,addCategory,acceptResource,publicResources,ownedResources,ownedResource,editableResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
+import { locationAssertions,type Audience } from '../src/modules/catalog/projection';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
@@ -339,29 +340,37 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  // The listings below are named to sort ahead of the 100 earlier "A synthetic filler" listings, so the unfiltered public read (capped at 100 rows) includes them.
  it('never returns a confidential address or coordinates from public, card or queue reads',async()=>{
   const secret={address_1:'77 Sealed Lane',address_2:'Unit 4B',city:'Seattle',state_province:'WA' as const,postal_code:'98199'};
-  const id=await acceptResource(user.admin,{...input,name:'A confidential safety listing',categories:['safety'],locations:[{access:'physical',address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}}]});
+  const id=await acceptResource(user.admin,{...input,name:'A confidential safety listing',categories:['safety'],locations:[{access:'physical',name:'Lantern House Magnolia',address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}}]});
   const queue=await verificationQueue(user.admin);
   expect(queue.some(r=>r.id===id)).toBe(true);
   const queued=JSON.stringify(queue);
   await verify(user.admin,id);
   const text=queued+JSON.stringify(await publicResources())+JSON.stringify(await publicResources({postal_code:'98101',needs:['safety']}))+JSON.stringify(await ownedResources(user.admin,id));
-  for(const leak of ['77 Sealed Lane','Unit 4B','98199','47.6512','-122.4011']) expect(text).not.toContain(leak);
+  for(const leak of ['77 Sealed Lane','Unit 4B','98199','47.6512','-122.4011','Lantern House Magnolia']) expect(text).not.toContain(leak);
   const hidden=[{id:expect.any(String),access:'physical',confidential:true,name:null,address:null,coordinates:null}];
   expect((await publicResources()).find(r=>r.id===id)?.locations).toEqual(hidden);
   expect((await publicResources({postal_code:'98101',needs:['safety']})).find(r=>r.id===id)?.locations).toEqual(hidden);
   expect((await ownedResources(user.admin,id))[0]?.locations).toEqual(hidden);
-  expect((await editableResource(user.admin,id))?.locations[0]).toMatchObject({address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}});
+  expect((await editableResource(user.admin,id))?.locations[0]).toMatchObject({name:'Lantern House Magnolia',address:secret,coordinates:{latitude:47.6512,longitude:-122.4011}});
  });
  it('returns a confidential address only to the listing\'s editors',async()=>{
-  const place={access:'physical' as const,confidential:true,address:{address_1:'88 Staff Only Road',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98107'}};
+  const place={access:'physical' as const,confidential:true,name:'Staff Only Annex',address:{address_1:'88 Staff Only Road',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98107'}};
   const id=await acceptResource(user.org,{...input,locations:[place]});
   expect(await editableResource(user.org,id)).toMatchObject({id,organization_id:fixtureOrg,organization_name:input.organization_name,name:input.name,categories:['food'],service_area:zip('98101'),phones:[],hours:null});
-  expect((await editableResource(user.org,id))?.locations).toEqual([{id:expect.any(String),access:'physical',confidential:true,name:null,address:place.address,coordinates:null}]);
+  expect((await editableResource(user.org,id))?.locations).toEqual([{id:expect.any(String),access:'physical',confidential:true,name:'Staff Only Annex',address:place.address,coordinates:null}]);
   // The same staff member's card read is a public read.
-  expect(JSON.stringify(await ownedResources(user.org,id))).not.toContain('88 Staff Only Road');
+  const card=JSON.stringify(await ownedResources(user.org,id));
+  for(const leak of ['88 Staff Only Road','Staff Only Annex']) expect(card).not.toContain(leak);
   expect(await editableResource(user.other,id)).toBeUndefined();
   expect(await editableResource(user.org,'invalid')).toBeUndefined();
   await expect(editableResource(user.seeker,id)).rejects.toThrow('Access denied');
+  // An approved verifier is not an editor (approved for 98101 by the earlier tests).
+  expect((await database().selectFrom('membership').select('approved').where('user_id','=',user.community).where('role','=','community').executeTakeFirstOrThrow()).approved).toBe(true);
+  await expect(editableResource(user.community,id)).rejects.toThrow('Access denied');
+  // Nor is pending staff of the listing's own organization.
+  const pending=(await database().insertInto('membership').values({user_id:user.seeker,role:'organization',organization_id:fixtureOrg,approved:false}).returning('id').executeTakeFirstOrThrow()).id;
+  try {await expect(editableResource(user.seeker,id)).rejects.toThrow('Access denied');}
+  finally {await database().deleteFrom('membership').where('id','=',pending).execute();}
  });
  it('covers every ZIP for a nationwide listing and only the listed ZIPs otherwise',async()=>{
   const nationwide=await acceptResource(user.admin,{...input,name:'A nationwide listing',service_area:{kind:'nationwide'}});
@@ -385,11 +394,11 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
  });
  // S2-17 and S2-13: public reads fail closed, so a location with no access row reads as confidential.
  it('treats a location without an access row as confidential',async()=>{
-  const place={access:'physical' as const,confidential:false,address:{address_1:'91 Unguarded Court',address_2:'Rear Gate 7',city:'Tacoma',state_province:'WA',postal_code:'98422'},coordinates:{latitude:47.2529,longitude:-122.4443}};
+  const place={access:'physical' as const,confidential:false,name:'Quillback Annex',address:{address_1:'91 Unguarded Court',address_2:'Rear Gate 7',city:'Tacoma',state_province:'WA',postal_code:'98422'},coordinates:{latitude:47.2529,longitude:-122.4443}};
   const id=await acceptResource(user.admin,{...input,name:'A missing access row listing',locations:[place]});
   const location=((await accepted(id,'locations')) as string[])[0];
   // With its access row the address is public, so the checks below are not vacuous.
-  expect((await ownedResources(user.admin,id))[0]?.locations[0]).toMatchObject({confidential:false,address:place.address,coordinates:place.coordinates});
+  expect((await ownedResources(user.admin,id))[0]?.locations[0]).toMatchObject({confidential:false,name:'Quillback Annex',address:place.address,coordinates:place.coordinates});
   const row=await database().selectFrom('location_access').selectAll().where('location_id','=',location).executeTakeFirstOrThrow();
   // Test-only damage: no application code deletes an access row.
   await sql`DELETE FROM oran.location_access WHERE location_id=${location}`.execute(database());
@@ -403,8 +412,65 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
    expect(matched.map(r=>r.locations)).toEqual([hidden]);
    expect(owned.map(r=>r.locations)).toEqual([hidden]);
    const text=JSON.stringify([queued,published,matched,owned]);
-   for(const leak of ['91 Unguarded Court','Rear Gate 7','Tacoma','98422','47.2529','-122.4443']) expect(text).not.toContain(leak);
+   for(const leak of ['91 Unguarded Court','Rear Gate 7','Tacoma','98422','47.2529','-122.4443','Quillback Annex']) expect(text).not.toContain(leak);
   } finally {await database().insertInto('location_access').values(row).execute();}
+ });
+ // The SQL layer on its own keeps private fields out of a public read; the JS layer is a second guard.
+ it('never selects a confidential location\'s private fields for a public read',async()=>{
+  const at=(address_1:string,postal_code:string)=>({address_1,address_2:null,city:'Seattle',state_province:'WA',postal_code});
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',confidential:true,name:'Heron Point Rooms',address:at('5 Heron Point Way','98126'),coordinates:{latitude:47.5301,longitude:-122.3802}},{access:'physical',confidential:false,name:'Open Door Hall',address:at('9 Open Door Street','98134'),coordinates:{latitude:47.5802,longitude:-122.3301}}]});
+  const [secret,open]=(await accepted(id,'locations')) as string[];
+  const organization=(await database().selectFrom('service').select('organization_id').where('id','=',id).executeTakeFirstOrThrow()).organization_id;
+  const paths=async(location:string,audience:Audience)=>(await locationAssertions(database(),[location],audience)).map(r=>r.field_path).sort();
+  const all=['access','address','confidential','coordinates','name'],bare=['access','confidential'];
+  // Controls: the listing's editors read every field of the confidential location, and the public every field of the open one.
+  expect(await paths(secret,{kind:'editor',organization_id:organization})).toEqual(all);
+  expect(await paths(open,{kind:'public'})).toEqual(all);
+  expect(await paths(secret,{kind:'public'})).toEqual(bare);
+  // An editor audience of another organization gets no private field either.
+  expect(await paths(secret,{kind:'editor',organization_id:fixtureOrg})).toEqual(bare);
+  const row=await database().selectFrom('location_access').selectAll().where('location_id','=',open).executeTakeFirstOrThrow();
+  // Test-only damage: no application code deletes an access row.
+  await sql`DELETE FROM oran.location_access WHERE location_id=${open}`.execute(database());
+  try {expect(await paths(open,{kind:'public'})).toEqual(bare);}
+  finally {await database().insertInto('location_access').values(row).execute();}
+ });
+ it('an editor read hides a listed location that belongs to another organization',async()=>{
+  const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',name:'Driftwood Rooms',address:{address_1:'23 Driftwood Lane',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98118'},coordinates:{latitude:47.5413,longitude:-122.2716}}]});
+  const location=((await accepted(id,'locations')) as string[])[0];
+  const owner=(await database().selectFrom('location').select('organization_id').where('id','=',location).executeTakeFirstOrThrow()).organization_id;
+  // Control: the editor reads the location while it belongs to the listing's organization.
+  expect((await editableResource(user.admin,id))?.locations[0]).toMatchObject({confidential:false,name:'Driftwood Rooms',address:{address_1:'23 Driftwood Lane'}});
+  // Test-only damage: no application code moves a location to another organization.
+  await database().updateTable('location').set({organization_id:fixtureOrg}).where('id','=',location).execute();
+  try {expect((await editableResource(user.admin,id))?.locations).toEqual([{id:location,access:'physical',confidential:true,name:null,address:null,coordinates:null}]);}
+  finally {await database().updateTable('location').set({organization_id:owner}).where('id','=',location).execute();}
+ });
+ it('a public read falls back closed on an unreadable stored part, and an editor read throws',async()=>{
+  const broken=await acceptResource(user.admin,{...input,name:'A broken parts listing',phones:[{number:'988',extension:null}],locations:[{access:'physical',name:'Ashgrove Wing',address:{address_1:'14 Ashgrove Terrace',address_2:null,city:'Seattle',state_province:'WA',postal_code:'98144'}},{access:'phone'}]});
+  const healthy=await acceptResource(user.admin,{...input,name:'A healthy parts listing',phones:[{number:'211',extension:null}]});
+  await verify(user.admin,broken);await verify(user.admin,healthy);
+  const [place,line]=(await accepted(broken,'locations')) as string[];
+  const write=(entity:string,path:string,value:unknown)=>database().updateTable('field_assertion').set({value:JSON.stringify(value)}).where('entity_id','=',entity).where('field_path','=',path).where('status','=','accepted').execute();
+  const damage:[string,string,unknown][]=[[broken,'phones',[{number:'not a phone',extension:null}]],[place,'address',{address_1:'14 Ashgrove Terrace'}],[line,'access','teleport']];
+  const saved=await Promise.all(damage.map(async([entity,path])=>(await database().selectFrom('field_assertion').select('value').where('entity_id','=',entity).where('field_path','=',path).where('status','=','accepted').executeTakeFirstOrThrow()).value));
+  const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  try {
+   // Test-only damage: values the part schemas reject, written past acceptance.
+   for(const [entity,path,value] of damage) await write(entity,path,value);
+   const rows=await publicResources();
+   expect(rows.find(r=>r.id===healthy)?.phones).toEqual([{number:'211',extension:null}]);
+   expect(rows.find(r=>r.id===broken)).toMatchObject({phones:[],locations:[{id:place,access:'physical',confidential:true,name:null,address:null,coordinates:null}]});
+   expect(JSON.stringify(rows)).not.toContain('Ashgrove');
+   // The log names the entity, never the value.
+   const logged=warn.mock.calls.map(c=>c.join(' '));
+   for(const entity of [broken,place,line]) expect(logged.some(l=>l.includes(entity))).toBe(true);
+   for(const value of ['not a phone','Ashgrove','teleport']) expect(logged.join('\n')).not.toContain(value);
+   await expect(editableResource(user.admin,broken)).rejects.toThrow('Use a US phone number');
+  } finally {
+   warn.mockRestore();
+   for(const [i,[entity,path]] of damage.entries()) await write(entity,path,saved[i]);
+  }
  });
 });
 

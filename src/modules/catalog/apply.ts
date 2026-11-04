@@ -23,8 +23,9 @@ function scalarColumns(fields: readonly FieldValue[], serviceId: string): Partia
  return columns;
 }
 // The ids of a `locations` value: a list of ids, or null for none.
+export const idListValue = z.array(z.uuid()).nullable();
 export function idList(value: JsonValue): string[] {
- return z.array(z.uuid()).nullable().parse(value) ?? [];
+ return idListValue.parse(value) ?? [];
 }
 export async function applyFields(trx: Kysely<DB>, listing: { service_id: string; organization_id: string; new_service: boolean; new_organization: boolean }, desired: readonly FieldValue[], changed: readonly FieldValue[]): Promise<void> {
  const id = listing.service_id;
