@@ -2,6 +2,8 @@ import { describe,it,expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { migrate } from '../scripts/database';
+import { closeDatabase } from '../src/modules/platform/index';
+import { acceptResource } from '../src/modules/catalog/index';
 import { disposableDatabase } from './support/disposable-database';
 async function withDatabase(fn:(client:Client,url:string)=>Promise<void>) {
  const db=await disposableDatabase(),client=new Client({connectionString:db.url});
@@ -84,6 +86,113 @@ describe('taxonomy migration',()=>{
    await migrate(url);
    const tax=(await client.query('SELECT id FROM oran.taxonomy LIMIT 1')).rows[0].id;
    await expect(client.query("INSERT INTO oran.taxonomy_term(id,taxonomy_id,code,name) VALUES ($1,$2,'Bad Code','Bad')",[randomUUID(),tax])).rejects.toThrow();
+  });
+ },120000);
+ it('turns legacy snapshots into revisions with per-field accepted assertions',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103100100_membership_organization_scope.sql'});
+   const o=randomUUID(),s=randomUUID(),r1=randomUUID(),r2=randomUUID();
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('legacy-verifier','Legacy verifier')");
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Legacy provider')",[o]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description,url,eligibility_description,application_process) VALUES ($1,$2,'Legacy pantry','Synthetic legacy listing',NULL,'Anyone nearby','Walk in during open hours')",[s,o]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'ZIP 98101','98101')",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.attribute(id,link_id,link_entity,link_type,taxonomy_term_id) SELECT $1,$2,'service','category',id FROM oran.taxonomy_term WHERE code='food'",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status,created_at) VALUES ($1,$2,'legacy-verifier','community',$3,'accepted',now()-interval '2 days')",[r1,s,'{"input":{"source_note":"First legacy note"}}']);
+   await client.query("INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status) VALUES ($1,$2,'legacy-verifier','community',$3,'accepted')",[r2,s,'{"input":{"source_note":"Legacy phone call note"},"previous":null}']);
+   await client.query("INSERT INTO oran.listing_state(service_id,created_by,revision_id,state,checked_at,next_review_due) VALUES ($1,'legacy-verifier',$2,'checked',now(),now()+interval '30 days')",[s,r2]);
+   await migrate(url);
+   expect((await client.query('SELECT id,origin FROM oran.revision ORDER BY created_at')).rows).toEqual([{id:r1,origin:'verifier'},{id:r2,origin:'verifier'}]);
+   expect((await client.query("SELECT legacy_snapshot #>> '{input,source_note}' AS note FROM oran.revision WHERE id=$1",[r2])).rows[0].note).toBe('Legacy phone call note');
+   expect((await client.query('SELECT revision_id,state FROM oran.listing_state WHERE service_id=$1',[s])).rows[0]).toEqual({revision_id:r2,state:'checked'});
+   const rows=(await client.query("SELECT field_path,value,status,origin,source_type,source_url,source_note,decided_by,revision_id FROM oran.field_assertion WHERE entity_type='service' AND entity_id=$1 ORDER BY field_path",[s])).rows;
+   expect(rows.map(r=>r.field_path)).toEqual(['application_process','categories','description','eligibility_description','name','service_area']);
+   expect(rows.find(r=>r.field_path==='categories').value).toEqual(['food']);
+   expect(rows.find(r=>r.field_path==='service_area').value).toEqual({kind:'zip',postal_codes:['98101']});
+   for(const r of rows) expect(r).toMatchObject({status:'accepted',origin:'verifier',source_type:'legacy',source_url:null,source_note:'Legacy phone call note',decided_by:'legacy-verifier',revision_id:r2});
+   expect((await client.query("SELECT field_path,value,revision_id FROM oran.field_assertion WHERE entity_type='organization' AND entity_id=$1",[o])).rows).toEqual([{field_path:'name',value:'Legacy provider',revision_id:r1}]);
+  });
+ },120000);
+ it('skips empty legacy values and links each organization name to its earliest revision',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103100100_membership_organization_scope.sql'});
+   const [oa,oidle,bare,sparse,mixed,early,mid,late]=Array.from({length:8},()=>randomUUID());
+   for(const u of ['legacy-admin','legacy-verifier','legacy-staff']) await client.query('INSERT INTO oran.account(user_id,display_name) VALUES ($1,$1)',[u]);
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Skip provider'),($2,'Idle provider')",[oa,oidle]);
+   // bare: empty text, a non-ZIP area and no listing_state. sparse: empty text, a non-ZIP area and no categories. mixed: one empty and one filled text, a url and a ZIP.
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$3,'Bare service','Bare description'),($2,$3,'Sparse service','Sparse description')",[bare,sparse,oa]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description,url,application_process) VALUES ($1,$2,'Mixed service','Mixed description','https://example.org/mixed','Call first')",[mixed,oa]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'United States','US'),($3,$4,'United States','US'),($5,$6,'ZIP 98102','98102')",[randomUUID(),bare,randomUUID(),sparse,randomUUID(),mixed]);
+   const revise=(id:string,service:string,actor:string,origin:string,note:string,ago:string)=>client.query(`INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status,created_at) VALUES ($1,$2,$3,$4,$5,'accepted',now()-interval '${ago}')`,[id,service,actor,origin,JSON.stringify({input:{source_note:note}})]);
+   await revise(early,bare,'legacy-admin','admin','Earliest note','3 days');
+   await revise(mid,mixed,'legacy-staff','organization','Middle note','1 day');
+   await revise(late,sparse,'legacy-verifier','community','Latest note','0 days');
+   for(const [s,r] of [[sparse,late],[mixed,mid]]) await client.query("INSERT INTO oran.listing_state(service_id,created_by,revision_id) VALUES ($1,'legacy-admin',$2)",[s,r]);
+   await migrate(url);
+   const paths=async(type:string,id:string)=>(await client.query('SELECT field_path FROM oran.field_assertion WHERE entity_type=$1 AND entity_id=$2 ORDER BY field_path',[type,id])).rows.map(x=>x.field_path);
+   expect(await paths('service',bare)).toEqual([]);
+   expect(await paths('service',sparse)).toEqual(['description','name']);
+   expect(await paths('service',mixed)).toEqual(['application_process','description','name','service_area','url']);
+   expect(await paths('organization',oidle)).toEqual([]);
+   const mixedRows=(await client.query("SELECT field_path,value,origin,source_note,decided_by,revision_id FROM oran.field_assertion WHERE entity_type='service' AND entity_id=$1 AND field_path IN ('url','service_area','application_process') ORDER BY field_path",[mixed])).rows;
+   expect(mixedRows.map(r=>r.value)).toEqual(['Call first',{kind:'zip',postal_codes:['98102']},'https://example.org/mixed']);
+   for(const r of mixedRows) expect(r).toMatchObject({origin:'organization',source_note:'Middle note',decided_by:'legacy-staff',revision_id:mid});
+   const org=(await client.query("SELECT f.value,f.revision_id,f.origin,f.source_type,f.source_note,f.decided_by,f.status,f.observed_at=r.created_at AS observed_at_revision,f.decided_at=r.created_at AS decided_at_revision FROM oran.field_assertion f JOIN oran.revision r ON r.id=f.revision_id WHERE f.entity_type='organization' AND f.entity_id=$1",[oa])).rows;
+   expect(org).toEqual([{value:'Skip provider',revision_id:early,origin:'admin',source_type:'legacy',source_note:'Earliest note',decided_by:'legacy-admin',status:'accepted',observed_at_revision:true,decided_at_revision:true}]);
+  });
+ },120000);
+ it('a backfilled legacy listing resubmitted unchanged records no assertions',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261103100100_membership_organization_scope.sql'});
+   const o=randomUUID(),s=randomUUID(),r=randomUUID();
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('legacy-admin','Legacy admin')");
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Legacy provider')",[o]);
+   // The values are exactly what the resource form submits when it prefills and re-saves this listing: a bare-host website stays as stored, and one ZIP code.
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description,url,eligibility_description,application_process) VALUES ($1,$2,'Legacy pantry','Synthetic legacy listing','https://example.org','Anyone nearby','Walk in during open hours')",[s,o]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'ZIP 98101','98101')",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.attribute(id,link_id,link_entity,link_type,taxonomy_term_id) SELECT $1,$2,'service','category',id FROM oran.taxonomy_term WHERE code='food'",[randomUUID(),s]);
+   await client.query("INSERT INTO oran.field_assertion(id,service_id,actor_id,origin,value,status) VALUES ($1,$2,'legacy-admin','admin',$3,'accepted')",[r,s,'{"input":{"source_note":"Legacy note"}}']);
+   await client.query("INSERT INTO oran.listing_state(service_id,created_by,revision_id,state,checked_at,next_review_due) VALUES ($1,'legacy-admin',$2,'checked',now(),now()+interval '30 days')",[s,r]);
+   await migrate(url);
+   await client.query("INSERT INTO oran.membership(user_id,role,approved) VALUES ('legacy-admin','admin',true)");
+   const saved={DATABASE_URL:process.env.DATABASE_URL,ORAN_ENV:process.env.ORAN_ENV,ORAN_DATABASE_HOST:process.env.ORAN_DATABASE_HOST};
+   process.env.DATABASE_URL=url;process.env.ORAN_ENV='test';process.env.ORAN_DATABASE_HOST=new URL(url).hostname;
+   try {
+    await closeDatabase();
+    await acceptResource('legacy-admin',{name:'Legacy pantry',description:'Synthetic legacy listing',organization_name:'Legacy provider',categories:['food'],postal_code:'98101',eligibility_description:'Anyone nearby',application_process:'Walk in during open hours',url:'https://example.org',source_type:'phone_call',source_url:'',source_note:'Resubmitted without changes'},s);
+   } finally {
+    await closeDatabase();
+    for(const [key,value] of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+   }
+   const state=(await client.query('SELECT revision_id,state FROM oran.listing_state WHERE service_id=$1',[s])).rows[0];
+   expect(state.revision_id).not.toBe(r);
+   expect(state.state).toBe('unreviewed');
+   expect((await client.query('SELECT id FROM oran.field_assertion WHERE revision_id=$1',[state.revision_id])).rows).toEqual([]);
+   const rows=(await client.query("SELECT DISTINCT status,revision_id FROM oran.field_assertion WHERE entity_id=$1",[s])).rows;
+   expect(rows).toEqual([{status:'accepted',revision_id:r}]);
+  });
+ },120000);
+ it('allows one accepted value per field and enforces decision and source shapes',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url);
+   const o=randomUUID(),s=randomUUID(),rev=randomUUID();
+   await client.query("INSERT INTO oran.account(user_id,display_name) VALUES ('shape-actor','Shape actor')");
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Shape org')",[o]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$2,'Shape service','Synthetic')",[s,o]);
+   await client.query("INSERT INTO oran.revision(id,service_id,actor_id,origin) VALUES ($1,$2,'shape-actor','admin')",[rev,s]);
+   const insert=(status:string,over:Record<string,unknown>={})=>{
+    const v={status,source_type:'phone_call',source_url:null,decided_by:status==='proposed'?null:'shape-actor',decided_at:status==='proposed'?null:new Date(),...over};
+    return client.query("INSERT INTO oran.field_assertion(id,revision_id,entity_type,entity_id,field_path,value,origin,source_type,source_url,observed_at,status,decided_by,decided_at) VALUES ($1,$2,'service',$3,'name','\"Shape service\"','admin',$4,$5,now(),$6,$7,$8)",[randomUUID(),rev,s,v.source_type,v.source_url,v.status,v.decided_by,v.decided_at]);
+   };
+   await insert('accepted');
+   await expect(insert('accepted')).rejects.toThrow('field_assertion_one_accepted');
+   await insert('superseded');
+   await insert('proposed');
+   await expect(insert('proposed',{decided_by:'shape-actor',decided_at:new Date()})).rejects.toThrow('field_assertion_decision_shape');
+   await expect(insert('superseded',{decided_by:null})).rejects.toThrow('field_assertion_decider_shape');
+   await expect(insert('superseded',{source_type:'url',source_url:null})).rejects.toThrow('field_assertion_source_shape');
+   await expect(insert('superseded',{source_type:'phone_call',source_url:'https://example.org/a'})).rejects.toThrow('field_assertion_source_shape');
+   await expect(insert('superseded',{source_type:'url',source_url:'ftp://example.org/a'})).rejects.toThrow('field_assertion_source_url_check');
+   await insert('superseded',{source_type:'url',source_url:'https://example.org/a'});
   });
  },120000);
  it('rejects a community membership scoped to an organization',async()=>{
