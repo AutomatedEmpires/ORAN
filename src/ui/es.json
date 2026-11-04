@@ -94,5 +94,10 @@
   "categoryExists": "Ese código de categoría ya existe.",
   "categoryCodeHint": "Letras minúsculas, números y guiones bajos, por ejemplo immigration.",
   "chooseAtLeastOne": "Elige al menos una.",
-  "chooseOrganization": "Organización"
+  "chooseOrganization": "Organización",
+  "sourceType": "De dónde viene esta información",
+  "sourceWebsite": "Un sitio web",
+  "sourcePhoneCall": "Una llamada telefónica",
+  "sourceOrganization": "La propia organización",
+  "sourceUrl": "Dirección web de la fuente"
 }

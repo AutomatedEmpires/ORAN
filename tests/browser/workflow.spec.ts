@@ -16,9 +16,14 @@ test('admin entry → approved scoped community verification → personalized di
  await page.getByLabel('Description',{exact:true}).fill('Synthetic browser test listing, not a real assistance service.');
  await page.getByLabel('Who may qualify',{exact:true}).fill('Contact the provider about requirements');
  await page.getByLabel('How to get help',{exact:true}).fill('Contact the provider before visiting');
+ await page.getByRole('radio',{name:'A website',exact:true}).check();
+ await page.getByLabel('Source web address',{exact:true}).fill('https://example.org/synthetic-source');
  await page.getByLabel('Source and permission note',{exact:true}).fill('Synthetic browser fixture for testing only');
  await page.getByRole('button',{name:'Add resource',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Saved. This resource needs'})).toBeVisible();
+ // The form resets after a save, and the source question resets with it.
+ await expect(page.getByRole('radio',{name:'A website',exact:true})).not.toBeChecked();
+ await expect(page.getByLabel('Source web address',{exact:true})).toHaveCount(0);
  await page.goto('/');
  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
  await page.goto('/admin');
@@ -69,6 +74,7 @@ test('organization staff maintain their own unpublished resources',async({page})
  await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Organization',exact:true}).click();
  await accessible(page);
  await expect(page.getByLabel('Organization name',{exact:true})).toHaveValue('Development organization');
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toBeChecked();
  await page.getByLabel('Resource name',{exact:true}).fill(name);
  await page.getByLabel('Service ZIP code',{exact:true}).fill('98101');
  await page.getByRole('checkbox',{name:'Food',exact:true}).check();
@@ -81,12 +87,37 @@ test('organization staff maintain their own unpublished resources',async({page})
  const card=page.locator('article').filter({has:page.getByRole('heading',{name,exact:true})});
  await card.getByRole('link',{name:'Edit resource',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Edit resource',exact:true})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toBeChecked();
  await page.getByLabel('Description',{exact:true}).fill('Updated synthetic organization fixture.');
  await page.getByLabel('Source and permission note',{exact:true}).fill('Updated synthetic source note for browser verification');
  await page.getByRole('button',{name:'Save',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Saved. This resource needs'})).toBeVisible();
  await page.goto('/organization');await expect(page.getByText('Updated synthetic organization fixture.',{exact:true})).toBeVisible();
  await page.goto('/');await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+});
+test('an admin who belongs to no organization has no source preselected',async({page})=>{
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
+ await page.goto('/organization');
+ await expect(page.getByRole('heading',{name:'Resources you maintain',exact:true})).toBeVisible();
+ for(const name of ['A website','A phone call'])await expect(page.getByRole('radio',{name,exact:true})).not.toBeChecked();
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toHaveCount(0);
+});
+test('the source question offers only answers the server accepts',async({page})=>{
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Admin',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add resource',exact:true})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toHaveCount(0);
+ const address=page.getByLabel('Source web address',{exact:true});
+ await expect(address).toHaveCount(0);
+ await page.getByRole('radio',{name:'A website',exact:true}).check();
+ await expect(address).toHaveAttribute('required','');
+ await accessible(page);
+ await page.getByRole('radio',{name:'A phone call',exact:true}).check();
+ await expect(address).toHaveCount(0);
+ await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as Organization',exact:true}).click();
+ await expect(page.getByLabel('Organization name',{exact:true})).toHaveValue('Development organization');
+ await expect(page.getByRole('radio',{name:'The organization itself',exact:true})).toBeChecked();
+ await expect(address).toHaveCount(0);
 });
 test('a signed-in user with no memberships is denied staff workspaces',async({page})=>{
  await page.goto('/sign-in');await page.getByRole('button',{name:'Enter as My profile',exact:true}).click();

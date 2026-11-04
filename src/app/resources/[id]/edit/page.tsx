@@ -8,5 +8,5 @@ export default async function Edit({params}:{params:Promise<{id:string}>}){
  const actor=await requireActor(),{text:t,locale}=await messages();
  if(!isAdmin(actor)&&!organizationIds(actor).length) return <p role="alert">{t.denied}</p>;
  const {id}=await params,resource=await ownedResource(actor.user_id,id);if(!resource)notFound();
- return <section><h1>{t.edit}</h1><ResourceForm categories={await listCategories(locale)} resource={resource}/></section>;
+ return <section><h1>{t.edit}</h1><ResourceForm categories={await listCategories(locale)} resource={resource} defaultSource={organizationIds(actor).includes(resource.organization_id)?'organization':undefined}/></section>;
 }

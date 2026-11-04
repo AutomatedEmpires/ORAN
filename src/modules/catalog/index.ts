@@ -3,6 +3,10 @@ import { sql,type Kysely,type ExpressionBuilder } from 'kysely';
 import { z } from 'zod';
 import { database, lockCatalog, type DB } from '@/modules/platform';
 import { actorFor, affiliatedOrganizationIds, canCreate, isAdmin, organizationIds, verifierScope } from '@/modules/identity';
+import { acceptedValues, changedFields, recordRevision, type FieldValue, type JsonValue, type Origin } from './assertions';
+import { applyFields } from './apply';
+export { fieldKey, changedFields } from './assertions';
+export type { JsonValue, EntityType, Origin, Source, FieldValue } from './assertions';
 export type Category = { code: string; label: string };
 export async function listCategories(locale:'en'|'es', db:Kysely<DB> = database()):Promise<Category[]> {
  const rows = await db.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select(['t.code','d.label_en','d.label_es']).orderBy('d.sort_order').execute();
@@ -44,20 +48,37 @@ export async function serviceHasCategory(db:Kysely<DB>, serviceId:string, codes:
  return !!(await categoryAttributes(db as never,codes).select('at.id').where('at.link_id','=',serviceId).executeTakeFirst());
 }
 const categoryCodes = (eb:AnyBuilder) => eb.fn.coalesce(eb.selectFrom('attribute as at').innerJoin('taxonomy_term as tt','tt.id','at.taxonomy_term_id').innerJoin('category_display as cd','cd.term_id','tt.id').select(sql<string[]>`COALESCE(array_agg(tt.code ORDER BY cd.sort_order),'{}')`.as('codes')).whereRef('at.link_id','=','s.id').where('at.link_entity','=','service').where('at.link_type','=','category'),sql<string[]>`'{}'::text[]`).as('categories');
-const optionalUrl = z.union([z.literal(''),z.url().refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address')]);
+// A web address as typed, kept as is when it already starts with a lower-case http(s):// and otherwise written out in full (`Https://x`, `https:/x` and `http:x` all become `https://x/`), so the database check on source addresses always holds.
+const optionalUrl = z.union([z.literal(''),z.url().max(500).refine(v=>['https:','http:'].includes(new URL(v).protocol),'Use an HTTP or HTTPS address').transform(v=>/^https?:\/\//.test(v)?v:new URL(v).href)]);
 export const resourceInput = z.object({
  name:z.string().trim().min(3).max(150), description:z.string().trim().min(10).max(3000),
  organization_name:z.string().trim().min(2).max(150), organization_id:z.uuid().optional(), categories:categoryCodeList,
  postal_code:z.string().regex(/^[0-9]{5}$/, 'Use a five-digit ZIP code'),
  eligibility_description:z.string().trim().min(3).max(2000), application_process:z.string().trim().min(3).max(2000),
- url:optionalUrl, source_note:z.string().trim().min(10).max(2000),
-}).strict();
+ url:optionalUrl, source_type:z.enum(['url','phone_call','organization']), source_url:optionalUrl, source_note:z.string().trim().min(10).max(2000),
+}).strict().superRefine((v,ctx)=>{
+ if ((v.source_type === 'url') !== (v.source_url !== '')) ctx.addIssue({code:'custom',path:['source_url'],message:'Give a source web address only for a website source'});
+});
+type ResourceInput = z.infer<typeof resourceInput>;
+// The facts a submission states. `codes` are the listing's categories in display order.
+function listingFields(input:ResourceInput, ids:{service_id:string;organization_id:string;new_organization:boolean}, codes:string[]):FieldValue[] {
+ const service = (field_path:string, value:JsonValue):FieldValue => ({entity_type:'service',entity_id:ids.service_id,field_path,value});
+ return [
+  service('name',input.name), service('description',input.description), service('url',input.url || null),
+  service('eligibility_description',input.eligibility_description), service('application_process',input.application_process),
+  service('categories',codes), service('service_area',{kind:'zip',postal_codes:[input.postal_code]}),
+  ...(ids.new_organization ? [{entity_type:'organization' as const,entity_id:ids.organization_id,field_path:'name',value:input.organization_name}] : []),
+ ];
+}
+const origins = {organization:'organization',admin:'admin',community:'verifier'} as const satisfies Record<string,Origin>;
 export async function acceptResource(userId:string, raw:unknown, existingId?:string) {
  const input = resourceInput.parse(raw);
  return database().transaction().execute(async trx=>{
   await lockCatalog(trx);
   const actor = await actorFor(userId,trx), admin = isAdmin(actor), orgs = organizationIds(actor), scope = verifierScope(actor);
-  const codes = await assertCategoryCodes(input.categories,trx);
+  const valid = await assertCategoryCodes(input.categories,trx);
+  // Display order, as the legacy backfill stored categories, so the same categories in another order assert nothing new.
+  const codes = (await listCategories('en',trx)).map(c=>c.code).filter(c=>valid.includes(c));
   if (!canCreate(actor)) throw new Error('Access denied');
   const existing = existingId ? await trx.selectFrom('service').selectAll().where('id','=',existingId).forUpdate().executeTakeFirstOrThrow() : null;
   // The listing's organization: its current owner or the one chosen.
@@ -74,24 +95,21 @@ export async function acceptResource(userId:string, raw:unknown, existingId?:str
   // The capacity used: staff filing for their own organization act for it, even when also admins; with no organization, a verifier files only inside their area and categories.
   const capacity = organizationId && orgs.includes(organizationId) ? 'organization' : admin ? 'admin' : 'community';
   if (capacity === 'community' && !inScope) throw new Error('Access denied');
+  if (input.source_type === 'organization' && capacity !== 'organization') throw new Error('Only organization staff can name the organization as the source');
   const previousState = existing ? await trx.selectFrom('listing_state').select('created_by').where('service_id','=',existing.id).executeTakeFirstOrThrow() : null;
-  if (!organizationId) {
-   organizationId = randomUUID();
-   await trx.insertInto('organization').values({id:organizationId,name:input.organization_name}).execute();
-  }
-  const owner = await trx.selectFrom('organization').select('name').where('id','=',organizationId).executeTakeFirst();
-  if (!owner) throw new Error('Unknown organization');
-  if (owner.name !== input.organization_name) throw new Error('Organization name changes require a separate organization update');
-  const id = existing?.id ?? randomUUID();
-  const values = {organization_id:organizationId,name:input.name,description:input.description,url:input.url || null,eligibility_description:input.eligibility_description,application_process:input.application_process};
-  if (existing) await trx.updateTable('service').set(values).where('id','=',id).execute();
-  else await trx.insertInto('service').values({id,...values}).execute();
-  await trx.insertInto('service_area').values({id:randomUUID(),service_id:id,name:'ZIP '+input.postal_code,extent:input.postal_code,extent_type:'text'}).onConflict(o=>o.column('service_id').doUpdateSet({name:'ZIP '+input.postal_code,extent:input.postal_code})).execute();
-  const revisionId = randomUUID();
-  await trx.insertInto('field_assertion').values({id:revisionId,service_id:id,actor_id:actor.user_id,origin:capacity,value:JSON.stringify({input,previous:existing}),status:'accepted'}).execute();
-  const terms = await trx.selectFrom('taxonomy_term as t').innerJoin('category_display as d','d.term_id','t.id').select('t.id').where('t.code','in',codes).execute();
-  await trx.deleteFrom('attribute').where('link_id','=',id).where('link_entity','=','service').where('link_type','=','category').where('taxonomy_term_id','not in',terms.map(t=>t.id)).execute();
-  await trx.insertInto('attribute').values(terms.map(t=>({id:randomUUID(),link_id:id,link_entity:'service',link_type:'category',taxonomy_term_id:t.id}))).onConflict(o=>o.columns(['link_id','taxonomy_term_id']).doNothing()).execute();
+  // A new organization is created by applying its asserted name; an existing one keeps its name.
+  const newOrganization = !organizationId;
+  if (organizationId) {
+   const owner = await trx.selectFrom('organization').select('name').where('id','=',organizationId).executeTakeFirst();
+   if (!owner) throw new Error('Unknown organization');
+   if (owner.name !== input.organization_name) throw new Error('Organization name changes require a separate organization update');
+  } else organizationId = randomUUID();
+  const id = existing?.id ?? randomUUID(), listing = {service_id:id,organization_id:organizationId,new_service:!existing,new_organization:newOrganization};
+  const desired = listingFields(input,listing,codes);
+  const current = existing ? await acceptedValues(trx,[id]) : new Map<string,JsonValue>();
+  const changed = changedFields(current,desired);
+  await applyFields(trx,listing,desired,changed);
+  const revisionId = await recordRevision(trx,{service_id:id,actor_id:actor.user_id,origin:origins[capacity],source:{source_type:input.source_type,source_url:input.source_url || null,source_note:input.source_note},current,changed});
   await trx.insertInto('listing_state').values({service_id:id,created_by:actor.user_id,revision_id:revisionId}).onConflict(o=>o.column('service_id').doUpdateSet({revision_id:revisionId,state:'unreviewed',checked_at:null,next_review_due:null})).execute();
   // Ownership is never independent verification: skip candidates affiliated with this organization, approved or pending.
   const verifier = await trx.selectFrom('membership as m').select('m.user_id').where('m.role','=','community').where('m.approved','=',true).where('m.postal_code','=',input.postal_code).where(sql<boolean>`m.category_scope && ${codes}::text[]`).where('m.user_id','!=',actor.user_id).where('m.user_id','!=',previousState?.created_by ?? actor.user_id)
@@ -113,7 +131,7 @@ export async function ownedResources(userId:string,resourceId?:string) {
  const actor = await actorFor(userId), admin = isAdmin(actor), orgs = organizationIds(actor);
  if (!admin && !orgs.length) throw new Error('Access denied');
  if(resourceId&&!z.uuid().safeParse(resourceId).success)return [];
- let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name']);
+ let query = database().selectFrom('service as s').innerJoin('listing_state as l','l.service_id','s.id').innerJoin('service_area as a','a.service_id','s.id').innerJoin('organization as o','o.id','s.organization_id').select(eb=>[categoryCodes(eb)]).select(['s.id','s.name','s.description','s.url','s.eligibility_description','s.application_process','l.state','l.checked_at','l.next_review_due','a.extent as postal_code','o.name as organization_name','s.organization_id']);
  if (!admin) query = query.where('s.organization_id','in',orgs);
  if(resourceId)query=query.where('s.id','=',resourceId);
  return query.orderBy('s.name').limit(100).execute();
