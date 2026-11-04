@@ -31,6 +31,18 @@ export interface Account {
   user_id: string;
 }
 
+export interface Address {
+  address_1: string;
+  address_2: string | null;
+  address_type: Generated<string>;
+  city: string;
+  country: Generated<string>;
+  id: string;
+  location_id: string;
+  postal_code: string;
+  state_province: string;
+}
+
 export interface Attribute {
   id: string;
   label: string | null;
@@ -84,6 +96,21 @@ export interface ListingState {
   state: Generated<string>;
 }
 
+export interface Location {
+  id: string;
+  latitude: number | null;
+  location_type: string;
+  longitude: number | null;
+  name: string | null;
+  organization_id: string;
+}
+
+export interface LocationAccess {
+  confidential: Generated<boolean>;
+  location_id: string;
+  mode: string;
+}
+
 export interface Membership {
   approved: Generated<boolean>;
   category_scope: Generated<string[]>;
@@ -108,6 +135,13 @@ export interface PersonalProfile {
   user_id: string;
 }
 
+export interface Phone {
+  extension: number | null;
+  id: string;
+  number: string;
+  service_id: string;
+}
+
 export interface Revision {
   actor_id: string;
   created_at: Generated<Timestamp>;
@@ -115,6 +149,18 @@ export interface Revision {
   legacy_snapshot: Json | null;
   origin: string;
   service_id: string;
+}
+
+export interface Schedule {
+  byday: string | null;
+  closes_at: string | null;
+  description: Generated<string>;
+  freq: string | null;
+  id: string;
+  opens_at: string | null;
+  service_id: string;
+  valid_from: Timestamp | null;
+  valid_to: Timestamp | null;
 }
 
 export interface Service {
@@ -134,6 +180,23 @@ export interface ServiceArea {
   id: string;
   name: string;
   service_id: string;
+}
+
+export interface ServiceAreaKind {
+  kind: string;
+  service_area_id: string;
+}
+
+export interface ServiceAtLocation {
+  id: string;
+  location_id: string;
+  service_id: string;
+}
+
+export interface ServiceHours {
+  kind: string;
+  service_id: string;
+  time_zone: string | null;
 }
 
 export interface Taxonomy {
@@ -173,17 +236,25 @@ export interface WorkItem {
 
 export interface DB {
   account: Account;
+  address: Address;
   attribute: Attribute;
   audit_event: AuditEvent;
   category_display: CategoryDisplay;
   field_assertion: FieldAssertion;
   listing_state: ListingState;
+  location: Location;
+  location_access: LocationAccess;
   membership: Membership;
   organization: Organization;
   personal_profile: PersonalProfile;
+  phone: Phone;
   revision: Revision;
+  schedule: Schedule;
   service: Service;
   service_area: ServiceArea;
+  service_area_kind: ServiceAreaKind;
+  service_at_location: ServiceAtLocation;
+  service_hours: ServiceHours;
   taxonomy: Taxonomy;
   taxonomy_term: TaxonomyTerm;
   verification_event: VerificationEvent;

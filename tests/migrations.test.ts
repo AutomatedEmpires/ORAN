@@ -195,6 +195,87 @@ describe('taxonomy migration',()=>{
    await insert('superseded',{source_type:'url',source_url:'https://example.org/a'});
   });
  },120000);
+ it('marks legacy ZIP service areas and allows several areas per service',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url,{until:'20261104090000_per_field_assertions.sql'});
+   expect((await client.query("SELECT conname FROM pg_constraint WHERE conrelid='oran.service_area'::regclass AND contype='u'")).rows).toEqual([{conname:'service_area_service_id_key'}]);
+   const o=randomUUID(),s=randomUUID(),other=randomUUID(),zip=randomUUID();
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Area org')",[o]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$3,'Area service','Synthetic'),($2,$3,'Other service','Synthetic')",[s,other,o]);
+   await client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,'ZIP 98101','98101'),($3,$4,'United States','US')",[zip,s,randomUUID(),other]);
+   await migrate(url);
+   expect((await client.query('SELECT kind FROM oran.service_area_kind')).rows).toEqual([{kind:'zip'}]);
+   const add=(id:string,service:string,extent:string)=>client.query("INSERT INTO oran.service_area(id,service_id,name,extent) VALUES ($1,$2,$3,$3)",[id,service,extent]);
+   const second=randomUUID();
+   await add(second,s,'98102');
+   await expect(add(randomUUID(),s,'98101')).rejects.toThrow('service_area_service_extent');
+   await expect(client.query("INSERT INTO oran.service_area_kind(service_area_id,kind) VALUES ($1,'region')",[second])).rejects.toThrow(/constraint "service_area_kind_kind"/);
+   await client.query("INSERT INTO oran.service_area_kind(service_area_id,kind) VALUES ($1,'zip')",[second]);
+   await client.query('DELETE FROM oran.service_area WHERE id=$1',[second]);
+   expect((await client.query('SELECT service_area_id FROM oran.service_area_kind')).rows).toEqual([{service_area_id:zip}]);
+  });
+ },120000);
+ it('enforces the shapes of locations, schedules and phones',async()=>{
+  await withDatabase(async(client,url)=>{
+   await migrate(url);
+   const o=randomUUID(),s=randomUUID(),s2=randomUUID();
+   await client.query("INSERT INTO oran.organization(id,name) VALUES ($1,'Shape org')",[o]);
+   await client.query("INSERT INTO oran.service(id,organization_id,name,description) VALUES ($1,$3,'Shape service','Synthetic'),($2,$3,'Second service','Synthetic')",[s,s2,o]);
+   // Every rejection names the one constraint it breaks, so each case violates exactly that constraint.
+   type Q=[string,unknown[]];
+   const rejects=(name:string,sql:string,params:unknown[])=>expect(client.query(sql,params)).rejects.toThrow(new RegExp('constraint "'+name+'"'));
+   const location=(type:string,lat:number|null,lon:number|null,id=randomUUID())=>client.query('INSERT INTO oran.location(id,organization_id,location_type,latitude,longitude) VALUES ($1,$2,$3,$4,$5)',[id,o,type,lat,lon]);
+   const place=randomUUID(),remote=randomUUID();
+   await rejects('location_type_kind','INSERT INTO oran.location(id,organization_id,location_type) VALUES ($1,$2,$3)',[randomUUID(),o,'remote']);
+   await rejects('location_latitude_range','INSERT INTO oran.location(id,organization_id,location_type,latitude,longitude) VALUES ($1,$2,\'physical\',$3,$4)',[randomUUID(),o,91,0]);
+   await rejects('location_longitude_range','INSERT INTO oran.location(id,organization_id,location_type,latitude,longitude) VALUES ($1,$2,\'physical\',$3,$4)',[randomUUID(),o,0,181]);
+   await rejects('location_coordinates_pair','INSERT INTO oran.location(id,organization_id,location_type,latitude,longitude) VALUES ($1,$2,\'physical\',$3,$4)',[randomUUID(),o,47.6,null]);
+   await rejects('location_coordinates_physical','INSERT INTO oran.location(id,organization_id,location_type,latitude,longitude) VALUES ($1,$2,\'virtual\',$3,$4)',[randomUUID(),o,47.6,-122.3]);
+   await location('physical',47.6,-122.3,place);await location('physical',null,null);await location('virtual',null,null,remote);
+   const access=(id:string,mode:string,confidential:boolean)=>client.query('INSERT INTO oran.location_access(location_id,mode,confidential) VALUES ($1,$2,$3)',[id,mode,confidential]);
+   await rejects('location_access_mode','INSERT INTO oran.location_access(location_id,mode,confidential) VALUES ($1,$2,$3)',[remote,'fax',false]);
+   await rejects('location_access_confidential_physical','INSERT INTO oran.location_access(location_id,mode,confidential) VALUES ($1,$2,$3)',[remote,'remote',true]);
+   await rejects('location_access_confidential_physical','INSERT INTO oran.location_access(location_id,mode,confidential) VALUES ($1,$2,$3)',[remote,'phone',true]);
+   await access(remote,'remote',false);await access(place,'physical',true);
+   const link=(service:string,loc:string)=>client.query('INSERT INTO oran.service_at_location(id,service_id,location_id) VALUES ($1,$2,$3)',[randomUUID(),service,loc]);
+   await link(s,place);await link(s2,place);await link(s,remote);
+   await expect(link(s,place)).rejects.toThrow('service_at_location_service_id_location_id_key');
+   const address=(state:string,postal:string,country:string,type:string):Q=>['INSERT INTO oran.address(id,location_id,address_1,city,state_province,postal_code,country,address_type) VALUES ($1,$2,\'1 Main St\',\'Seattle\',$3,$4,$5,$6)',[randomUUID(),place,state,postal,country,type]];
+   await rejects('address_state_code',...address('wa','98101','US','physical'));
+   await rejects('address_postal_code',...address('WA','9810','US','physical'));
+   await rejects('address_country_us',...address('WA','98101','CA','physical'));
+   await rejects('address_type_physical',...address('WA','98101','US','postal'));
+   const [okSql,okParams]=address('WA','98101-1234','US','physical');
+   await client.query(okSql,okParams);
+   await expect(client.query(okSql,[randomUUID(),...okParams.slice(1)])).rejects.toThrow('address_location_id_key');
+   const phone=(number:string,extension:number|null=null):Q=>['INSERT INTO oran.phone(id,service_id,number,extension) VALUES ($1,$2,$3,$4)',[randomUUID(),s,number,extension]];
+   await rejects('phone_number_shape',...phone('206-555-0100'));
+   await rejects('phone_number_shape',...phone('911'));
+   await rejects('phone_extension_range',...phone('+12065550100',0));
+   await rejects('phone_extension_range',...phone('+12065550100',100000));
+   for(const [number,extension] of [['+12065550100',null],['988',null],['+12065550100',99999]] as [string,number|null][]) await client.query(...phone(number,extension));
+   type Part={freq:string|null,byday:string|null,opens_at:string|null,closes_at:string|null,valid_from:string|null,valid_to:string|null};
+   const row=(over:Partial<Part>):Q=>{const v:Part={freq:'WEEKLY',byday:'FR',opens_at:'09:00',closes_at:'17:00',valid_from:null,valid_to:null,...over};return ['INSERT INTO oran.schedule(id,service_id,freq,byday,opens_at,closes_at,valid_from,valid_to) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',[randomUUID(),s,v.freq,v.byday,v.opens_at,v.closes_at,v.valid_from,v.valid_to]];};
+   const exception={freq:null,byday:null,opens_at:null,closes_at:null};
+   await rejects('schedule_freq_weekly',...row({freq:'DAILY'}));
+   await rejects('schedule_byday_day',...row({byday:'XX'}));
+   await rejects('schedule_rule_pair',...row({byday:null}));
+   await rejects('schedule_times_pair',...row({opens_at:'19:00',closes_at:null}));
+   await rejects('schedule_times_differ',...row({opens_at:'09:00',closes_at:'09:00'}));
+   await rejects('schedule_rule_or_exception',...row({opens_at:null,closes_at:null}));
+   await rejects('schedule_rule_or_exception',...row({valid_from:'2026-12-25'}));
+   await rejects('schedule_rule_or_exception',...row({...exception,valid_from:'2026-12-25',valid_to:'2026-12-24'}));
+   await rejects('schedule_rule_or_exception',...row({...exception,valid_from:'2026-12-25'}));
+   await rejects('schedule_rule_or_exception',...row(exception));
+   for(const over of [{byday:'FR',opens_at:'19:00',closes_at:'07:00'},{...exception,valid_from:'2026-12-25',valid_to:'2026-12-25'},{...exception,opens_at:'10:00',closes_at:'14:00',valid_from:'2026-12-24',valid_to:'2026-12-24'}]) await client.query(...row(over));
+   const hours=(service:string,kind:string,zone:string|null):Q=>['INSERT INTO oran.service_hours(service_id,kind,time_zone) VALUES ($1,$2,$3)',[service,kind,zone]];
+   await rejects('service_hours_kind',...hours(s,'sometimes',null));
+   await rejects('service_hours_time_zone',...hours(s,'weekly',null));
+   await rejects('service_hours_time_zone',...hours(s,'always_open','America/Los_Angeles'));
+   await client.query(...hours(s,'weekly','America/Los_Angeles'));await client.query(...hours(s2,'by_appointment',null));
+   expect((await client.query("SELECT to_char(opens_at,'HH24:MI') AS opens_at,to_char(closes_at,'HH24:MI') AS closes_at FROM oran.schedule WHERE byday='FR'")).rows).toEqual([{opens_at:'19:00',closes_at:'07:00'}]);
+  });
+ },120000);
  it('rejects a community membership scoped to an organization',async()=>{
   await withDatabase(async(client,url)=>{
    await migrate(url);
