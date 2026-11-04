@@ -14,7 +14,9 @@ async function allowed(): Promise<boolean> {
 }
 
 // Metadata is still rendered when the page then calls notFound(), so the title and robots tag are given only to an
-// allowed request. A denied request gets the not-found page with Next's own noindex, as an unknown route would.
+// allowed request. A denied request gets the not-found page and none of the catalog's content or metadata. Its status is
+// still 200 (the root loading.tsx streams first), which shows that the route exists; the deferred fix is a 404 for /dev/*
+// in src/proxy.ts.
 export async function generateMetadata(): Promise<Metadata> {
   return (await allowed()) ? metadata : {};
 }

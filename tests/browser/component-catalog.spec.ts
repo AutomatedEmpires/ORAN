@@ -1,7 +1,10 @@
+import { request as httpRequest } from 'node:http';
 import { expect, type Locator } from '@playwright/test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { catalogAllowed } from '../../src/app/dev/guard';
-import { buttonClassName } from '../../src/ui/button';
-import { accessible, documentedColors, fitsWidth, focusByKeyboard, ring, test } from './support';
+import { Button, buttonClassName, type ButtonProps } from '../../src/ui/button';
+import { accessible, documentedColors, fitsWidth, focusByKeyboard, hydrated, ring, test } from './support';
 
 test('catalog guard admits only the local launcher on loopback', () => {
   const local = { ORAN_LOCAL_DEV: '1', ORAN_ENV: 'development', NODE_ENV: 'development', DATABASE_URL: 'postgresql://oran@127.0.0.1:5432/oran' };
@@ -94,6 +97,24 @@ test('buttonClassName composes variant and size classes', () => {
   expect(buttonClassName('destructive-confirm', 'large')).toBe('button button-destructive-confirm button-large');
 });
 
+test('Button alone decides whether it is disabled or busy', () => {
+  const markup = (props: ButtonProps) => renderToStaticMarkup(createElement(Button, props, 'Save'));
+
+  // An active button carries none of the state, and never the native attribute.
+  expect(markup({ disabled: false, busy: false }), 'active').toBe('<button class="button">Save</button>');
+  for (const props of [{ disabled: true }, { busy: true }, { disabled: true, busy: true }]) {
+    expect(markup(props), JSON.stringify(props)).toContain('aria-disabled="true"');
+    expect(markup(props), JSON.stringify(props)).not.toMatch(/\sdisabled(=|>|\s)/);
+  }
+  expect(markup({ busy: true })).toContain('aria-busy="true"');
+  expect(markup({ disabled: true })).not.toContain('aria-busy');
+
+  // The attributes are not props: the type refuses them, and if one gets in anyway the markup ignores it, so a button can
+  // never look inactive while its click guard is off.
+  // @ts-expect-error aria-disabled and aria-busy are set by the disabled and busy props only.
+  expect(markup({ 'aria-disabled': true, 'aria-busy': true }), 'caller attributes').not.toContain('aria-');
+});
+
 const variants = [
   ['Primary', 'rgb(23, 89, 107)', 'rgb(255, 255, 255)'],
   ['Secondary', 'rgb(226, 238, 240)', 'rgb(23, 89, 107)'],
@@ -139,7 +160,7 @@ test('catalog renders every Button variant, size and state', async ({ page }) =>
       await expect(disabled, label + ' disabled' + (hovered ? ' hovered' : '')).toHaveCSS('color', 'rgb(74, 85, 99)');
     }
 
-    // Busy keeps the variant's own look and the label, and says so to assistive technology.
+    // Busy keeps the variant's own look and the label, and exposes aria-busy.
     const busy = button(label + ' busy');
     await expect(busy).toHaveAttribute('aria-busy', 'true');
     await expect(busy).toHaveAttribute('aria-disabled', 'true');
@@ -188,26 +209,55 @@ test('busy and disabled buttons stay distinguishable under forced colors', async
   expect(busy.gap, 'spinner gap against the button face').toBe(busy.face);
 });
 
-// React puts its props on a DOM node when it hydrates the node. Before that, nothing runs the click guard.
-async function hydrated(target: Locator): Promise<void> {
-  await expect.poll(() => target.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps$'))), { message: 'React has hydrated the button' }).toBe(true);
-}
-
 test('disabled and busy buttons never submit', async ({ page }) => {
   await page.goto('/dev/components');
   for (const name of ['Primary disabled', 'Primary busy']) {
     const target = page.getByRole('button', { name, exact: true });
+    // Until React has hydrated the button, nothing runs the click guard.
     await hydrated(target);
-    const submitted = page.waitForURL(/submitted=1/, { timeout: 1000 }).then(() => true, () => false);
+    // 'commit' resolves as soon as a navigation starts, so a slow submit cannot finish after the one second is over.
+    const submitted = page.waitForURL(/submitted=1/, { timeout: 1000, waitUntil: 'commit' }).then(() => true, () => false);
     await target.focus();
+    // Enter clicks on keydown and Space on keyup: two separate paths to the same submit.
     await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
     // Playwright treats aria-disabled as disabled, so a plain click would wait until it times out.
     await target.click({ force: true });
     expect(await submitted, name + ' submitted the form').toBe(false);
   }
 
+  // The positive check below must not pass because an earlier press submitted late.
+  await expect(page).not.toHaveURL(/submitted=1/);
   await page.getByRole('button', { name: 'Primary', exact: true }).click();
   await expect(page).toHaveURL(/submitted=1/);
+});
+
+// Plain node:http, because a browser and Playwright's own request context never send a Host header like the ones below.
+function getWithHost(url: URL, host: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({ hostname: url.hostname, port: url.port, path: url.pathname, headers: { host }, timeout: 30_000 }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      response.on('error', reject);
+    });
+    request.on('timeout', () => request.destroy(new Error('No response for ' + host)));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+test('the catalog page asks the guard itself, not only the proxy', async ({ baseURL }) => {
+  const url = new URL('/dev/components', baseURL);
+  // Control: with the launcher's own Host header the page is served, so the text check below can tell the two apart.
+  expect(await getWithHost(url, url.host), 'launcher host').toContain('Component catalog');
+
+  // The proxy compares the parsed hostname, which is 127.0.0.1 here, and lets the request through. Only the guard sees the
+  // raw header, whose host shape is refused. The page must then be the app's not-found page without any catalog content;
+  // a proxy refusal ('Not found', plain text) or any other error must not pass for it.
+  const denied = await getWithHost(url, 'evil@' + url.host);
+  expect(denied, 'userinfo host').not.toContain('Component catalog');
+  expect(denied, 'userinfo host').toContain('Page not found');
 });
 
 test('the catalog is not linked from the app', async ({ page }) => {

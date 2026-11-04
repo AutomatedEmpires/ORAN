@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-// Every spec runs against a hydrated page with Playwright's own `test`. Blocking the dev server's /_next/ socket used to
-// keep a Turbopack reload loop away (vercel/next.js#100251), but it also stopped React from hydrating, so those specs
-// tested a page that never became interactive. PR #15 fixed the loop at its cause: test runs compile without the saved
-// dev cache (next.config.ts).
+// Specs use Playwright's own `test`, so pages can hydrate. Blocking the dev server's /_next/ socket used to keep a Turbopack
+// reload loop away (vercel/next.js#100251), but it also stopped React from hydrating, so those specs tested a page that
+// never became interactive. PR #15 fixed the loop at its cause: test runs compile without the saved dev cache
+// (next.config.ts). A page still hydrates after it loads, so a spec that needs React to be running waits with hydrated().
 export { test };
 
 // The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
@@ -117,4 +117,10 @@ export async function ring(target: Locator): Promise<{ style: string; width: str
     const computed = getComputedStyle(element);
     return { style: computed.outlineStyle, width: computed.outlineWidth, color: computed.outlineColor, offset: computed.outlineOffset };
   });
+}
+
+// Waits until React has hydrated the element. React puts its props on a DOM node when it hydrates the node, and before
+// that nothing runs the page's click handlers. If React ever renames that key, the poll times out loudly.
+export async function hydrated(target: Locator): Promise<void> {
+  await expect.poll(() => target.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps$'))), { message: 'React has hydrated the element' }).toBe(true);
 }
