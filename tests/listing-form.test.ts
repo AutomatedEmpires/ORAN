@@ -8,7 +8,7 @@ const scalars={name:'Synthetic food program',description:'Synthetic test record,
 const scalarEntries=Object.entries(scalars) as [string,string][];
 const base:[string,string][]=[...scalarEntries,['categories','food'],['area_kind','nationwide']];
 const weeklyHours:[string,string][]=[['hours_kind','weekly'],['hours_time_zone','America/Los_Angeles'],['hours_MO_opens','09:00'],['hours_MO_closes','17:00']];
-const typedLocation:[string,string][]=[['location_0_access','remote'],['location_0_name','Online'],['location_0_address_1','1 Hidden Way'],['location_0_address_2','Suite 2'],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98109'],['location_0_latitude','47.6205'],['location_0_longitude','-122.3493'],['location_0_confidential','on']];
+const typedLocation:[string,string][]=[['location_0_access','remote'],['location_0_name','Online'],['location_0_address_1','1 Hidden Way'],['location_0_address_2','Suite 2'],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98109'],['location_0_latitude','47.6205'],['location_0_longitude','-122.3493'],['location_0_confidential','private']];
 const locationId=randomUUID();
 describe('listing form parsing',()=>{
  it('builds the acceptance input from a fully filled form',()=>{
@@ -19,7 +19,7 @@ describe('listing form parsing',()=>{
    ['hours_kind','weekly'],['hours_time_zone','America/Los_Angeles'],
    ['hours_MO_opens','09:00'],['hours_MO_closes','17:00'],['hours_TU_opens',''],['hours_TU_closes',''],['hours_FR_opens','19:00'],['hours_FR_closes','07:00'],
    ['exception_from','2026-12-25'],['exception_to',''],['exception_opens',''],['exception_closes',''],['exception_note','Holiday'],
-   ['location_0_id',locationId],['location_0_access','physical'],['location_0_name',''],['location_0_address_1','1 Hidden Way'],['location_0_address_2',''],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98109'],['location_0_latitude','47.6205'],['location_0_longitude','-122.3493'],['location_0_confidential','on'],
+   ['location_0_id',locationId],['location_0_access','physical'],['location_0_name',''],['location_0_address_1','1 Hidden Way'],['location_0_address_2',''],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98109'],['location_0_latitude','47.6205'],['location_0_longitude','-122.3493'],['location_0_confidential','private'],
    ['location_1_id',''],['location_1_access','none'],['location_1_name',''],['location_1_address_1',''],
   ]);
   const input=listingFromForm(filled);
@@ -95,5 +95,53 @@ describe('listing form parsing',()=>{
   expect(listingFromForm(form([...base,['hours_kind','sometimes']])).hours).toEqual({kind:'sometimes'});
   expect(resourceInput.safeParse(listingFromForm(form([...base,['hours_kind','sometimes']]))).success).toBe(false);
   expect(listingFromForm(form([...base,...weeklyHours,['exception_from','2026-12-25'],['exception_opens','09:00'],['exception_closes','']])).hours).toMatchObject({exceptions:[{opens_at:'09:00',closes_at:null}]});
+ });
+ it('reads the privacy choice as private, public or not chosen',()=>{
+  const physical:[string,string][]=[['location_0_access','physical'],['location_0_address_1','1 Main Street'],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98101']];
+  const location=(choice?:string)=>(listingFromForm(form([...base,...physical,...(choice===undefined?[]:[['location_0_confidential',choice] as [string,string]])])).locations as Record<string,unknown>[])[0];
+  expect(location('private')).toHaveProperty('confidential',true);
+  expect(location('public')).toHaveProperty('confidential',false);
+  // Not chosen is not "public": the key is left out so the server decides (a Safety listing's physical location is private, and a private one stays private).
+  expect(location()).not.toHaveProperty('confidential');
+  expect(location('')).not.toHaveProperty('confidential');
+  // The old checkbox value and anything else are not a choice either.
+  for(const other of ['on','true','off','PRIVATE','none'])expect(location(other),other).not.toHaveProperty('confidential');
+  // Only a physical location has the flag.
+  for(const access of ['remote','phone'])expect(listingFromForm(form([...base,['location_0_access',access],['location_0_confidential','private']])).locations,access).toEqual([{access,confidential:false,name:'',address:null,coordinates:null}]);
+ });
+ it('sends a weekly day with one time so the validator rejects it',()=>{
+  const weekly=(entries:[string,string][])=>listingFromForm(form([...base,['hours_kind','weekly'],['hours_time_zone','America/Los_Angeles'],...entries]));
+  const mondayOnlyOpens=weekly([['hours_MO_opens','09:00'],['hours_MO_closes','']]);
+  expect((mondayOnlyOpens.hours as {weekly:unknown[]}).weekly).toEqual([{day:'MO',opens_at:'09:00',closes_at:''}]);
+  const rejected=resourceInput.safeParse(mondayOnlyOpens);
+  expect(rejected.success).toBe(false);
+  expect(rejected.error?.issues.some(i=>i.path[0]==='hours')).toBe(true);
+  expect(resourceInput.safeParse(weekly([['hours_MO_opens',''],['hours_MO_closes','17:00']])).success).toBe(false);
+  // A day with both times blank is a closed day and is left out; with both filled it is valid.
+  expect((weekly([['hours_MO_opens',''],['hours_MO_closes',''],['hours_TU_opens','  '],['hours_TU_closes','']]).hours as {weekly:unknown[]}).weekly).toEqual([]);
+  expect(resourceInput.safeParse(weekly([['hours_MO_opens','09:00'],['hours_MO_closes','17:00']])).success).toBe(true);
+ });
+ it('reads an extension only when it is all digits',()=>{
+  const extension=(value:string)=>(listingFromForm(form([...base,['phone_number','988'],['phone_extension',value]])).phones as {extension:number|null}[])[0].extension;
+  expect(extension('12')).toBe(12);
+  expect(extension(' 12 ')).toBe(12);
+  expect(extension('')).toBeNull();
+  for(const typed of ['1e3','0x10','+5','1.5','-3','12a','abc','١٢'])expect(Number.isNaN(extension(typed)),typed).toBe(true);
+  expect(resourceInput.safeParse(listingFromForm(form([...base,['hours_kind','unknown'],['phone_number','988'],['phone_extension','1e3']]))).success).toBe(false);
+  expect(resourceInput.safeParse(listingFromForm(form([...base,['hours_kind','unknown'],['phone_number','988'],['phone_extension','12']]))).success).toBe(true);
+ });
+ it('zips phone columns of different lengths by position and reads only ten location slots',()=>{
+  const phones=(entries:[string,string][])=>listingFromForm(form([...base,...entries])).phones;
+  expect(phones([['phone_number','988'],['phone_number','211'],['phone_extension','5']])).toEqual([{number:'988',extension:5},{number:'211',extension:null}]);
+  expect(phones([['phone_number','988'],['phone_extension','5'],['phone_extension','7']])).toEqual([{number:'988',extension:5}]);
+  expect(phones([['phone_extension','5']])).toEqual([]);
+  const remote=(slot:number):[string,string][]=>[[`location_${slot}_access`,'remote']];
+  expect(listingFromForm(form([...base,...remote(9)])).locations).toEqual([{access:'remote',confidential:false,name:'',address:null,coordinates:null}]);
+  expect(listingFromForm(form([...base,...remote(10),...remote(11)])).locations).toEqual([]);
+  // A live slot with no id sends no id key at all (toEqual would not see an undefined one).
+  const [fresh]=listingFromForm(form([...base,...remote(0),['location_0_id','']])).locations as object[];
+  expect(fresh).not.toHaveProperty('id');
+  const [kept]=listingFromForm(form([...base,...remote(0),['location_0_id',locationId]])).locations as object[];
+  expect(kept).toHaveProperty('id',locationId);
  });
 });

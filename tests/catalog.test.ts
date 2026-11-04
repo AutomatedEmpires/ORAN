@@ -6,6 +6,7 @@ import { migrate } from '../scripts/database';
 import { database,closeDatabase } from '../src/modules/platform/index';
 import { listCategories,addCategory,acceptResource,resourceInput,publicResources,ownedResources,ownedResource,editableResource,verificationQueue,verifyResource } from '../src/modules/catalog/index';
 import { locationAssertions,type Audience } from '../src/modules/catalog/projection';
+import { listingFromForm } from '../src/server/listing-form';
 import { approveContributor } from '../src/modules/community/index';
 import { saveProfile,profileFor,deleteProfile } from '../src/modules/profiles/index';
 let local:Awaited<ReturnType<typeof localDatabase>>|null=null;
@@ -244,6 +245,29 @@ describe('real PostgreSQL/PostGIS resource and authorization flow',()=>{
   expect(await confidential(await acceptResource(user.admin,{...input,categories:['safety'],locations:[{...hidden,confidential:false}]}))).toEqual([false]);
   // Without Safety, a physical location is confidential only when the input says so.
   expect(await confidential(await acceptResource(user.admin,{...input,locations:[hidden]}))).toEqual([false]);
+ });
+ it('a form that leaves the privacy choice unset keeps a Safety address private',async()=>{
+  // The form posts location_0_confidential as 'private', 'public' or not at all; only a missing field lets the server's Safety default and its keep-private guard decide.
+  const formFor=(categories:string[],location:[string,string][])=>{
+   const data=new FormData();
+   for(const key of ['name','description','organization_name','url','eligibility_description','application_process','source_type','source_url','source_note'] as const)data.append(key,input[key]);
+   for(const code of categories)data.append('categories',code);
+   for(const [key,value] of [['area_kind','zip'],['area_postal_codes','98101'],['hours_kind','unknown'],['location_0_access','physical'],['location_0_address_1','1 Hidden Way'],['location_0_city','Seattle'],['location_0_state','WA'],['location_0_postal_code','98109'],...location] as [string,string][])data.append(key,value);
+   return data;
+  };
+  const confidential=async(id:string)=>(await database().selectFrom('service_at_location as sl').innerJoin('location_access as la','la.location_id','sl.location_id').select('la.confidential').where('sl.service_id','=',id).execute()).map(r=>r.confidential);
+  const submit=(categories:string[],location:[string,string][]=[],id?:string)=>acceptResource(user.admin,listingFromForm(formFor(categories,location)),id);
+  const safety=await submit(['safety']);
+  expect(await confidential(safety)).toEqual([true]);
+  expect(await confidential(await submit(['safety'],[['location_0_confidential','private']]))).toEqual([true]);
+  expect(await confidential(await submit(['safety'],[['location_0_confidential','public']]))).toEqual([false]);
+  // Without Safety, not chosen is public, and an edit that leaves the choice unset keeps a private address private.
+  expect(await confidential(await submit(['food']))).toEqual([false]);
+  const food=await submit(['food'],[['location_0_confidential','private']]);
+  expect(await confidential(food)).toEqual([true]);
+  const [locationId]=(await accepted(food,'locations')) as string[];
+  await submit(['food'],[['location_0_id',locationId]],food);
+  expect(await confidential(food)).toEqual([true]);
  });
  it('links a service to several locations of its organization',async()=>{
   const id=await acceptResource(user.admin,{...input,locations:[{access:'physical',address:{address_1:'200 Main Street',address_2:'Suite 3',city:'Seattle',state_province:'WA',postal_code:'98101'},coordinates:{latitude:47.61,longitude:-122.33}},{access:'phone'}]});

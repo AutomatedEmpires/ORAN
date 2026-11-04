@@ -10,7 +10,7 @@ export function ActionForm({action,children,label,onReset}:{action:Action;childr
  // React 19 resets an uncontrolled form as soon as its action returns, which would wipe a rejected submission. So the form sends itself: a rejection keeps what was typed, and only a save resets the form. `action` stays for forms posted without JavaScript.
  useEffect(()=>{if(state.ok)ref.current?.reset();},[state]);
  // The status region is always in the page so that a screen reader announces what is put in it; the busy Button keeps its label and aria-busy is not reliably spoken.
- return <form ref={ref} action={submit} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);startTransition(()=>submit(data));}} onReset={onReset}>{children}<Button busy={busy}>{label}</Button><div role="status">{busy?<p>{t.pending}</p>:state.message?<p className={state.ok?'':'error'}>{state.message}</p>:null}</div></form>;
+ return <form ref={ref} action={submit} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget,(e.nativeEvent as SubmitEvent).submitter);startTransition(()=>submit(data));}} onReset={onReset}>{children}<Button busy={busy}>{label}</Button><div role="status">{busy?<p>{t.pending}</p>:state.message?<p className={state.ok?'':'error'}>{state.message}</p>:null}</div></form>;
 }
 type Resource={id?:string;name?:string;description?:string;organization_name?:string;categories?:string[];postal_code?:string;eligibility_description?:string;application_process?:string;url?:string|null};
 export function CategoryChecks({categories,name,selected=[],required=false}:{categories:Category[];name:string;selected?:readonly string[];required?:boolean}){

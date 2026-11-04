@@ -8,6 +8,8 @@ const column = (form: FormData, name: string): string[] => form.getAll(name).map
 const blank = (value: string): boolean => value.trim() === '';
 const nullIfBlank = (value: string): string | null => (blank(value) ? null : value);
 const numberOrNaN = (value: string): number => (blank(value) ? NaN : Number(value));
+// An extension is digits only: Number() would also read '1e3' as 1000 and '0x10' as 16, saving a number that was not typed. NaN fails validation.
+const extensionNumber = (value: string): number | null => (blank(value) ? null : /^\d+$/.test(value.trim()) ? Number(value) : NaN);
 function serviceArea(form: FormData): Record<string, unknown> {
  const kind = text(form, 'area_kind');
  switch (kind) {
@@ -22,7 +24,7 @@ function phones(form: FormData): { number: string; extension: number | null }[] 
  const extensions = column(form, 'phone_extension');
  return column(form, 'phone_number').flatMap((number, i) => {
   const extension = extensions[i] ?? '';
-  return blank(number) ? [] : [{ number, extension: blank(extension) ? null : Number(extension) }];
+  return blank(number) ? [] : [{ number, extension: extensionNumber(extension) }];
  });
 }
 function hours(form: FormData): Record<string, unknown> | null {
@@ -31,7 +33,8 @@ function hours(form: FormData): Record<string, unknown> | null {
  if (kind !== 'weekly') return { kind };
  const weekly = weekDays.flatMap(day => {
   const opens_at = text(form, `hours_${day}_opens`), closes_at = text(form, `hours_${day}_closes`);
-  return blank(opens_at) || blank(closes_at) ? [] : [{ day, opens_at, closes_at }];
+  // A day is skipped only when both times are blank. A half-filled day is sent as typed, so the schema rejects it instead of it being saved as closed.
+  return blank(opens_at) && blank(closes_at) ? [] : [{ day, opens_at, closes_at }];
  });
  const [from, to, opens, closes, notes] = ['from', 'to', 'opens', 'closes', 'note'].map(field => column(form, `exception_${field}`));
  // A row without a first date is an unused row. A blank last date means a one-day exception, and a blank time means closed.
@@ -41,6 +44,7 @@ function hours(form: FormData): Record<string, unknown> | null {
  });
  return { kind, time_zone: text(form, 'hours_time_zone'), weekly, exceptions };
 }
+const privacy = (choice: string): { confidential?: boolean } => (choice === 'private' ? { confidential: true } : choice === 'public' ? { confidential: false } : {});
 function locations(form: FormData): Record<string, unknown>[] {
  return Array.from({ length: locationSlots }, (_, i) => i).flatMap(i => {
   const field = (name: string) => text(form, `location_${i}_${name}`), access = field('access'), id = field('id');
@@ -50,7 +54,8 @@ function locations(form: FormData): Record<string, unknown>[] {
   return [{
    ...(id !== '' ? { id } : {}), access, name: field('name'),
    // Only a physical location has an address, coordinates and the confidential flag; whatever was typed for another kind is ignored.
-   confidential: physical && field('confidential') === 'on',
+   // The flag has three states: 'private', 'public', or not chosen. Not chosen leaves `confidential` out, so the server decides: a Safety listing's physical location is private, and an existing private one stays private.
+   ...(physical ? privacy(field('confidential')) : { confidential: false }),
    address: physical ? { address_1: field('address_1'), address_2: field('address_2'), city: field('city'), state_province: field('state'), postal_code: field('postal_code') } : null,
    coordinates: physical && !(blank(latitude) && blank(longitude)) ? { latitude: numberOrNaN(latitude), longitude: numberOrNaN(longitude) } : null,
   }];
