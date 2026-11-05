@@ -1,0 +1,24 @@
+---
+description: AE Control bootstrap for ORAN agents
+alwaysApply: true
+---
+
+# ORAN — AE Control bootstrap
+
+Product requirements in this repository stay authoritative. This rule does not replace `AGENTS.md`, `docs/CONSTITUTION.md`, `docs/DECISIONS.md`, or `docs/adr/`.
+
+Before substantive work:
+
+1. Read `AGENTS.md` and the requirement paths in `C:\Users\Cole0\AutomatedEmpires\Projects\AE-Control\registry\projects.json`.
+2. Read `C:\Users\Cole0\AutomatedEmpires\Projects\AE-Control\policy\continuity.md`.
+3. Run the read-only session script:
+
+```powershell
+powershell -NoProfile -File C:\Users\Cole0\AutomatedEmpires\Projects\AE-Control\scripts\session.ps1 -Project oran -Issue <number> -Agent <registry id>
+```
+
+4. Stop when that script prints `EDIT: no`, when no issue is assigned, or when the governance files cannot be read.
+5. Feature development stays paused. ADR-0006 slice 3 and the architecture conversation slice 3 stay paused and distinct.
+6. Do not merge, deploy, or activate billing.
+
+GitHub issues in `AutomatedEmpires/ORAN` are the task record. A chat from another model is not.
