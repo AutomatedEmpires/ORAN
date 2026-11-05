@@ -19,6 +19,6 @@ powershell -NoProfile -File C:\Users\Cole0\AutomatedEmpires\Projects\AE-Control\
 
 4. The script checks the branch, HEAD, working tree, pause flag, decision pointers, owner, and latest handoff. Stop when it prints `EDIT: no`.
 5. Confirm you are `OWNER`, or that `TRANSFER` names you, before modifying files. Another model's chat is not ownership.
-6. Feature development stays paused. Do not merge, deploy, or activate billing.
+6. Feature development stays paused. That pause does not revoke ADR-0003 or withdraw ADR-0006. Slices 3 through 6 stay unbuilt, and the two slice 3 identities stay distinct. Do not merge, deploy, or activate billing.
 
 GitHub issues in `AutomatedEmpires/ORAN` are the task record. If the script file is missing, stop.
