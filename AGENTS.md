@@ -27,7 +27,7 @@ Hosting is Vercel, the database is Supabase Postgres + PostGIS, and identity is 
 
 ## 4. Working rules
 
-- **Work by pull request only.** Never push to `main`. Target about 400 authored lines per PR, excluding tests, fixtures and generated lock/type outputs reviewed separately (C17). ADR-0003 records the existing foundation bootstrap exception.
+- **Work by pull request only.** Never push to `main`. `main` is production and `integrate/oran-v1` is the integration branch. Agents open task PRs into `integrate/oran-v1` and merge only their own, through AE-Control's `ae.py merge` once CI and its review gate pass. Merging into `main`, and any deploy, needs a founder comment ([AE-Control decisions, 2026-11-08](https://github.com/AutomatedEmpires/AE-Control/issues/6#issuecomment-6723859431)). Target about 400 authored lines per PR, excluding tests, fixtures and generated lock/type outputs reviewed separately (C17). ADR-0003 records the existing foundation bootstrap exception.
 - **Reference repository.** ORAN 1.0 (`AutomatedEmpires/Open-Resource-Access-Network`) is read-only reference material. Port from it only by re-implementing with tests, citing the source path and commit `e0c9afd` (C23). Do not copy its documents into this repository.
 - **No speculative documentation.** No new documents beyond the core set and ADRs (C22).
 - **Honest status.** Never report work as done unless it runs end to end (C2, §13.3).
