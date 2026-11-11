@@ -74,7 +74,7 @@ There is no general SQL, shell, arbitrary HTTP, role-grant, bulk publication or 
 
 ## Proposed delivery slices and release evidence
 
-This sequence is a recommendation under D20, not a replacement for the existing pilot/public-release gates. Each slice needs approved layouts/policies, appropriate tests and a reviewed PR; no all-at-once rewrite is authorized or required. Preserve existing admin/organization/community flows throughout.
+This sequence is a recommendation under D20. ADR-0005 superseded the pilot-county gates; replacement milestones are not approved, and no gate is marked passed. Each slice needs approved layouts/policies, appropriate tests and a reviewed PR; no all-at-once rewrite is authorized or required. Preserve existing admin/organization/community flows throughout.
 
 | Slice | Reviewable outcome | Evidence needed before calling it complete |
 | --- | --- | --- |
