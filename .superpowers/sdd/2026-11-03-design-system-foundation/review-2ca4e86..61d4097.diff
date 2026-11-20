@@ -1,0 +1,401 @@
+# Review package: 2ca4e86..HEAD
+
+## Commits
+61d4097 feat: add the Blend design tokens as CSS custom properties
+
+## Files changed
+ docs/DESIGN_SYSTEM.md               |  12 +--
+ src/app/globals.css                 |  72 +++++++++++++++++
+ tests/browser/design-system.spec.ts | 156 ++++++++++++++++++++++++++++++++++++
+ tests/browser/support.ts            |  79 ++++++++++++++++++
+ 4 files changed, 313 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/docs/DESIGN_SYSTEM.md b/docs/DESIGN_SYSTEM.md
+index 66c16ea..c20baaf 100644
+--- a/docs/DESIGN_SYSTEM.md
++++ b/docs/DESIGN_SYSTEM.md
+@@ -83,42 +83,42 @@ Text must reach 4.5:1 (3:1 for text at least 24px, or at least 18.66px bold). No
+ | Focus ring and switch-on `#17596B` | surface / bg / mockup map ground `#E8ECE7` | 7.84 / 7.11 / 6.57 | Pass |
+ | Send icon `#1C2733` | accent | 8.43 | Pass. The marigold fill against white is only 1.80, so the dark icon is what identifies the button and must stay |
+ | Hairlines `#E1E6EA` / `#EDF0F3` | surface | 1.26 / 1.14 | Decorative only; never the only boundary of a control |
+ 
+ ### 3.3 Typography
+ 
+ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`. Weights: `--font-weight-regular` 400, `--font-weight-semibold` 600, `--font-weight-bold` 700, `--font-weight-heavy` 800. Weight 500 is unused, so do not load it.
+ 
+ | Token | Size / line height | Use | Mockup sizes merged |
+ |---|---|---|---|
+-| `--font-size-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
+-| `--font-size-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
+-| `--font-size-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
+-| `--font-size-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
+-| `--font-size-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
++| `--font-size-xs` / `--line-height-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
++| `--font-size-sm` / `--line-height-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
++| `--font-size-md` / `--line-height-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
++| `--font-size-lg` / `--line-height-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
++| `--font-size-xl` / `--line-height-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
+ 
+ - That is five steps. A sixth step is reserved and needs approval.
+ - Body text and all inputs use 16px. Inputs under 16px make iOS zoom on focus.
+ - Prose is at most 65ch, about 75 characters, even inside the 760px chat column.
+ - The "ORAN" wordmark (18–20px in the mockups, 800, letter-spacing 0.06em, teal) is a logo asset, not a type step.
+ 
+ ### 3.4 Spacing, size, radius, shadow, focus, motion
+ 
+ - **Spacing (4-based):** `--space-1` 4, `--space-2` 8, `--space-3` 12, `--space-4` 16, `--space-5` 20, `--space-6` 24, `--space-7` 32, `--space-8` 48 (px).
+   - The side gutter is `--space-4`. The gap between cards is `--space-3`. Card padding is `--space-3` by `--space-4`.
+   - The only off-scale value is 2px, for optical icon alignment and the focus offset.
+ - **Sizes:** `--size-target` 44px (minimum hit area of every interactive element); `--size-control-lg` 48px (search field, Detail call button, map banner, sheet actions); `--size-topbar` 56px; `--size-tabbar` 76px plus the safe area; `--size-sidenav` 272px; `--size-drawer` min(316px, 85vw); `--size-chat-column` 760px.
+ - **Radius:** `--radius-badge` 10px (trust labels, status notes, 32–40px icon tiles, today's hours row), `--radius-control` 12px (buttons, chips, inputs, nav items, tab pill, MemoryNote), `--radius-card` 14px (cards, grouped lists, sheet top corners), `--radius-bubble` 20px (user bubble), `--radius-full` 9999px (switches, map banner, composer, send button, avatar).
+ - **Shadow:** `--shadow-1` `0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05)` for cards and grouped lists on `--color-bg`, raised buttons, the composer and the switch thumb. `--shadow-2` `0 4px 14px rgba(28,39,51,.16)` for controls over the map, the drawer and the bottom sheet, with the offset pointing away from the attached edge. Bars use a 1px `--color-border` hairline instead; cards on white use a 1px `--color-border` border and no shadow.
+ - **Focus:** `:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px }` on every interactive element. Never remove it without an equal replacement. The offset keeps the ring visible around teal fills. Use `:focus-within` on the composer pill.
+ - **Motion:** `--motion-fast` 120ms (hover, press), `--motion-base` 200ms (drawer, sheet, toast), `--motion-easing` `cubic-bezier(.2, 0, 0, 1)`. Under `prefers-reduced-motion: reduce`, transitions are instant, nothing slides or scales, scrolling is not smooth and skeleton shimmer is off. Never use fake typing, bouncing, auto-playing animation or pulsing crisis content.
+-- **Layers:** bars 10, map overlays 20, sheet 30, drawer and scrim 40, dialog 50, toast 60.
++- **Layers:** bars `--layer-bar` 10, map overlays `--layer-map-overlay` 20, sheet `--layer-sheet` 30, drawer and scrim `--layer-drawer` 40, dialog `--layer-dialog` 50, toast `--layer-toast` 60.
+ 
+ ## 4. Layout
+ 
+ | Breakpoint | Width | Shell |
+ |---|---|---|
+ | Phone | 360–767px | TopBar plus SeekerTabBar |
+ | Tablet | 768–1023px | Phone shell, content max 640px, centered (not mocked; see §11) |
+ | Desktop | ≥1024px | SideNav plus main area; no tab bar |
+ 
+ - **Minimum width** is 360px. Layouts must still reflow without horizontal page scrolling at 320 CSS px and at 400% zoom (WCAG 1.4.10).
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 1e036d5..bf1bdd0 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -1,11 +1,83 @@
+ :root { --ink:#173d36; --muted:#5a6e67; --paper:#f7f8f2; --line:#d6e1d8; --accent:#1c5847; --soft:#e9f0df; --white:#fff; --danger:#8c2525; }
++:root {
++  color-scheme: light;
++  --color-bg: #F2F4F5;
++  --color-surface: #FFFFFF;
++  --color-surface-user: #EEF1F3;
++  --color-surface-neutral: #EBEEF1;
++  --color-scrim: rgba(28, 39, 51, 0.45);
++  --color-text: #1C2733;
++  --color-text-secondary: #4A5563;
++  --color-primary: #17596B;
++  --color-primary-hover: #0F4150;
++  --color-primary-tint: #E2EEF0;
++  --color-primary-tint-strong: #D3E6EA;
++  --color-on-primary: #FFFFFF;
++  --color-accent: #F4B740;
++  --color-on-accent: #1C2733;
++  --color-accent-tint: #FCEFD2;
++  --color-text-personal: #7A4A00;
++  --color-status-open: #1E6B47;
++  --color-danger: #B42318;
++  --color-danger-tint: #FDECEA;
++  --color-border: #E1E6EA;
++  --color-border-subtle: #EDF0F3;
++  --color-border-input: #808C99;
++  --color-control-off: #6B7683;
++  --font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
++  --font-weight-regular: 400;
++  --font-weight-semibold: 600;
++  --font-weight-bold: 700;
++  --font-weight-heavy: 800;
++  --font-size-xs: 12px;
++  --font-size-sm: 14px;
++  --font-size-md: 16px;
++  --font-size-lg: 18px;
++  --font-size-xl: 24px;
++  --line-height-xs: 16px;
++  --line-height-sm: 20px;
++  --line-height-md: 24px;
++  --line-height-lg: 24px;
++  --line-height-xl: 30px;
++  --space-1: 4px;
++  --space-2: 8px;
++  --space-3: 12px;
++  --space-4: 16px;
++  --space-5: 20px;
++  --space-6: 24px;
++  --space-7: 32px;
++  --space-8: 48px;
++  --size-target: 44px;
++  --size-control-lg: 48px;
++  --size-topbar: 56px;
++  --size-tabbar: 76px;
++  --size-sidenav: 272px;
++  --size-drawer: min(316px, 85vw);
++  --size-chat-column: 760px;
++  --radius-badge: 10px;
++  --radius-control: 12px;
++  --radius-card: 14px;
++  --radius-bubble: 20px;
++  --radius-full: 9999px;
++  --shadow-1: 0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05);
++  --shadow-2: 0 4px 14px rgba(28,39,51,.16);
++  --motion-fast: 120ms;
++  --motion-base: 200ms;
++  --motion-easing: cubic-bezier(.2, 0, 0, 1);
++  --layer-bar: 10;
++  --layer-map-overlay: 20;
++  --layer-sheet: 30;
++  --layer-drawer: 40;
++  --layer-dialog: 50;
++  --layer-toast: 60;
++}
+ * { box-sizing:border-box; }
+ body { margin:0; background:var(--paper); color:var(--ink); font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; }
+ a { color:var(--accent); text-underline-offset:4px; }
+ a:hover { text-decoration-thickness:2px; }
+ :focus-visible { outline:3px solid #95641b; outline-offset:4px; }
+ header { max-width:1240px; margin:auto; padding:28px 36px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+ .brand { font-size:30px; font-weight:800; letter-spacing:-1px; text-decoration:none; line-height:1.1; }
+ .brand span { display:block; margin-top:8px; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:500; }
+ nav { display:flex; gap:20px; flex-wrap:wrap; }
+ nav a { font-size:14px; text-decoration:none; padding:10px 0; }
+diff --git a/tests/browser/design-system.spec.ts b/tests/browser/design-system.spec.ts
+new file mode 100644
+index 0000000..b4b2841
+--- /dev/null
++++ b/tests/browser/design-system.spec.ts
+@@ -0,0 +1,156 @@
++import { readFileSync } from 'node:fs';
++import { test, expect } from '@playwright/test';
++import { contrast, documentedColors, documentedTokenNames, normalized, readTokens, resolveAs } from './support';
++
++// The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
++const blendTokens: Record<string, string> = {
++  '--font-family-base': "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
++  '--font-weight-regular': '400',
++  '--font-weight-semibold': '600',
++  '--font-weight-bold': '700',
++  '--font-weight-heavy': '800',
++  '--font-size-xs': '12px',
++  '--font-size-sm': '14px',
++  '--font-size-md': '16px',
++  '--font-size-lg': '18px',
++  '--font-size-xl': '24px',
++  '--line-height-xs': '16px',
++  '--line-height-sm': '20px',
++  '--line-height-md': '24px',
++  '--line-height-lg': '24px',
++  '--line-height-xl': '30px',
++  '--space-1': '4px',
++  '--space-2': '8px',
++  '--space-3': '12px',
++  '--space-4': '16px',
++  '--space-5': '20px',
++  '--space-6': '24px',
++  '--space-7': '32px',
++  '--space-8': '48px',
++  '--size-target': '44px',
++  '--size-control-lg': '48px',
++  '--size-topbar': '56px',
++  '--size-tabbar': '76px',
++  '--size-sidenav': '272px',
++  '--size-drawer': 'min(316px, 85vw)',
++  '--size-chat-column': '760px',
++  '--radius-badge': '10px',
++  '--radius-control': '12px',
++  '--radius-card': '14px',
++  '--radius-bubble': '20px',
++  '--radius-full': '9999px',
++  '--shadow-1': '0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05)',
++  '--shadow-2': '0 4px 14px rgba(28,39,51,.16)',
++  '--motion-fast': '120ms',
++  '--motion-base': '200ms',
++  '--motion-easing': 'cubic-bezier(.2, 0, 0, 1)',
++  '--layer-bar': '10',
++  '--layer-map-overlay': '20',
++  '--layer-sheet': '30',
++  '--layer-drawer': '40',
++  '--layer-dialog': '50',
++  '--layer-toast': '60',
++};
++
++// Ruling DS-1: approved values that §3 did not name. The names are recorded in DESIGN_SYSTEM.md §3.3 and §3.4.
++const derivedTokens = [
++  '--line-height-xs',
++  '--line-height-sm',
++  '--line-height-md',
++  '--line-height-lg',
++  '--line-height-xl',
++  '--layer-bar',
++  '--layer-map-overlay',
++  '--layer-sheet',
++  '--layer-drawer',
++  '--layer-dialog',
++  '--layer-toast',
++];
++
++// Next's CSS pipeline re-serializes these value types (#FFFFFF as #fff, rgba() as #rrggbbaa, 120ms as .12s),
++// so a served value that is spelled differently is compared by what the browser computes from it.
++function computedKind(name: string) {
++  if (name.startsWith('--color-')) return 'color';
++  if (name.startsWith('--shadow-')) return 'boxShadow';
++  if (name === '--motion-fast' || name === '--motion-base') return 'transitionDuration';
++  return undefined;
++}
++
++test('implements every DESIGN_SYSTEM §3 token with its exact value', async ({ page }) => {
++  const colors = documentedColors();
++  expect(colors.size).toBe(23);
++  const expected = new Map([...colors, ...Object.entries(blendTokens)]);
++  const documented = documentedTokenNames();
++
++  // Every token the document names is implemented here, and every token implemented here is documented.
++  expect([...documented].filter((name) => !expected.has(name))).toEqual([]);
++  expect([...expected.keys()].filter((name) => !documented.has(name))).toEqual([]);
++  expect(derivedTokens.filter((name) => !documented.has(name))).toEqual([]);
++  expect(derivedTokens.filter((name) => !(name in blendTokens))).toEqual([]);
++
++  await page.goto('/');
++  const actual = await readTokens(page, expected.keys());
++  const mismatches: string[] = [];
++  for (const [name, value] of expected) {
++    const served = actual.get(name) ?? '';
++    if (normalized(served) === normalized(value)) continue;
++    const kind = computedKind(name);
++    if (kind) {
++      const [servedValue, approvedValue] = await resolveAs(page, kind, [served, value]);
++      if (approvedValue && servedValue === approvedValue) continue;
++    }
++    mismatches.push(name + ': expected "' + value + '", found "' + served + '"');
++  }
++  expect(mismatches).toEqual([]);
++});
++
++test('writes every approved token verbatim in the globals.css token block', () => {
++  const lines = readFileSync('src/app/globals.css', 'utf8').split(/\r?\n/);
++  const expected = new Map([...documentedColors(), ...Object.entries(blendTokens)]);
++  expect([...expected].filter(([name, value]) => !lines.includes('  ' + name + ': ' + value + ';')).map(([name]) => name)).toEqual([]);
++  expect(lines).toContain('  color-scheme: light;');
++});
++
++// Foreground, background, documented ratio. Names are prefixed with --color-.
++const textPairs: [string, string, number][] = [
++  ['text', 'surface', 15.14], ['text', 'bg', 13.72], ['text', 'surface-user', 13.34], ['text', 'surface-neutral', 13.0],
++  ['text', 'primary-tint', 12.77], ['text', 'accent-tint', 13.27], ['text', 'accent', 8.43], ['text', 'danger-tint', 13.24],
++  ['text-secondary', 'surface', 7.58], ['text-secondary', 'bg', 6.87], ['text-secondary', 'surface-neutral', 6.51],
++  ['text-secondary', 'accent-tint', 6.65], ['text-secondary', 'surface-user', 6.68], ['primary', 'surface', 7.84], ['primary', 'bg', 7.11],
++  ['primary', 'primary-tint', 6.62], ['primary', 'primary-tint-strong', 6.08], ['primary', 'accent-tint', 6.88], ['primary-hover', 'surface', 11.1],
++  ['on-primary', 'primary', 7.84], ['on-primary', 'primary-hover', 11.1], ['text-personal', 'accent-tint', 6.56], ['text-personal', 'surface', 7.48],
++  ['status-open', 'surface', 6.46], ['status-open', 'bg', 5.86], ['danger', 'surface', 6.57], ['danger', 'bg', 5.96], ['danger', 'danger-tint', 5.75],
++  ['on-primary', 'danger', 6.57],
++];
++const nonTextPairs: [string, string, number][] = [
++  ['border-input', 'surface', 3.43], ['border-input', 'bg', 3.11], ['control-off', 'surface', 4.62], ['control-off', 'surface-neutral', 3.97], ['on-accent', 'accent', 8.43],
++];
++
++test('implemented colors keep the DESIGN_SYSTEM §3.2 contrast ratios', async ({ page }) => {
++  await page.goto('/');
++  const names = new Set([...textPairs, ...nonTextPairs].flatMap(([foreground, background]) => ['--color-' + foreground, '--color-' + background]));
++  names.add('--color-primary-hover');
++  names.add('--color-bg');
++  const colors = await readTokens(page, names);
++  const color = (name: string) => colors.get('--color-' + name) ?? '';
++  const ratio = (foreground: string, background: string) => contrast(color(foreground), color(background));
++
++  const failures: string[] = [];
++  for (const [minimum, pairs] of [[4.5, textPairs], [3, nonTextPairs]] as const) {
++    for (const [foreground, background, documented] of pairs) {
++      const actual = ratio(foreground, background);
++      if (Number(actual.toFixed(2)) !== documented || actual < minimum) {
++        failures.push(foreground + ' on ' + background + ': documented ' + documented + ', computed ' + actual + ', minimum ' + minimum);
++      }
++    }
++  }
++  expect(failures).toEqual([]);
++  // Link hover on the page ground (Task 3).
++  expect(ratio('primary-hover', 'bg')).toBeGreaterThanOrEqual(4.5);
++});
++
++test('forces the light color scheme', async ({ page }) => {
++  await page.emulateMedia({ colorScheme: 'dark' });
++  await page.goto('/');
++  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
++});
+diff --git a/tests/browser/support.ts b/tests/browser/support.ts
+new file mode 100644
+index 0000000..743a23a
+--- /dev/null
++++ b/tests/browser/support.ts
+@@ -0,0 +1,79 @@
++import { readFileSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++
++// The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
++// The path is relative to the working directory, which is the repository root for Playwright.
++export function designSystemSection(title: string): string {
++  const lines = readFileSync('docs/DESIGN_SYSTEM.md', 'utf8').split(/\r?\n/);
++  const start = lines.indexOf('## ' + title);
++  if (start === -1) throw new Error('DESIGN_SYSTEM.md has no "## ' + title + '" section.');
++  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '));
++  return lines.slice(start, end === -1 ? undefined : end).join('\n');
++}
++
++// The §3.1 color rows, in table order: token name to documented value.
++export function documentedColors(): Map<string, string> {
++  const colors = new Map<string, string>();
++  for (const line of designSystemSection('3. Tokens').split(/\r?\n/)) {
++    const row = /^\| `(--color-[a-z-]+)` \| `([^`]+)` \|/.exec(line);
++    if (row) colors.set(row[1], row[2]);
++  }
++  return colors;
++}
++
++// Every custom property the approved document names anywhere in §3.
++export function documentedTokenNames(): Set<string> {
++  return new Set([...designSystemSection('3. Tokens').matchAll(/`(--[a-z0-9-]+)/g)].map((match) => match[1]));
++}
++
++export async function readTokens(page: Page, names: Iterable<string>): Promise<Map<string, string>> {
++  const list = [...names];
++  const values = await page.evaluate(
++    (tokenNames) => tokenNames.map((name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()),
++    list,
++  );
++  return new Map(list.map((name, index) => [name, values[index]]));
++}
++
++export function normalized(value: string): string {
++  return value.toLowerCase().replace(/\s+/g, '').replace(/"/g, "'");
++}
++
++// Next's CSS pipeline re-serializes some approved values without changing them: rgba(28, 39, 51, 0.45) becomes
++// #1c273373 and 120ms becomes .12s. This resolves values the way the browser computes the given property, or to ''
++// when the browser rejects the value, so the served and the approved spelling can be compared as the same value.
++export async function resolveAs(page: Page, property: 'color' | 'boxShadow' | 'transitionDuration', values: string[]): Promise<string[]> {
++  return page.evaluate(
++    ([name, list]) => {
++      const probe = document.createElement('div');
++      document.body.append(probe);
++      const resolved = list.map((value) => {
++        probe.style[name] = value;
++        const computed = probe.style[name] ? getComputedStyle(probe)[name] : '';
++        probe.style[name] = '';
++        return computed;
++      });
++      probe.remove();
++      return resolved;
++    },
++    [property, values] as ['color' | 'boxShadow' | 'transitionDuration', string[]],
++  );
++}
++
++// Next's CSS pipeline serializes #FFFFFF as #fff, so the three-digit form is expanded before it is read.
++function luminance(color: string): number {
++  const hex = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(color.trim());
++  if (!hex) throw new Error('Expected a #RRGGBB color, got "' + color + '".');
++  const digits = hex[1].length === 3 ? [...hex[1]].map((digit) => digit + digit).join('') : hex[1];
++  const [red, green, blue] = [0, 2, 4].map((offset) => {
++    const channel = parseInt(digits.slice(offset, offset + 2), 16) / 255;
++    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
++  });
++  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
++}
++
++// The unrounded WCAG 2.x contrast ratio of two #RRGGBB colors.
++export function contrast(foreground: string, background: string): number {
++  const [first, second] = [luminance(foreground), luminance(background)];
++  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
++}

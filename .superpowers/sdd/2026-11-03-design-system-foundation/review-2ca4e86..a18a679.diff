@@ -1,0 +1,1118 @@
+# Review package: 2ca4e86..HEAD
+
+## Commits
+a18a679 feat: give the header the Blend top bar and current-page navigation
+0eef01d fix: harden the raw-color guard and give radios Blend rows
+0693584 feat: restyle the existing screens with Blend base styles
+ed5e552 feat: self-host Figtree in four Latin weights
+61d4097 feat: add the Blend design tokens as CSS custom properties
+
+## Files changed
+ docs/ARCHITECTURE.md                |   5 +-
+ docs/DESIGN_SYSTEM.md               |  12 +-
+ package.json                        |   1 +
+ pnpm-lock.yaml                      |   8 +
+ src/app/globals.css                 | 181 +++++++++----
+ src/app/layout.tsx                  |  14 +-
+ src/ui/logo.tsx                     |  12 +
+ src/ui/nav.tsx                      |  22 ++
+ tests/browser/design-system.spec.ts | 500 ++++++++++++++++++++++++++++++++++++
+ tests/browser/support.ts            | 126 +++++++++
+ 10 files changed, 825 insertions(+), 56 deletions(-)
+
+## Diff
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index d5e3cf5..0eb64e7 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -10,28 +10,29 @@ The target blueprint is implemented incrementally under ADR-0003. The developmen
+ | @clerk/nextjs | Hosted identity adapter; no development credentials committed |
+ | kysely, pg | Parameterized queries over one application PostgreSQL pool |
+ | zod | Validate untrusted input at boundaries |
+ | @electric-sql/pglite, pglite-socket, pglite-postgis | Development/test-only isolated PostgreSQL with loopback access; PostGIS WASM is experimental and does not replace standard PostgreSQL/PostGIS CI |
+ | kysely-codegen | Generate types from the migrated schema; no hand-maintained ORM schema |
+ | tsx | Cross-platform Node development scripts |
+ | typescript, @types/node, @types/pg, @types/react, @types/react-dom | Static checks and library declarations |
+ | eslint, eslint-config-next | Framework, React, accessibility and TypeScript checks |
+ | vitest | Domain/data tests added with the resource workflow |
+ | @playwright/test, @axe-core/playwright | Browser workflow and accessibility verification; development only |
++| @fontsource/figtree | Self-hosted Figtree (SIL OFL 1.1): Latin files for weights 400, 600, 700 and 800, bundled at build; no runtime third-party font requests |
+ 
+-Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. System fonts avoid build-time font downloads. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
++Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. Figtree is self-hosted from the pinned @fontsource/figtree package (Latin, four weights, font-display: swap), so neither the build nor the browser contacts a font service. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
+ 
+ ## Current routes and checks
+ 
+ Public / exposes current checked resources or an honest empty/outage state. /profile requires identity and accesses only that user's preferences. /organization and /resources/[id]/edit require scoped organization/admin control. /community requires approved geographic/category membership for verification; /admin requires the database admin role, and category creation there is admin-only. Server actions independently authenticate and recheck authorization inside the catalog services. Resource creation, edits, category creation, approval, verification and profile deletion refresh affected views. No role or profile-user ID is trusted from form input.
+ 
+-Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. PR check results are authoritative for each commit. No production deployment is configured.
++Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. PR check results are authoritative for each commit. No production deployment is configured.
+ 
+ ## Identity and route contract
+ 
+ Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+ 
+ One account may hold several memberships (admin, organization, community), each with its own scope and approval, and only approved memberships grant privileges. Independence rule: no admin or verifier is assigned, sees in a queue or verifies a listing of an organization they are affiliated with, whether that affiliation is approved or pending. Any future organization-membership grant or claim flow must release that organization's verification work currently assigned to the new member, using the same release logic as `approveContributor`.
+ 
+ The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
+ 
+ Framework agent-file generation is disabled to preserve AGENTS.md. next-env.d.ts and .next are generated/ignored; typecheck runs next typegen before TypeScript so it also works immediately after a fresh clone.
+diff --git a/docs/DESIGN_SYSTEM.md b/docs/DESIGN_SYSTEM.md
+index 66c16ea..c20baaf 100644
+--- a/docs/DESIGN_SYSTEM.md
++++ b/docs/DESIGN_SYSTEM.md
+@@ -83,42 +83,42 @@ Text must reach 4.5:1 (3:1 for text at least 24px, or at least 18.66px bold). No
+ | Focus ring and switch-on `#17596B` | surface / bg / mockup map ground `#E8ECE7` | 7.84 / 7.11 / 6.57 | Pass |
+ | Send icon `#1C2733` | accent | 8.43 | Pass. The marigold fill against white is only 1.80, so the dark icon is what identifies the button and must stay |
+ | Hairlines `#E1E6EA` / `#EDF0F3` | surface | 1.26 / 1.14 | Decorative only; never the only boundary of a control |
+ 
+ ### 3.3 Typography
+ 
+ Family: `--font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`. Weights: `--font-weight-regular` 400, `--font-weight-semibold` 600, `--font-weight-bold` 700, `--font-weight-heavy` 800. Weight 500 is unused, so do not load it.
+ 
+ | Token | Size / line height | Use | Mockup sizes merged |
+ |---|---|---|---|
+-| `--font-size-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
+-| `--font-size-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
+-| `--font-size-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
+-| `--font-size-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
+-| `--font-size-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
++| `--font-size-xs` / `--line-height-xs` | 12 / 16px | Tab labels, composer disclaimer, count badge, "Today" tag | 12 |
++| `--font-size-sm` / `--line-height-sm` | 14 / 20px | Meta lines, chips, trust labels, status notes, compact buttons, history group headings, helper text | 13, 14 |
++| `--font-size-md` / `--line-height-md` | 16 / 24px | Body, chat messages, inputs, buttons, list rows, section headings (700) | 15, 16 |
++| `--font-size-lg` / `--line-height-lg` | 18 / 24px | Card titles, sheet title (700) | 17, 18 |
++| `--font-size-xl` / `--line-height-xl` | 24 / 30px | Page title h1 (700, letter-spacing −0.01em) | 24 |
+ 
+ - That is five steps. A sixth step is reserved and needs approval.
+ - Body text and all inputs use 16px. Inputs under 16px make iOS zoom on focus.
+ - Prose is at most 65ch, about 75 characters, even inside the 760px chat column.
+ - The "ORAN" wordmark (18–20px in the mockups, 800, letter-spacing 0.06em, teal) is a logo asset, not a type step.
+ 
+ ### 3.4 Spacing, size, radius, shadow, focus, motion
+ 
+ - **Spacing (4-based):** `--space-1` 4, `--space-2` 8, `--space-3` 12, `--space-4` 16, `--space-5` 20, `--space-6` 24, `--space-7` 32, `--space-8` 48 (px).
+   - The side gutter is `--space-4`. The gap between cards is `--space-3`. Card padding is `--space-3` by `--space-4`.
+   - The only off-scale value is 2px, for optical icon alignment and the focus offset.
+ - **Sizes:** `--size-target` 44px (minimum hit area of every interactive element); `--size-control-lg` 48px (search field, Detail call button, map banner, sheet actions); `--size-topbar` 56px; `--size-tabbar` 76px plus the safe area; `--size-sidenav` 272px; `--size-drawer` min(316px, 85vw); `--size-chat-column` 760px.
+ - **Radius:** `--radius-badge` 10px (trust labels, status notes, 32–40px icon tiles, today's hours row), `--radius-control` 12px (buttons, chips, inputs, nav items, tab pill, MemoryNote), `--radius-card` 14px (cards, grouped lists, sheet top corners), `--radius-bubble` 20px (user bubble), `--radius-full` 9999px (switches, map banner, composer, send button, avatar).
+ - **Shadow:** `--shadow-1` `0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05)` for cards and grouped lists on `--color-bg`, raised buttons, the composer and the switch thumb. `--shadow-2` `0 4px 14px rgba(28,39,51,.16)` for controls over the map, the drawer and the bottom sheet, with the offset pointing away from the attached edge. Bars use a 1px `--color-border` hairline instead; cards on white use a 1px `--color-border` border and no shadow.
+ - **Focus:** `:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px }` on every interactive element. Never remove it without an equal replacement. The offset keeps the ring visible around teal fills. Use `:focus-within` on the composer pill.
+ - **Motion:** `--motion-fast` 120ms (hover, press), `--motion-base` 200ms (drawer, sheet, toast), `--motion-easing` `cubic-bezier(.2, 0, 0, 1)`. Under `prefers-reduced-motion: reduce`, transitions are instant, nothing slides or scales, scrolling is not smooth and skeleton shimmer is off. Never use fake typing, bouncing, auto-playing animation or pulsing crisis content.
+-- **Layers:** bars 10, map overlays 20, sheet 30, drawer and scrim 40, dialog 50, toast 60.
++- **Layers:** bars `--layer-bar` 10, map overlays `--layer-map-overlay` 20, sheet `--layer-sheet` 30, drawer and scrim `--layer-drawer` 40, dialog `--layer-dialog` 50, toast `--layer-toast` 60.
+ 
+ ## 4. Layout
+ 
+ | Breakpoint | Width | Shell |
+ |---|---|---|
+ | Phone | 360–767px | TopBar plus SeekerTabBar |
+ | Tablet | 768–1023px | Phone shell, content max 640px, centered (not mocked; see §11) |
+ | Desktop | ≥1024px | SideNav plus main area; no tab bar |
+ 
+ - **Minimum width** is 360px. Layouts must still reflow without horizontal page scrolling at 320 CSS px and at 400% zoom (WCAG 1.4.10).
+diff --git a/package.json b/package.json
+index 0f6a3eb..a21d7ac 100644
+--- a/package.json
++++ b/package.json
+@@ -19,20 +19,21 @@
+     "test:e2e": "playwright test",
+     "dev:remote": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next dev --hostname 127.0.0.1",
+     "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
+     "db:types": "tsx scripts/types.ts",
+     "db:types:check": "tsx scripts/types.ts --verify",
+     "admin:grant": "node --env-file-if-exists=.env.local --import tsx scripts/grant-admin.ts",
+     "test:integration": "vitest run tests/catalog.test.ts tests/migrations.test.ts"
+   },
+   "dependencies": {
+     "@clerk/nextjs": "7.9.23",
++    "@fontsource/figtree": "5.3.0",
+     "kysely": "0.29.8",
+     "next": "16.4.4",
+     "pg": "8.23.1",
+     "react": "19.3.1",
+     "react-dom": "19.3.1",
+     "zod": "4.6.7"
+   },
+   "devDependencies": {
+     "@axe-core/playwright": "4.14.0",
+     "@electric-sql/pglite": "0.5.14",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index a49e6c1..2e917a6 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -4,20 +4,23 @@ settings:
+   autoInstallPeers: true
+   excludeLinksFromLockfile: false
+ 
+ importers:
+ 
+   .:
+     dependencies:
+       '@clerk/nextjs':
+         specifier: 7.9.23
+         version: 7.9.23(next@16.4.4(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
++      '@fontsource/figtree':
++        specifier: 5.3.0
++        version: 5.3.0
+       kysely:
+         specifier: 0.29.8
+         version: 0.29.8
+       next:
+         specifier: 16.4.4
+         version: 16.4.4(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+       pg:
+         specifier: 8.23.1
+         version: 8.23.1
+       react:
+@@ -434,20 +437,23 @@ packages:
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
+   '@eslint/object-schema@2.1.7':
+     resolution: {integrity: sha512-VtAOaymWVfZcmZbp6E2mympDIHvyjXs/12LqWYjVw6qjrfF+VK+fyG33kChz3nnK+SU5/NeHOqrTEHS8sXO3OA==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
+   '@eslint/plugin-kit@0.4.1':
+     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
++  '@fontsource/figtree@5.3.0':
++    resolution: {integrity: sha512-/iTcTXL1eRBGhvD7NN9dnKzXzWqDLVZVEUFI9xIxAC1G/hXU8tCyYeXCAuPOuvSYPInFUP7H6KLGgygmDfy1SA==}
++
+   '@humanfs/core@0.19.2':
+     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
+     engines: {node: '>=18.18.0'}
+ 
+   '@humanfs/node@0.16.8':
+     resolution: {integrity: sha512-gE1eQNZ3R++kTzFUpdGlpmy8kDZD/MLyHqDwqjkVQI0JMdI1D51sy1H958PNXYkM2rAac7e5/CnIKZrHtPh3BQ==}
+     engines: {node: '>=18.18.0'}
+ 
+   '@humanfs/types@0.15.0':
+     resolution: {integrity: sha512-ZZ1w0aoQkwuUuC7Yf+7sdeaNfqQiiLcSRbfI08oAxqLtpXQr9AIVX7Ay7HLDuiLYAaFPu8oBYNq/QIi9URHJ3Q==}
+@@ -2918,20 +2924,22 @@ snapshots:
+ 
+   '@eslint/js@9.39.5': {}
+ 
+   '@eslint/object-schema@2.1.7': {}
+ 
+   '@eslint/plugin-kit@0.4.1':
+     dependencies:
+       '@eslint/core': 0.17.0
+       levn: 0.4.1
+ 
++  '@fontsource/figtree@5.3.0': {}
++
+   '@humanfs/core@0.19.2':
+     dependencies:
+       '@humanfs/types': 0.15.0
+ 
+   '@humanfs/node@0.16.8':
+     dependencies:
+       '@humanfs/core': 0.19.2
+       '@humanfs/types': 0.15.0
+       '@humanwhocodes/retry': 0.4.3
+ 
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 1e036d5..2ee8806 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -1,45 +1,138 @@
+-:root { --ink:#173d36; --muted:#5a6e67; --paper:#f7f8f2; --line:#d6e1d8; --accent:#1c5847; --soft:#e9f0df; --white:#fff; --danger:#8c2525; }
++:root {
++  color-scheme: light;
++  --color-bg: #F2F4F5;
++  --color-surface: #FFFFFF;
++  --color-surface-user: #EEF1F3;
++  --color-surface-neutral: #EBEEF1;
++  --color-scrim: rgba(28, 39, 51, 0.45);
++  --color-text: #1C2733;
++  --color-text-secondary: #4A5563;
++  --color-primary: #17596B;
++  --color-primary-hover: #0F4150;
++  --color-primary-tint: #E2EEF0;
++  --color-primary-tint-strong: #D3E6EA;
++  --color-on-primary: #FFFFFF;
++  --color-accent: #F4B740;
++  --color-on-accent: #1C2733;
++  --color-accent-tint: #FCEFD2;
++  --color-text-personal: #7A4A00;
++  --color-status-open: #1E6B47;
++  --color-danger: #B42318;
++  --color-danger-tint: #FDECEA;
++  --color-border: #E1E6EA;
++  --color-border-subtle: #EDF0F3;
++  --color-border-input: #808C99;
++  --color-control-off: #6B7683;
++  --font-family-base: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
++  --font-weight-regular: 400;
++  --font-weight-semibold: 600;
++  --font-weight-bold: 700;
++  --font-weight-heavy: 800;
++  --font-size-xs: 12px;
++  --font-size-sm: 14px;
++  --font-size-md: 16px;
++  --font-size-lg: 18px;
++  --font-size-xl: 24px;
++  --line-height-xs: 16px;
++  --line-height-sm: 20px;
++  --line-height-md: 24px;
++  --line-height-lg: 24px;
++  --line-height-xl: 30px;
++  --space-1: 4px;
++  --space-2: 8px;
++  --space-3: 12px;
++  --space-4: 16px;
++  --space-5: 20px;
++  --space-6: 24px;
++  --space-7: 32px;
++  --space-8: 48px;
++  --size-target: 44px;
++  --size-control-lg: 48px;
++  --size-topbar: 56px;
++  --size-tabbar: 76px;
++  --size-sidenav: 272px;
++  --size-drawer: min(316px, 85vw);
++  --size-chat-column: 760px;
++  --radius-badge: 10px;
++  --radius-control: 12px;
++  --radius-card: 14px;
++  --radius-bubble: 20px;
++  --radius-full: 9999px;
++  --shadow-1: 0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05);
++  --shadow-2: 0 4px 14px rgba(28,39,51,.16);
++  --motion-fast: 120ms;
++  --motion-base: 200ms;
++  --motion-easing: cubic-bezier(.2, 0, 0, 1);
++  --layer-bar: 10;
++  --layer-map-overlay: 20;
++  --layer-sheet: 30;
++  --layer-drawer: 40;
++  --layer-dialog: 50;
++  --layer-toast: 60;
++}
+ * { box-sizing:border-box; }
+-body { margin:0; background:var(--paper); color:var(--ink); font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; }
+-a { color:var(--accent); text-underline-offset:4px; }
+-a:hover { text-decoration-thickness:2px; }
+-:focus-visible { outline:3px solid #95641b; outline-offset:4px; }
+-header { max-width:1240px; margin:auto; padding:28px 36px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+-.brand { font-size:30px; font-weight:800; letter-spacing:-1px; text-decoration:none; line-height:1.1; }
+-.brand span { display:block; margin-top:8px; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:500; }
+-nav { display:flex; gap:20px; flex-wrap:wrap; }
+-nav a { font-size:14px; text-decoration:none; padding:10px 0; }
+-main { max-width:1168px; margin:auto; padding:48px 36px 80px; min-height:65vh; }
+-h1,h2,h3 { line-height:1.15; letter-spacing:-.04em; }
+-h1 { font-size:clamp(32px,5vw,60px); font-weight:500; margin:12px 0 24px; }
+-h2 { font-size:30px; font-weight:500; }
+-h3 { font-size:22px; }
+-.hero { padding:26px 0; max-width:760px; }
+-.hero h1 { font-size:clamp(42px,7vw,82px); }
+-.eyebrow { text-transform:uppercase; letter-spacing:2px; font-size:12px; font-weight:700; }
+-.lede { font-size:20px; color:var(--muted); max-width:650px; }
+-.notice,.card { padding:24px; border:1px solid var(--line); border-radius:12px; background:var(--white); }
+-.card { overflow-wrap:anywhere; }
+-.local-notice { max-width:1096px; margin:24px auto 0; font-size:14px; }
+-.local-notice form { display:inline; margin-left:12px; }
+-.local-notice button { margin:0 0 0 8px; padding:6px 12px; }
+-.notice { background:var(--soft); margin:24px 0; }
+-.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:20px; }
+-.stack { display:grid; gap:18px; }
+-.card h2,.card h3 { margin-top:8px; }
+-.card p { color:var(--muted); }
+-.tag { display:inline-block; font-size:12px; border-radius:30px; padding:4px 10px; background:var(--soft); margin:4px 8px 4px 0; }
+-.small { font-size:14px; color:var(--muted); }
+-form { max-width:720px; }
+-label { display:block; font-weight:600; margin:14px 0 6px; }
+-input,textarea,select { font:inherit; color:var(--ink); background:var(--white); border:1px solid #879b90; border-radius:6px; padding:12px; width:100%; }
+-input[type=checkbox] { width:auto; margin-right:10px; }
+-textarea { min-height:100px; resize:vertical; }
+-button,.button { display:inline-flex; justify-content:center; align-items:center; font:inherit; font-weight:600; padding:12px 22px; min-height:44px; border:0; border-radius:6px; color:white; background:var(--accent); cursor:pointer; text-decoration:none; margin-top:16px; }
+-button:disabled { opacity:.6; cursor:wait; }
+-.secondary { background:transparent; border:1px solid var(--line); color:var(--ink); }
+-.error { color:var(--danger); }
+-footer { border-top:1px solid var(--line); max-width:1168px; margin:auto; padding:32px 36px; font-size:14px; color:var(--muted); }
+-.skip { position:absolute; top:-60px; padding:12px; background:white; }
+-.skip:focus { top:0; }
+-@media(max-width:760px) { header { align-items:flex-start; flex-direction:column; padding:24px; } nav { gap:16px; } main { padding:28px 24px 56px; } }
++body { margin:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-family-base); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-regular); }
++a { color:var(--color-primary); text-underline-offset:var(--space-1); transition:color var(--motion-fast) var(--motion-easing); }
++a:hover, a:active { color:var(--color-primary-hover); text-decoration-thickness:2px; }
++:focus-visible { outline:3px solid var(--color-primary); outline-offset:2px; }
++header { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-4); min-block-size:var(--size-topbar); padding-block:var(--space-2); padding-inline:var(--space-4); background-color:var(--color-surface); border-block-end:1px solid var(--color-border); }
++.brand { display:inline-flex; align-items:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); color:var(--color-primary); text-decoration:none; }
++.brand-name { font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-heavy); letter-spacing:0.06em; }
++.logo-tile { fill:var(--color-primary); }
++.logo-sun { fill:var(--color-accent); }
++.logo-rays { stroke:var(--color-accent); }
++.logo-horizon { stroke:var(--color-on-primary); }
++.language { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-inline-start:auto; }
++.language label { display:inline; margin:0; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); }
++.language select { inline-size:auto; }
++.language button { margin:0; }
++nav { display:flex; flex-wrap:wrap; flex-basis:100%; gap:var(--space-1); }
++nav a { display:inline-flex; align-items:center; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1px solid transparent; border-radius:var(--radius-control); color:var(--color-text-secondary); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-semibold); text-decoration:none; transition:background-color var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing); }
++nav a:hover, nav a:active { background-color:var(--color-primary-tint); color:var(--color-primary); }
++nav a[aria-current=page] { background-color:var(--color-primary-tint-strong); color:var(--color-primary); font-weight:var(--font-weight-heavy); }
++main { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6) var(--space-8); padding-inline:var(--space-4); min-block-size:65vh; }
++main p, .lede { max-inline-size:65ch; }
++h1 { margin-block:0 var(--space-4); font-size:var(--font-size-xl); line-height:var(--line-height-xl); font-weight:var(--font-weight-bold); letter-spacing:-0.01em; }
++h2 { margin-block:var(--space-7) var(--space-3); font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-bold); }
++h3 { margin-block:var(--space-4) var(--space-2); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); }
++.eyebrow { font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-bold); color:var(--color-text-secondary); }
++.lede { font-size:var(--font-size-md); line-height:var(--line-height-md); color:var(--color-text-secondary); }
++.card { padding-block:var(--space-3); padding-inline:var(--space-4); border:1px solid transparent; border-radius:var(--radius-card); background:var(--color-surface); box-shadow:var(--shadow-1); color:var(--color-text); overflow-wrap:anywhere; }
++.card h2 { margin-block-start:var(--space-2); }
++.card > :first-child, .card > input[type=hidden]:first-child + * { margin-block-start:0; }
++.card a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
++.notice { max-inline-size:none; margin-block:var(--space-4); padding-block:var(--space-3); padding-inline:var(--space-4); border:1px solid var(--color-border); border-radius:var(--radius-card); background:var(--color-surface); }
++.local-notice { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3); margin-block:var(--space-4) 0; margin-inline:max(var(--space-4), (100% - var(--size-chat-column)) / 2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); }
++.local-notice a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
++.local-notice form { display:inline; }
++.local-notice button { margin:0; }
++.grid, .stack { display:grid; gap:var(--space-3); }
++.grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }
++.tag { display:inline; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-text-secondary); }
++.small { font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
++.error { display:flex; align-items:flex-start; gap:var(--space-2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-danger); }
++.error::before { content:''; flex:none; inline-size:var(--space-4); block-size:var(--space-4); margin-block-start:calc((var(--line-height-sm) - var(--space-4)) / 2); background-color:currentColor; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 7v6M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat; }
++label { display:block; margin-block:var(--space-4) var(--space-1); margin-inline:0; font-weight:var(--font-weight-semibold); }
++label:has(> input:is([type=checkbox],[type=radio])) { display:flex; align-items:center; gap:var(--space-3); min-block-size:var(--size-target); margin:0; font-weight:var(--font-weight-regular); }
++input:is([type=checkbox],[type=radio]) { inline-size:var(--space-5); block-size:var(--space-5); margin:0; flex:none; accent-color:var(--color-primary); }
++input:not([type=checkbox],[type=radio],[type=hidden]), select, textarea { inline-size:100%; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1.5px solid var(--color-border-input); border-radius:var(--radius-control); background:var(--color-surface); color:var(--color-text); font-family:inherit; font-size:var(--font-size-md); line-height:var(--line-height-md); }
++input[readonly], textarea[readonly] { background:var(--color-bg); }
++input[aria-invalid=true], select[aria-invalid=true], textarea[aria-invalid=true] { border-color:var(--color-danger); }
++textarea { min-block-size:calc(var(--size-target) * 2); padding-block:var(--space-2); resize:vertical; }
++fieldset { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,12rem),1fr)); gap:0 var(--space-4); min-inline-size:0; margin-block-start:var(--space-4); margin-inline:0; padding:0; border:0; }
++legend { padding:0; font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); }
++fieldset > p { grid-column:1 / -1; }
++button, .button, .skip:focus { display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); padding-block:var(--space-2); padding-inline:var(--space-5); border:1px solid transparent; border-radius:var(--radius-control); background-color:var(--color-primary); color:var(--color-on-primary); font-family:inherit; font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); text-decoration:none; cursor:pointer; transition:background-color var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing); }
++button:hover, button:active, .button:hover, .button:active { background-color:var(--color-primary-hover); color:var(--color-on-primary); }
++form > button { margin-block-start:var(--space-4); }
++.secondary, .button-secondary { background-color:var(--color-primary-tint); color:var(--color-primary); }
++.secondary:hover, .secondary:active, .button-secondary:hover, .button-secondary:active { background-color:var(--color-primary-tint-strong); color:var(--color-primary); }
++.button-compact { padding-inline:var(--space-3); font-size:var(--font-size-sm); line-height:var(--line-height-sm); }
++button:disabled, button:disabled:hover, button:disabled:active { background-color:var(--color-surface-neutral); color:var(--color-text-secondary); cursor:not-allowed; }
++footer { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6); padding-inline:var(--space-4); border-block-start:1px solid var(--color-border); font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
++.visually-hidden { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
++.skip { position:absolute; inset-block-start:calc(-2 * var(--size-target)); inset-inline-start:var(--space-2); }
++.skip:focus { inset-block-start:var(--space-2); z-index:var(--layer-toast); }
++@media (width < 380px) { .brand-name { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; } }
++@media (forced-colors: active) { .error::before { background-color:CanvasText; } }
++@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration:0s !important; animation:none !important; scroll-behavior:auto !important; } }
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index bc69412..22f81e8 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,19 +1,25 @@
+ import type { Metadata } from 'next';
+ import Link from 'next/link';
+ import { ClerkProvider } from '@clerk/nextjs';
+ import { messages, changeLanguage } from '@/server/language';
+ import { LocaleProvider } from '@/ui/locale';
++import { LogoMark } from '@/ui/logo';
++import { DomainNav } from '@/ui/nav';
++import '@fontsource/figtree/latin-400.css';
++import '@fontsource/figtree/latin-600.css';
++import '@fontsource/figtree/latin-700.css';
++import '@fontsource/figtree/latin-800.css';
+ import './globals.css';
+ export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
+ export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {
+  const {locale,text:t}=await messages();
+  const local=process.env.ORAN_LOCAL_DEV==='1';
+  const body=<LocaleProvider locale={locale}>
+   <a className="skip" href="#main">{t.skip}</a>
+-  <header><Link className="brand" href="/">ORAN<span>{t.brand}</span></Link>
+-   <nav aria-label={t.navigation}><Link href="/">{t.find}</Link><Link href="/profile">{t.profile}</Link><Link href="/organization">{t.organization}</Link><Link href="/community">{t.community}</Link><Link href="/admin">{t.admin}</Link></nav>
+-   <form action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><button>{t.apply}</button></form>
+-  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><button className="secondary">{t.signOut}</button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
++  <header><Link className="brand" href="/"><LogoMark/><span className="brand-name">ORAN</span>{' '}<span className="visually-hidden">{t.brand}</span></Link>
++   <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><button className="secondary button-compact">{t.apply}</button></form>
++   <DomainNav label={t.navigation} items={[{href:'/',label:t.find},{href:'/profile',label:t.profile},{href:'/organization',label:t.organization},{href:'/community',label:t.community},{href:'/admin',label:t.admin}]}/>
++  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><button className="secondary button-compact">{t.signOut}</button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
+  </LocaleProvider>;
+  return <html lang={locale}><body>{!local && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?<ClerkProvider>{body}</ClerkProvider>:body}</body></html>;
+ }
+diff --git a/src/ui/logo.tsx b/src/ui/logo.tsx
+new file mode 100644
+index 0000000..5397606
+--- /dev/null
++++ b/src/ui/logo.tsx
+@@ -0,0 +1,12 @@
++// The ORAN mark (DESIGN_SYSTEM §5.1): a rounded tile with a half-sun above a horizon and three rays.
++// It is decorative; the link that holds it carries the name. Colors come from CSS (.logo-*), never from here.
++export function LogoMark(): React.JSX.Element {
++  return (
++    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
++      <rect className="logo-tile" width="28" height="28" rx="8" />
++      <path className="logo-sun" d="M8 18a6 6 0 0 1 12 0z" />
++      <path className="logo-rays" d="M14 10V8M8.3 12.3l-1.4-1.4M19.7 12.3l1.4-1.4" fill="none" strokeWidth="1.5" strokeLinecap="round" />
++      <path className="logo-horizon" d="M6 18h16" fill="none" strokeWidth="1.5" strokeLinecap="round" />
++    </svg>
++  );
++}
+diff --git a/src/ui/nav.tsx b/src/ui/nav.tsx
+new file mode 100644
+index 0000000..22b6899
+--- /dev/null
++++ b/src/ui/nav.tsx
+@@ -0,0 +1,22 @@
++'use client';
++import Link from 'next/link';
++import { usePathname } from 'next/navigation';
++
++export type NavItem = { href: string; label: string };
++
++// The domain navigation. It renders on the server too, so the current page is marked without JavaScript.
++export function DomainNav({ label, items }: { label: string; items: readonly NavItem[] }): React.JSX.Element {
++  const pathname = usePathname();
++  return (
++    <nav aria-label={label}>
++      {items.map((item) => {
++        const current = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(item.href + '/');
++        return (
++          <Link key={item.href} href={item.href} aria-current={current ? 'page' : undefined}>
++            {item.label}
++          </Link>
++        );
++      })}
++    </nav>
++  );
++}
+diff --git a/tests/browser/design-system.spec.ts b/tests/browser/design-system.spec.ts
+new file mode 100644
+index 0000000..1215c96
+--- /dev/null
++++ b/tests/browser/design-system.spec.ts
+@@ -0,0 +1,500 @@
++import { readFileSync } from 'node:fs';
++import { expect } from '@playwright/test';
++import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, normalized, readTokens, resolveAs, ring, test } from './support';
++
++// The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
++const blendTokens: Record<string, string> = {
++  '--font-family-base': "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
++  '--font-weight-regular': '400',
++  '--font-weight-semibold': '600',
++  '--font-weight-bold': '700',
++  '--font-weight-heavy': '800',
++  '--font-size-xs': '12px',
++  '--font-size-sm': '14px',
++  '--font-size-md': '16px',
++  '--font-size-lg': '18px',
++  '--font-size-xl': '24px',
++  '--line-height-xs': '16px',
++  '--line-height-sm': '20px',
++  '--line-height-md': '24px',
++  '--line-height-lg': '24px',
++  '--line-height-xl': '30px',
++  '--space-1': '4px',
++  '--space-2': '8px',
++  '--space-3': '12px',
++  '--space-4': '16px',
++  '--space-5': '20px',
++  '--space-6': '24px',
++  '--space-7': '32px',
++  '--space-8': '48px',
++  '--size-target': '44px',
++  '--size-control-lg': '48px',
++  '--size-topbar': '56px',
++  '--size-tabbar': '76px',
++  '--size-sidenav': '272px',
++  '--size-drawer': 'min(316px, 85vw)',
++  '--size-chat-column': '760px',
++  '--radius-badge': '10px',
++  '--radius-control': '12px',
++  '--radius-card': '14px',
++  '--radius-bubble': '20px',
++  '--radius-full': '9999px',
++  '--shadow-1': '0 1px 2px rgba(28,39,51,.06), 0 2px 10px rgba(28,39,51,.05)',
++  '--shadow-2': '0 4px 14px rgba(28,39,51,.16)',
++  '--motion-fast': '120ms',
++  '--motion-base': '200ms',
++  '--motion-easing': 'cubic-bezier(.2, 0, 0, 1)',
++  '--layer-bar': '10',
++  '--layer-map-overlay': '20',
++  '--layer-sheet': '30',
++  '--layer-drawer': '40',
++  '--layer-dialog': '50',
++  '--layer-toast': '60',
++};
++
++// Ruling DS-1: approved values that §3 did not name. The names are recorded in DESIGN_SYSTEM.md §3.3 and §3.4.
++const derivedTokens = [
++  '--line-height-xs',
++  '--line-height-sm',
++  '--line-height-md',
++  '--line-height-lg',
++  '--line-height-xl',
++  '--layer-bar',
++  '--layer-map-overlay',
++  '--layer-sheet',
++  '--layer-drawer',
++  '--layer-dialog',
++  '--layer-toast',
++];
++
++// Next's CSS pipeline re-serializes these value types (#FFFFFF as #fff, rgba() as #rrggbbaa, 120ms as .12s),
++// so a served value that is spelled differently is compared by what the browser computes from it.
++function computedKind(name: string) {
++  if (name.startsWith('--color-')) return 'color';
++  if (name.startsWith('--shadow-')) return 'boxShadow';
++  if (name === '--motion-fast' || name === '--motion-base') return 'transitionDuration';
++  return undefined;
++}
++
++test('implements every DESIGN_SYSTEM §3 token with its exact value', async ({ page }) => {
++  const colors = documentedColors();
++  expect(colors.size).toBe(23);
++  const expected = new Map([...colors, ...Object.entries(blendTokens)]);
++  const documented = documentedTokenNames();
++
++  // Every token the document names is implemented here, and every token implemented here is documented.
++  expect([...documented].filter((name) => !expected.has(name))).toEqual([]);
++  expect([...expected.keys()].filter((name) => !documented.has(name))).toEqual([]);
++  expect(derivedTokens.filter((name) => !documented.has(name))).toEqual([]);
++  expect(derivedTokens.filter((name) => !(name in blendTokens))).toEqual([]);
++
++  await page.goto('/');
++  const actual = await readTokens(page, expected.keys());
++  const mismatches: string[] = [];
++  for (const [name, value] of expected) {
++    const served = actual.get(name) ?? '';
++    if (normalized(served) === normalized(value)) continue;
++    const kind = computedKind(name);
++    if (kind) {
++      const [servedValue, approvedValue] = await resolveAs(page, kind, [served, value]);
++      if (approvedValue && servedValue === approvedValue) continue;
++    }
++    mismatches.push(name + ': expected "' + value + '", found "' + served + '"');
++  }
++  expect(mismatches).toEqual([]);
++});
++
++test('writes every approved token verbatim in the globals.css token block', () => {
++  const lines = readFileSync('src/app/globals.css', 'utf8').split(/\r?\n/);
++  const expected = new Map([...documentedColors(), ...Object.entries(blendTokens)]);
++  expect([...expected].filter(([name, value]) => !lines.includes('  ' + name + ': ' + value + ';')).map(([name]) => name)).toEqual([]);
++  expect(lines).toContain('  color-scheme: light;');
++});
++
++// Foreground, background, documented ratio. Names are prefixed with --color-.
++const textPairs: [string, string, number][] = [
++  ['text', 'surface', 15.14], ['text', 'bg', 13.72], ['text', 'surface-user', 13.34], ['text', 'surface-neutral', 13.0],
++  ['text', 'primary-tint', 12.77], ['text', 'accent-tint', 13.27], ['text', 'accent', 8.43], ['text', 'danger-tint', 13.24],
++  ['text-secondary', 'surface', 7.58], ['text-secondary', 'bg', 6.87], ['text-secondary', 'surface-neutral', 6.51],
++  ['text-secondary', 'accent-tint', 6.65], ['text-secondary', 'surface-user', 6.68], ['primary', 'surface', 7.84], ['primary', 'bg', 7.11],
++  ['primary', 'primary-tint', 6.62], ['primary', 'primary-tint-strong', 6.08], ['primary', 'accent-tint', 6.88], ['primary-hover', 'surface', 11.1],
++  ['on-primary', 'primary', 7.84], ['on-primary', 'primary-hover', 11.1], ['text-personal', 'accent-tint', 6.56], ['text-personal', 'surface', 7.48],
++  ['status-open', 'surface', 6.46], ['status-open', 'bg', 5.86], ['danger', 'surface', 6.57], ['danger', 'bg', 5.96], ['danger', 'danger-tint', 5.75],
++  ['on-primary', 'danger', 6.57],
++];
++const nonTextPairs: [string, string, number][] = [
++  ['border-input', 'surface', 3.43], ['border-input', 'bg', 3.11], ['control-off', 'surface', 4.62], ['control-off', 'surface-neutral', 3.97], ['on-accent', 'accent', 8.43],
++];
++
++test('implemented colors keep the DESIGN_SYSTEM §3.2 contrast ratios', async ({ page }) => {
++  await page.goto('/');
++  const names = new Set([...textPairs, ...nonTextPairs].flatMap(([foreground, background]) => ['--color-' + foreground, '--color-' + background]));
++  names.add('--color-primary-hover');
++  names.add('--color-bg');
++  const colors = await readTokens(page, names);
++  const color = (name: string) => colors.get('--color-' + name) ?? '';
++  const ratio = (foreground: string, background: string) => contrast(color(foreground), color(background));
++
++  const failures: string[] = [];
++  for (const [minimum, pairs] of [[4.5, textPairs], [3, nonTextPairs]] as const) {
++    for (const [foreground, background, documented] of pairs) {
++      const actual = ratio(foreground, background);
++      if (Number(actual.toFixed(2)) !== documented || actual < minimum) {
++        failures.push(foreground + ' on ' + background + ': documented ' + documented + ', computed ' + actual + ', minimum ' + minimum);
++      }
++    }
++  }
++  expect(failures).toEqual([]);
++  // Link hover on the page ground (Task 3).
++  expect(ratio('primary-hover', 'bg')).toBeGreaterThanOrEqual(4.5);
++});
++
++test('forces the light color scheme', async ({ page }) => {
++  await page.emulateMedia({ colorScheme: 'dark' });
++  await page.goto('/');
++  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
++});
++
++const figtreeStack = /^["']?Figtree["']?,/;
++const googleFonts = /fonts\.(googleapis|gstatic)\.com/;
++
++test('seeker pages load self-hosted Figtree and never contact Google Fonts', async ({ page }) => {
++  const requested: string[] = [];
++  page.on('request', (request) => requested.push(request.url()));
++
++  const checkFigtree = async (path: string) => {
++    expect(new URL(page.url()).pathname).toBe(path);
++    await page.evaluate(() => document.fonts.ready);
++    const faces = await page.evaluate(() =>
++      [...document.fonts]
++        .filter((face) => face.family.replace(/["']/g, '') === 'Figtree')
++        .map(({ weight, display, style, status }) => ({ weight, display, style, status })),
++    );
++    expect(faces.map((face) => face.weight).sort(), path + ' faces').toEqual(['400', '600', '700', '800']);
++    expect(faces.map((face) => face.display), path + ' display').toEqual(['swap', 'swap', 'swap', 'swap']);
++    expect(faces.map((face) => face.style), path + ' style').toEqual(['normal', 'normal', 'normal', 'normal']);
++    expect(faces.find((face) => face.weight === '400')?.status, path + ' regular face').toBe('loaded');
++    expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily), path + ' body font').toMatch(figtreeStack);
++  };
++
++  await page.goto('/');
++  await checkFigtree('/');
++  await page.goto('/sign-in');
++  await checkFigtree('/sign-in');
++  await enterAs(page, 'My profile');
++  await checkFigtree('/profile');
++
++  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
++  const fontFiles = requested.filter((url) => /\.woff2?$/.test(new URL(url).pathname));
++  expect(fontFiles.filter((url) => new URL(url).origin !== 'http://127.0.0.1:3100')).toEqual([]);
++  expect(fontFiles.some((url) => new URL(url).pathname.endsWith('.woff2'))).toBe(true);
++});
++
++test('text renders in the fallback stack when font files fail', async ({ page }) => {
++  const requested: string[] = [];
++  let aborted = 0;
++  page.on('request', (request) => requested.push(request.url()));
++  await page.route(/\.woff2?(\?.*)?$/, (route) => {
++    aborted += 1;
++    return route.abort();
++  });
++
++  await page.goto('/');
++  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
++  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(figtreeStack);
++  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
++
++  // The failure was real: font requests were intercepted, and the browser gave up on the regular face.
++  await page.evaluate(() => document.fonts.ready);
++  expect(aborted).toBeGreaterThan(0);
++  const regular = await page.evaluate(() =>
++    [...document.fonts].find((face) => face.family.replace(/["']/g, '') === 'Figtree' && face.weight === '400')?.status,
++  );
++  expect(regular).toBe('error');
++});
++
++test('existing pages pass axe and reflow at phone and desktop widths', async ({ page }) => {
++  test.setTimeout(180_000);
++  // The first dev-server compile of a route streams a "Loading…" shell, so wait for the real page before measuring it.
++  const open = async (path: string) => {
++    await page.goto(path);
++    await expect(page.getByRole('heading', { level: 1 }).or(page.getByRole('main').getByRole('alert'))).toBeVisible();
++  };
++  const check = async (path: string) => {
++    for (const width of [360, 1280]) {
++      await page.setViewportSize({ width, height: 800 });
++      await open(path);
++      await accessible(page);
++    }
++    await page.setViewportSize({ width: 320, height: 800 });
++    await open(path);
++    expect(await fitsWidth(page), path + ' fits 320px').toBe(true);
++  };
++
++  for (const path of ['/', '/sign-in', '/no-such-page']) await check(path);
++  await enterAs(page, 'Admin');
++  for (const path of ['/admin', '/organization', '/community', '/profile']) await check(path);
++});
++
++test('controls follow the Blend button and field specs', async ({ page }) => {
++  await page.setViewportSize({ width: 360, height: 800 });
++  await enterAs(page, 'Admin');
++  await page.goto('/admin');
++  const primary = page.getByRole('button', { name: 'Add resource', exact: true });
++  await expect(primary).toBeVisible();
++  await expect(primary).toHaveCSS('background-color', 'rgb(23, 89, 107)');
++  await expect(primary).toHaveCSS('color', 'rgb(255, 255, 255)');
++  await expect(primary).toHaveCSS('border-radius', '12px');
++  await expect(primary).toHaveCSS('font-weight', '700');
++  await expect(primary).toHaveCSS('font-size', '16px');
++  await expect(primary).toHaveCSS('border-top-style', 'solid');
++
++  // The border width is not asserted: browsers snap 1.5px to a device pixel.
++  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
++  await expect(field).toHaveCSS('font-size', '16px');
++  await expect(field).toHaveCSS('border-top-style', 'solid');
++  await expect(field).toHaveCSS('border-top-color', 'rgb(128, 140, 153)');
++  await expect(field).toHaveCSS('border-radius', '12px');
++  await expect(field).toHaveCSS('background-color', 'rgb(255, 255, 255)');
++
++  const secondary = page.getByRole('button', { name: 'Sign out', exact: true });
++  await expect(secondary).toHaveCSS('background-color', 'rgb(226, 238, 240)');
++  await expect(secondary).toHaveCSS('color', 'rgb(23, 89, 107)');
++
++  const body = page.locator('body');
++  for (const colorScheme of ['light', 'dark'] as const) {
++    await page.emulateMedia({ colorScheme });
++    await expect(body, colorScheme + ' background').toHaveCSS('background-color', 'rgb(242, 244, 245)');
++    await expect(body, colorScheme + ' text').toHaveCSS('color', 'rgb(28, 39, 51)');
++  }
++
++  const title = page.getByRole('heading', { level: 1 });
++  await expect(title).toHaveCSS('font-size', '24px');
++  await expect(title).toHaveCSS('line-height', '30px');
++  await expect(title).toHaveCSS('font-weight', '700');
++
++  const main = page.getByRole('main');
++  for (const role of ['button', 'combobox', 'textbox'] as const) {
++    const controls = await main.getByRole(role).all();
++    if (role !== 'combobox') expect(controls.length, role + ' count').toBeGreaterThan(0);
++    for (const control of controls) {
++      const box = await control.boundingBox();
++      if (!box) continue;
++      expect(box.height, role + ' height').toBeGreaterThanOrEqual(44);
++      if (role === 'button') expect(box.width, role + ' width').toBeGreaterThanOrEqual(44);
++    }
++  }
++  const checkboxes = await main.getByRole('checkbox').all();
++  expect(checkboxes.length, 'checkbox count').toBeGreaterThan(0);
++  for (const checkbox of checkboxes) {
++    const box = await checkbox.locator('..').boundingBox();
++    expect(box?.height, 'checkbox label height').toBeGreaterThanOrEqual(44);
++  }
++
++  // Radios get the same 44px row and teal accent as checkboxes. No page here has one yet, so a minimal fieldset is added.
++  await page.evaluate(() => {
++    const fieldset = document.createElement('fieldset');
++    const legend = document.createElement('legend');
++    legend.textContent = 'Test';
++    const label = document.createElement('label');
++    const input = document.createElement('input');
++    input.type = 'radio';
++    input.name = 't';
++    label.append(input, ' Option');
++    fieldset.append(legend, label);
++    document.querySelector('main')?.append(fieldset);
++  });
++  const radio = page.getByRole('radio', { name: 'Option', exact: true });
++  await expect(radio).toBeVisible();
++  expect((await radio.locator('..').boundingBox())?.height, 'radio label height').toBeGreaterThanOrEqual(44);
++  await expect(radio).toHaveCSS('accent-color', 'rgb(23, 89, 107)');
++});
++
++const focusRing = { style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' };
++
++test('keyboard focus shows the Blend focus ring', async ({ page }) => {
++  await page.goto('/sign-in');
++  await expect(page.getByRole('button', { name: 'Enter as Admin', exact: true })).toBeVisible();
++  await page.keyboard.press('Tab');
++  const skip = page.getByRole('link', { name: 'Skip to content', exact: true });
++  await expect(skip).toBeFocused();
++  await expect(skip).toBeInViewport({ ratio: 1 });
++  expect(await ring(skip), 'skip link').toEqual(focusRing);
++
++  const enter = page.getByRole('button', { name: 'Enter as Admin', exact: true });
++  await focusByKeyboard(page, enter);
++  expect(await ring(enter), 'filled button').toEqual(focusRing);
++
++  await enterAs(page, 'Admin');
++  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
++  await expect(field).toBeVisible();
++  await focusByKeyboard(page, field);
++  expect(await ring(field), 'text field').toEqual(focusRing);
++  const checkbox = page.getByRole('checkbox', { name: 'Food', exact: true }).first();
++  await focusByKeyboard(page, checkbox);
++  expect(await ring(checkbox), 'checkbox').toEqual(focusRing);
++});
++
++test('honours reduced motion and keeps control boundaries under forced colors', async ({ page }) => {
++  await page.goto('/sign-in');
++  const enter = page.getByRole('button', { name: 'Enter as Admin', exact: true });
++  await expect(enter).toBeVisible();
++  expect(await enter.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.12s');
++
++  await page.emulateMedia({ reducedMotion: 'reduce' });
++  expect(await enter.evaluate((element) => getComputedStyle(element).transitionDuration)).toMatch(/^0s(, 0s)*$/);
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++
++  await page.emulateMedia({ forcedColors: 'active' });
++  await expect(enter).toHaveCSS('border-top-style', 'solid');
++  await expect(enter).toHaveCSS('border-top-width', '1px');
++  await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveCSS('border-top-style', 'solid');
++
++  // The focus ring is an outline, which forced colors keep (the color becomes a system color, so only its shape is checked).
++  await focusByKeyboard(page, enter);
++  expect(await ring(enter), 'ring under forced colors').toMatchObject({ style: 'solid', width: '3px' });
++
++  await enterAs(page, 'Admin');
++  const field = page.getByRole('textbox', { name: 'Resource name', exact: true });
++  await expect(field).toBeVisible();
++  await expect(field).toHaveCSS('border-top-style', 'solid');
++});
++
++test('the error glyph is not painted in the page background under forced colors', async ({ page }) => {
++  await page.goto('/sign-in');
++  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
++  await page.evaluate(() => {
++    const message = document.createElement('p');
++    message.className = 'error';
++    message.textContent = 'Example error message';
++    document.querySelector('main')?.append(message);
++  });
++  await page.emulateMedia({ forcedColors: 'active' });
++  const message = page.locator('p.error');
++  await expect(message).toBeVisible();
++  const colors = await message.evaluate((element) => ({
++    glyph: getComputedStyle(element, '::before').backgroundColor,
++    page: getComputedStyle(document.body).backgroundColor,
++  }));
++  expect(colors.glyph, 'glyph against the page color ' + colors.page).not.toBe(colors.page);
++});
++
++// A hex color or a color function. Named colors are left to review: `transparent`, `currentColor` and system colors are allowed.
++const rawColor = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\(/i;
++
++// Drops only the rules whose whole selector is `:root`. `html:root`, `.a, :root` and `.x :root` stay, so their values are checked.
++function withoutTokenBlocks(css: string): string {
++  return css.replace(/(?<=^|\})\s*:root\s*\{[^}]*\}/g, '');
++}
++
++test('rules use tokens instead of raw colors', () => {
++  const rules = withoutTokenBlocks(readFileSync('src/app/globals.css', 'utf8'));
++  expect(rules).toContain('.card');
++  expect(rules.match(rawColor)).toBeNull();
++
++  // Negative controls: the guard can fail. Raw colors hidden behind a `:root` in a longer selector are still found,
++  // and an exact `:root` block is still skipped.
++  for (const css of ['html:root{color:#fff}', '.a, :root{color:rgb(0,0,0)}', '.x :root{color:hsl(0 0% 0%)}', 'a{}:root,.b{color:#000}']) {
++    expect(withoutTokenBlocks(css).match(rawColor), css).not.toBeNull();
++  }
++  expect(withoutTokenBlocks(':root{color:#fff}\n:root { color:rgb(0,0,0) }').match(rawColor)).toBeNull();
++});
++
++test('the header is a Blend top bar with domain navigation', async ({ page }) => {
++  await page.setViewportSize({ width: 1280, height: 800 });
++  await page.goto('/');
++  const banner = page.getByRole('banner');
++  await expect(banner).toHaveCSS('background-color', 'rgb(255, 255, 255)');
++  await expect(banner).toHaveCSS('border-bottom-width', '1px');
++  await expect(banner).toHaveCSS('border-bottom-style', 'solid');
++  await expect(banner).toHaveCSS('border-bottom-color', 'rgb(225, 230, 234)');
++  await expect(page.getByRole('link', { name: 'ORAN Open Resource Access Network', exact: true })).toBeVisible();
++
++  const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
++  const links = nav.getByRole('link');
++  const names = ['Find support', 'My profile', 'Organization', 'Community', 'Admin'];
++  await expect(links).toHaveText(names);
++  const find = nav.getByRole('link', { name: 'Find support', exact: true });
++  await expect(find).toHaveAttribute('aria-current', 'page');
++  await expect(find).toHaveCSS('background-color', 'rgb(211, 230, 234)');
++  await expect(find).toHaveCSS('color', 'rgb(23, 89, 107)');
++  await expect(find).toHaveCSS('font-weight', '800');
++  for (const name of names.slice(1)) await expect(nav.getByRole('link', { name, exact: true }), name).not.toHaveAttribute('aria-current');
++
++  // On another page, no domain is current.
++  await page.goto('/sign-in');
++  await expect(links).toHaveText(names);
++  for (const name of names) await expect(nav.getByRole('link', { name, exact: true }), name + ' on /sign-in').not.toHaveAttribute('aria-current');
++
++  // Every header and notice control is a 44px target.
++  await page.goto('/');
++  const apply = page.getByRole('button', { name: 'Apply', exact: true });
++  const targets = [...(await links.all()), apply, page.getByRole('button', { name: 'Sign out', exact: true }), page.getByRole('link', { name: 'Switch identity', exact: true })];
++  for (const target of targets) {
++    const box = await target.boundingBox();
++    expect(box?.height, ((await target.textContent()) ?? '') + ' height').toBeGreaterThanOrEqual(44);
++  }
++  await expect(apply).toHaveCSS('font-size', '14px');
++  await expect(apply).toHaveCSS('background-color', 'rgb(226, 238, 240)');
++
++  // The development notice is as wide as the chat column and aligned with the page content, not the whole viewport (M6).
++  const [notice, main] = [await page.getByRole('complementary').boundingBox(), await page.getByRole('main').boundingBox()];
++  // 760px (--size-chat-column) plus 16px (--space-4) of padding on each side of main.
++  expect(notice?.width, 'notice width').toBeLessThanOrEqual(760 + 2 * 16);
++  expect(notice?.x, 'notice left edge').toBeCloseTo((main?.x ?? 0) + 16, 0);
++
++  // The bootstrap custom properties are gone, and every property the stylesheet declares is documented or derived.
++  expect([...(await readTokens(page, ['--ink', '--accent', '--paper'])).values()]).toEqual(['', '', '']);
++  const declared = new Set([...readFileSync('src/app/globals.css', 'utf8').matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]));
++  expect(declared.size, 'declared custom properties').toBeGreaterThan(50);
++  const documented = documentedTokenNames();
++  expect([...declared].filter((name) => !documented.has(name) && !derivedTokens.includes(name))).toEqual([]);
++});
++
++test('Spanish header reflows at 320 and 360 pixels', async ({ page }) => {
++  await page.goto('/');
++  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
++  await page.getByRole('button', { name: 'Apply', exact: true }).click();
++  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++
++  for (const width of [320, 360]) {
++    await page.setViewportSize({ width, height: 800 });
++    for (const path of ['/', '/sign-in']) {
++      await page.goto(path);
++      await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++      expect(await fitsWidth(page), path + ' fits ' + width + 'px').toBe(true);
++      const reachable = [
++        page.getByRole('combobox', { name: 'Idioma', exact: true }),
++        page.getByRole('button', { name: 'Aplicar', exact: true }),
++        ...['Buscar apoyo', 'Mi perfil', 'Organización', 'Comunidad', 'Administración'].map((name) => page.getByRole('link', { name, exact: true })),
++      ];
++      for (const control of reachable) await expect(control, path + ' at ' + width + 'px').toBeInViewport();
++    }
++  }
++});
++
++test('the server marks the current domain without JavaScript and respects path boundaries', async ({ browser, baseURL }) => {
++  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
++  try {
++    const page = await context.newPage();
++    const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
++    const marked = async (path: string) => {
++      await page.goto(path);
++      const names = await nav.getByRole('link').allTextContents();
++      expect(names, path + ' links').toHaveLength(5);
++      const current: string[] = [];
++      for (const name of names) if ((await nav.getByRole('link', { name, exact: true }).getAttribute('aria-current')) === 'page') current.push(name);
++      return current;
++    };
++    expect(await marked('/')).toEqual(['Find support']);
++    expect(await marked('/sign-in')).toEqual([]);
++    // A nested path belongs to its domain; a path that only starts with the same letters does not.
++    expect(await marked('/admin/anything')).toEqual(['Admin']);
++    expect(await marked('/adminx')).toEqual([]);
++    await enterAs(page, 'Admin');
++    expect(await marked('/admin')).toEqual(['Admin']);
++    expect(await marked('/organization')).toEqual(['Organization']);
++  } finally {
++    await context.close();
++  }
++});
+diff --git a/tests/browser/support.ts b/tests/browser/support.ts
+new file mode 100644
+index 0000000..f085887
+--- /dev/null
++++ b/tests/browser/support.ts
+@@ -0,0 +1,126 @@
++import { readFileSync } from 'node:fs';
++import { test as base, expect, type Locator, type Page } from '@playwright/test';
++import AxeBuilder from '@axe-core/playwright';
++
++// `test` for specs that read a page right after it loads. Next's dev server keeps a Fast Refresh socket open to every
++// page, and on this setup it can start a reload loop (it logs the browser's console to a file it also watches), which
++// destroys any evaluate in flight. These specs want a static page, so their pages get no Fast Refresh channel.
++// New specs import `test` from './support' until the loop is fixed, and this override is removed when it is
++// (the DS-6 root-cause PR). workflow.spec.ts still uses Playwright's own `test`.
++export const test = base.extend({
++  page: async ({ page }, provide) => {
++    await page.routeWebSocket(/\/_next\//, () => undefined);
++    await provide(page);
++  },
++});
++
++// The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
++// The path is relative to the working directory, which is the repository root for Playwright.
++export function designSystemSection(title: string): string {
++  const lines = readFileSync('docs/DESIGN_SYSTEM.md', 'utf8').split(/\r?\n/);
++  const start = lines.indexOf('## ' + title);
++  if (start === -1) throw new Error('DESIGN_SYSTEM.md has no "## ' + title + '" section.');
++  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '));
++  return lines.slice(start, end === -1 ? undefined : end).join('\n');
++}
++
++// The §3.1 color rows, in table order: token name to documented value.
++export function documentedColors(): Map<string, string> {
++  const colors = new Map<string, string>();
++  for (const line of designSystemSection('3. Tokens').split(/\r?\n/)) {
++    const row = /^\| `(--color-[a-z-]+)` \| `([^`]+)` \|/.exec(line);
++    if (row) colors.set(row[1], row[2]);
++  }
++  return colors;
++}
++
++// Every custom property the approved document names anywhere in §3.
++export function documentedTokenNames(): Set<string> {
++  return new Set([...designSystemSection('3. Tokens').matchAll(/`(--[a-z0-9-]+)/g)].map((match) => match[1]));
++}
++
++// Signs in through the local identity chooser and waits until the redirect has left /sign-in.
++export async function enterAs(page: Page, identity: 'Admin' | 'Organization' | 'Community' | 'My profile'): Promise<void> {
++  await page.goto('/sign-in');
++  await page.getByRole('button', { name: 'Enter as ' + identity, exact: true }).click();
++  await page.waitForURL((url) => !url.href.includes('/sign-in'));
++}
++
++export async function readTokens(page: Page, names: Iterable<string>): Promise<Map<string, string>> {
++  const list = [...names];
++  const values = await page.evaluate(
++    (tokenNames) => tokenNames.map((name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()),
++    list,
++  );
++  return new Map(list.map((name, index) => [name, values[index]]));
++}
++
++export function normalized(value: string): string {
++  return value.toLowerCase().replace(/\s+/g, '').replace(/"/g, "'");
++}
++
++// Next's CSS pipeline re-serializes some approved values without changing them: rgba(28, 39, 51, 0.45) becomes
++// #1c273373 and 120ms becomes .12s. This resolves values the way the browser computes the given property, or to ''
++// when the browser rejects the value, so the served and the approved spelling can be compared as the same value.
++export async function resolveAs(page: Page, property: 'color' | 'boxShadow' | 'transitionDuration', values: string[]): Promise<string[]> {
++  return page.evaluate(
++    ([name, list]) => {
++      const probe = document.createElement('div');
++      document.body.append(probe);
++      const resolved = list.map((value) => {
++        probe.style[name] = value;
++        const computed = probe.style[name] ? getComputedStyle(probe)[name] : '';
++        probe.style[name] = '';
++        return computed;
++      });
++      probe.remove();
++      return resolved;
++    },
++    [property, values] as ['color' | 'boxShadow' | 'transitionDuration', string[]],
++  );
++}
++
++// Next's CSS pipeline serializes #FFFFFF as #fff, so the three-digit form is expanded before it is read.
++function luminance(color: string): number {
++  const hex = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(color.trim());
++  if (!hex) throw new Error('Expected a #RRGGBB color, got "' + color + '".');
++  const digits = hex[1].length === 3 ? [...hex[1]].map((digit) => digit + digit).join('') : hex[1];
++  const [red, green, blue] = [0, 2, 4].map((offset) => {
++    const channel = parseInt(digits.slice(offset, offset + 2), 16) / 255;
++    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
++  });
++  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
++}
++
++// The unrounded WCAG 2.x contrast ratio of two #RRGGBB colors.
++export function contrast(foreground: string, background: string): number {
++  const [first, second] = [luminance(foreground), luminance(background)];
++  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
++}
++
++// Fails on any serious or critical WCAG 2.0 A/AA or 2.1 AA violation, as workflow.spec.ts does.
++export async function accessible(page: Page): Promise<void> {
++  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
++  expect(result.violations.filter((violation) => violation.impact === 'critical' || violation.impact === 'serious')).toEqual([]);
++}
++
++// True when the page does not scroll sideways (WCAG 1.4.10 reflow).
++export async function fitsWidth(page: Page): Promise<boolean> {
++  return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
++}
++
++// Moves focus the way a keyboard user does, so :focus-visible matches: focus the target, step away, and step back.
++export async function focusByKeyboard(page: Page, target: Locator): Promise<void> {
++  await target.focus();
++  await page.keyboard.press('Shift+Tab');
++  await page.keyboard.press('Tab');
++  await expect(target).toBeFocused();
++}
++
++// The computed focus ring of an element.
++export async function ring(target: Locator): Promise<{ style: string; width: string; color: string; offset: string }> {
++  return target.evaluate((element) => {
++    const computed = getComputedStyle(element);
++    return { style: computed.outlineStyle, width: computed.outlineWidth, color: computed.outlineColor, offset: computed.outlineOffset };
++  });
++}

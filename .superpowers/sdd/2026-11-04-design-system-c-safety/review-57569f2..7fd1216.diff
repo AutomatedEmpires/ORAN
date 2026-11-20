@@ -1,0 +1,458 @@
+# Review package: 57569f2..HEAD
+
+## Commits
+7fd1216 feat: add the quick exit link to the top bar on Safety results
+
+## Files changed
+ src/app/dev/components/page.tsx |   6 ++
+ src/app/globals.css             |   6 +-
+ src/app/layout.tsx              |   4 +-
+ src/ui/en.json                  |   4 +-
+ src/ui/es.json                  |   4 +-
+ src/ui/quick-exit.tsx           |  32 ++++++++
+ src/ui/safety.ts                |  16 ++++
+ tests/browser/safety.spec.ts    | 157 ++++++++++++++++++++++++++++++++++++++++
+ tests/safety-ui.test.ts         |  64 ++++++++++++++++
+ 9 files changed, 289 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/src/app/dev/components/page.tsx b/src/app/dev/components/page.tsx
+index 7148bfa..60aded9 100644
+--- a/src/app/dev/components/page.tsx
++++ b/src/app/dev/components/page.tsx
+@@ -1,15 +1,16 @@
+ // Authorization policy: local-launcher development only (catalogAllowed); otherwise not found. No identity, profile or catalog data.
+ import type { Metadata } from 'next';
+ import { headers } from 'next/headers';
+ import { notFound } from 'next/navigation';
+ import { Button, buttonClassName } from '@/ui/button';
++import { quickExitScope } from '@/ui/safety';
+ import { catalogAllowed } from '../guard';
+ 
+ export const dynamic = 'force-dynamic';
+ const metadata: Metadata = { title: 'Component catalog', robots: { index: false, follow: false } };
+ 
+ // The one place that asks the guard, for this request's environment and host. The page and its metadata both use it.
+ async function allowed(): Promise<boolean> {
+   return catalogAllowed(process.env, (await headers()).get('host'));
+ }
+ 
+@@ -113,12 +114,17 @@ export default async function ComponentCatalog() {
+       <article className="card" aria-labelledby="catalog-card-long">
+         <h3 id="catalog-card-long">{'Synthetic' + 'resource'.repeat(15)}</h3>
+         <p>{'https://example.org/' + 'a-very-long-path-segment-'.repeat(6)}</p>
+       </article>
+     </div>
+     <div className="stack">
+       <p className="notice">A notice sits in the page flow without announcing itself.</p>
+       <p className="notice" role="status">A status notice is announced politely when it appears.</p>
+     </div>
+     <p className="error">An error states what went wrong and what to do next.</p>
++
++    <section aria-labelledby="catalog-safety" {...quickExitScope(true)}>
++      <h2 id="catalog-safety">Safety</h2>
++      <p className="small">This section marks the page as Safety results, so the top bar shows Exit and pressing Esc twice leaves for the neutral site.</p>
++    </section>
+   </section>;
+ }
+diff --git a/src/app/globals.css b/src/app/globals.css
+index a17b5b1..7e3aea0 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -75,24 +75,28 @@ body { margin:0; background:var(--color-bg); color:var(--color-text); font-famil
+ a { color:var(--color-primary); text-underline-offset:var(--space-1); transition:color var(--motion-fast) var(--motion-easing); }
+ a:hover, a:active { color:var(--color-primary-hover); text-decoration-thickness:2px; }
+ :focus-visible { outline:3px solid var(--color-primary); outline-offset:2px; }
+ header { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-4); min-block-size:var(--size-topbar); padding-block:var(--space-2); padding-inline:var(--space-4); background-color:var(--color-surface); border-block-end:1px solid var(--color-border); }
+ .brand { display:inline-flex; align-items:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); color:var(--color-primary); text-decoration:none; }
+ .brand-name { font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-heavy); letter-spacing:0.06em; }
+ .logo-tile { fill:var(--color-primary); }
+ .logo-sun { fill:var(--color-accent); }
+ .logo-rays { stroke:var(--color-accent); }
+ .logo-horizon { stroke:var(--color-on-primary); }
+-.language { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-inline-start:auto; }
++.topbar-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:var(--space-2) var(--space-4); flex:1 1 0; min-inline-size:0; }
++.language { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); }
+ .language label { display:inline; margin:0; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); }
+ .language select { inline-size:auto; }
+ .language button { margin:0; }
++.quick-exit { display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); padding-inline:var(--space-3); border:1px solid transparent; border-radius:var(--radius-control); background-color:var(--color-surface-neutral); color:var(--color-text); font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-bold); text-decoration:none; }
++.quick-exit:hover, .quick-exit:active { color:var(--color-text); text-decoration:underline; }
++@supports selector(:has(a)) { body:not(:has([data-quick-exit])) .quick-exit { display:none; } }
+ nav { display:flex; flex-wrap:wrap; flex-basis:100%; gap:var(--space-1); }
+ nav a { display:inline-flex; align-items:center; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1px solid transparent; border-radius:var(--radius-control); color:var(--color-text-secondary); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-semibold); text-decoration:none; transition:background-color var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing); }
+ nav a:hover, nav a:active { background-color:var(--color-primary-tint); color:var(--color-primary); }
+ nav a[aria-current=page] { background-color:var(--color-primary-tint-strong); color:var(--color-primary); font-weight:var(--font-weight-heavy); }
+ main { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6) var(--space-8); padding-inline:var(--space-4); min-block-size:65vh; }
+ main p, .lede { max-inline-size:65ch; }
+ h1 { margin-block:0 var(--space-4); font-size:var(--font-size-xl); line-height:var(--line-height-xl); font-weight:var(--font-weight-bold); letter-spacing:-0.01em; }
+ h2 { margin-block:var(--space-7) var(--space-3); font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-bold); }
+ h3 { margin-block:var(--space-4) var(--space-2); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); }
+ .eyebrow { font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-bold); color:var(--color-text-secondary); }
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index 7aa8842..78ca1aa 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,26 +1,28 @@
+ import type { Metadata } from 'next';
+ import Link from 'next/link';
+ import { ClerkProvider } from '@clerk/nextjs';
+ import { messages, changeLanguage } from '@/server/language';
+ import { Button } from '@/ui/button';
+ import { LocaleProvider } from '@/ui/locale';
+ import { LogoMark } from '@/ui/logo';
+ import { DomainNav } from '@/ui/nav';
++import { QuickExit } from '@/ui/quick-exit';
+ import '@fontsource/figtree/latin-400.css';
+ import '@fontsource/figtree/latin-600.css';
+ import '@fontsource/figtree/latin-700.css';
+ import '@fontsource/figtree/latin-800.css';
+ import './globals.css';
+ export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
+ export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {
+  const {locale,text:t}=await messages();
+  const local=process.env.ORAN_LOCAL_DEV==='1';
+  const body=<LocaleProvider locale={locale}>
+   <a className="skip" href="#main">{t.skip}</a>
+   <header><Link className="brand" href="/"><LogoMark/><span className="brand-name">ORAN</span>{' '}<span className="visually-hidden">{t.brand}</span></Link>
+-   <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><Button variant="secondary" size="compact">{t.apply}</Button></form>
++   <div className="topbar-actions"><QuickExit label={t.exit} name={t.quickExitName}/>
++    <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><Button variant="secondary" size="compact">{t.apply}</Button></form></div>
+    <DomainNav label={t.navigation} items={[{href:'/',label:t.find},{href:'/profile',label:t.profile},{href:'/organization',label:t.organization},{href:'/community',label:t.community},{href:'/admin',label:t.admin}]}/>
+   </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><Button variant="secondary" size="compact">{t.signOut}</Button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
+  </LocaleProvider>;
+  return <html lang={locale}><body>{!local && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?<ClerkProvider>{body}</ClerkProvider>:body}</body></html>;
+ }
+diff --git a/src/ui/en.json b/src/ui/en.json
+index b0ceb83..ed6dbe8 100644
+--- a/src/ui/en.json
++++ b/src/ui/en.json
+@@ -93,12 +93,14 @@
+   "categoryAdded": "Category added.",
+   "categoryExists": "That category code already exists.",
+   "categoryCodeHint": "Lower-case letters, numbers and underscores, for example immigration.",
+   "chooseAtLeastOne": "Choose at least one.",
+   "chooseOrganization": "Organization",
+   "sourceType": "Where this information comes from",
+   "sourceWebsite": "A website",
+   "sourcePhoneCall": "A phone call",
+   "sourceOrganization": "The organization itself",
+   "sourceUrl": "Source web address",
+-  "areaNationwide": "Nationwide"
++  "areaNationwide": "Nationwide",
++  "exit": "Exit",
++  "quickExitName": "Quick exit to a neutral website"
+ }
+diff --git a/src/ui/es.json b/src/ui/es.json
+index d28125d..77c31c2 100644
+--- a/src/ui/es.json
++++ b/src/ui/es.json
+@@ -93,12 +93,14 @@
+   "categoryAdded": "Categoría agregada.",
+   "categoryExists": "Ese código de categoría ya existe.",
+   "categoryCodeHint": "Letras minúsculas, números y guiones bajos, por ejemplo immigration.",
+   "chooseAtLeastOne": "Elige al menos una.",
+   "chooseOrganization": "Organización",
+   "sourceType": "De dónde viene esta información",
+   "sourceWebsite": "Un sitio web",
+   "sourcePhoneCall": "Una llamada telefónica",
+   "sourceOrganization": "La propia organización",
+   "sourceUrl": "Dirección web de la fuente",
+-  "areaNationwide": "Todo el país"
++  "areaNationwide": "Todo el país",
++  "exit": "Salir",
++  "quickExitName": "Salir rápido a un sitio web neutral"
+ }
+diff --git a/src/ui/quick-exit.tsx b/src/ui/quick-exit.tsx
+new file mode 100644
+index 0000000..aa14f2a
+--- /dev/null
++++ b/src/ui/quick-exit.tsx
+@@ -0,0 +1,32 @@
++'use client';
++import { quickExitUrl } from './safety';
++
++// Hides the page before the request starts, so nothing of ORAN stays on screen while a slow network answers.
++// replace() puts no entry in the history. The Referrer-Policy header (same-origin, next.config.ts) keeps ORAN out of the request.
++function leave(): void {
++  document.body.hidden = true;
++  window.location.replace(quickExitUrl);
++}
++
++// A plain link to the neutral site without JavaScript; with it, every click leaves in this tab, modifier keys included.
++export function QuickExit({ label, name }: { label: string; name: string }): React.JSX.Element {
++  return (
++    <a
++      className="quick-exit"
++      href={quickExitUrl}
++      rel="noreferrer"
++      aria-label={name}
++      onClick={(event) => {
++        event.preventDefault();
++        leave();
++      }}
++    >
++      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
++        <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
++        <path d="M14 8l4 4-4 4" />
++        <path d="M18 12H9" />
++      </svg>
++      {label}
++    </a>
++  );
++}
+diff --git a/src/ui/safety.ts b/src/ui/safety.ts
+new file mode 100644
+index 0000000..57e2822
+--- /dev/null
++++ b/src/ui/safety.ts
+@@ -0,0 +1,16 @@
++// No directive: server pages and the client control both import this module.
++// Quick exit, DESIGN_SYSTEM §5.6 and ADR-0007 §3. Esc twice within the window leaves; the link leaves with one click.
++export const quickExitUrl = 'https://www.weather.gov';
++export const quickExitWindowMs = 1000;
++// Category codes, never labels. Domestic violence resources fall under safety.
++export const quickExitCategories: readonly string[] = ['safety', 'housing_shelter'];
++
++// True when any of the lists holds one of the codes above.
++export function showsQuickExit(...categoryLists: readonly (readonly string[])[]): boolean {
++  return categoryLists.some((codes) => codes.some((code) => quickExitCategories.includes(code)));
++}
++
++// Spread onto a page's root element. The layout's top bar shows Exit while the page holds this marker (see globals.css).
++export function quickExitScope(show: boolean): { 'data-quick-exit'?: '' } {
++  return show ? { 'data-quick-exit': '' } : {};
++}
+diff --git a/tests/browser/safety.spec.ts b/tests/browser/safety.spec.ts
+new file mode 100644
+index 0000000..c0d22f1
+--- /dev/null
++++ b/tests/browser/safety.spec.ts
+@@ -0,0 +1,157 @@
++import { expect, type Page } from '@playwright/test';
++import { accessible, fitsWidth, focusByKeyboard, hydrated, ring, test } from './support';
++
++const exitName = 'Quick exit to a neutral website';
++const exitLink = (page: Page) => page.getByRole('banner').getByRole('link', { name: exitName, exact: true, includeHidden: true });
++
++type Visit = { referer: string | undefined; hidden: boolean | null };
++
++// Stands in for the neutral site, so no run contacts the real host. For every request it records the Referer header and
++// whether the ORAN page was already hidden while the request was held (null without JavaScript, where nothing can hide it).
++//
++// The hidden state cannot be read with page.evaluate here: while a navigation request is held in a route handler, Chromium
++// answers no evaluate, CDP session or screenshot call for that page until the navigation commits, so the read deadlocks
++// against the fulfilment it precedes. The page reports instead. An init script watches the `hidden` attribute and calls a
++// binding, which is a one-way message that is still delivered. The handler holds the response until that report arrives
++// (or two seconds pass), so a page that is hidden only after weather.gov answers is recorded as not hidden.
++async function neutralSite(page: Page, scripted: boolean): Promise<Visit[]> {
++  const visits: Visit[] = [];
++  let reported = false;
++  let wake: (() => void) | undefined;
++  if (scripted) {
++    await page.exposeFunction('oranBodyHidden', () => {
++      reported = true;
++      wake?.();
++    });
++    await page.addInitScript(() => {
++      new MutationObserver(() => {
++        if (document.body?.hidden) (window as unknown as { oranBodyHidden(): void }).oranBodyHidden();
++      }).observe(document, { attributes: true, subtree: true, attributeFilter: ['hidden'] });
++    });
++  }
++  await page.route(/^https:\/\/www\.weather\.gov\//, async (route) => {
++    if (scripted && !reported) await new Promise<void>((resolve) => { wake = resolve; setTimeout(resolve, 2000); });
++    visits.push({ referer: route.request().headers()['referer'], hidden: scripted ? reported : null });
++    reported = false;
++    wake = undefined;
++    await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Weather</title><h1>Neutral page</h1>' });
++  });
++  return visits;
++}
++
++let visits: Visit[] = [];
++test.beforeEach(async ({ page, javaScriptEnabled }) => {
++  visits = await neutralSite(page, javaScriptEnabled);
++});
++
++test('Exit is a 44px neutral link on the right of the top bar on Safety results', async ({ page }) => {
++  await page.setViewportSize({ width: 1280, height: 800 });
++  await page.goto('/dev/components');
++  const exit = exitLink(page);
++  await expect(exit).toBeVisible();
++  await expect(exit).toHaveText('Exit');
++  await expect(exit).toHaveAttribute('href', 'https://www.weather.gov');
++  await expect(exit).toHaveAttribute('rel', /noreferrer/);
++  await expect(exit).toHaveCSS('background-color', 'rgb(235, 238, 241)');
++  await expect(exit).toHaveCSS('color', 'rgb(28, 39, 51)');
++  await expect(exit).toHaveCSS('font-size', '14px');
++  await expect(exit).toHaveCSS('font-weight', '700');
++  await expect(exit).toHaveCSS('border-radius', '12px');
++  await expect(exit).toHaveCSS('text-decoration-line', 'none');
++
++  const box = await exit.boundingBox();
++  const brand = await page.getByRole('banner').getByRole('link', { name: 'ORAN Open Resource Access Network', exact: true }).boundingBox();
++  const nav = await page.getByRole('navigation', { name: 'Main navigation', exact: true }).boundingBox();
++  if (!box || !brand || !nav) throw new Error('The brand link, Exit link or navigation has no box.');
++  expect(box.width, 'Exit width').toBeGreaterThanOrEqual(44);
++  expect(box.height, 'Exit height').toBeGreaterThanOrEqual(44);
++  expect(box.x, 'Exit is right of the brand').toBeGreaterThanOrEqual(brand.x + brand.width);
++  expect(box.y + box.height, 'Exit is above the navigation').toBeLessThanOrEqual(nav.y);
++
++  await focusByKeyboard(page, exit);
++  expect(await ring(exit), 'focus ring').toEqual({ style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' });
++
++  for (const width of [360, 1280]) {
++    await page.setViewportSize({ width, height: 800 });
++    await accessible(page);
++  }
++
++  await page.setViewportSize({ width: 320, height: 800 });
++  expect(await fitsWidth(page), 'fits 320px').toBe(true);
++  await expect(exit).toBeInViewport();
++
++  // ADR-0007: crisis help never appears in a top bar.
++  await expect(page.getByRole('banner').getByText('Get help now')).toHaveCount(0);
++
++  // Pages that are not Safety results carry the link in the markup but hide it.
++  await page.goto('/sign-in');
++  await expect(exit).toHaveCount(1);
++  await expect(exit).toBeHidden();
++});
++
++test('Exit keeps its edge under forced colors and does not animate with reduced motion', async ({ page }) => {
++  await page.goto('/dev/components');
++  const exit = exitLink(page);
++  await expect(exit).toBeVisible();
++  expect(await exit.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.12s');
++
++  await page.emulateMedia({ reducedMotion: 'reduce' });
++  expect(await exit.evaluate((element) => getComputedStyle(element).transitionDuration)).toMatch(/^0s(, 0s)*$/);
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++
++  await page.emulateMedia({ forcedColors: 'active' });
++  await expect(exit).toHaveCSS('border-top-style', 'solid');
++  await expect(exit).toHaveCSS('border-top-width', '1px');
++  expect(await exit.evaluate((element) => getComputedStyle(element).borderTopColor), 'border color under forced colors').not.toBe('rgba(0, 0, 0, 0)');
++});
++
++test('Exit names the neutral site in English and Spanish and keeps its visible word in its name', async ({ page }) => {
++  await page.goto('/dev/components');
++  const exit = exitLink(page);
++  await expect(exit).toHaveText('Exit');
++  expect(exitName.toLowerCase()).toContain((await exit.innerText()).toLowerCase());
++
++  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
++  await page.getByRole('button', { name: 'Apply', exact: true }).click();
++  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++
++  await page.goto('/dev/components');
++  const salir = page.getByRole('banner').getByRole('link', { name: 'Salir rápido a un sitio web neutral', exact: true });
++  await expect(salir).toHaveText('Salir');
++  expect('Salir rápido a un sitio web neutral'.toLowerCase()).toContain((await salir.innerText()).toLowerCase());
++
++  await page.setViewportSize({ width: 320, height: 800 });
++  expect(await fitsWidth(page), 'fits 320px in Spanish').toBe(true);
++  await expect(salir).toBeInViewport();
++});
++
++test('clicking Exit replaces the page and hides it at once', async ({ page }) => {
++  await page.goto('/sign-in');
++  await page.goto('/dev/components');
++  const exit = exitLink(page);
++  await hydrated(exit);
++  await exit.click();
++  await page.waitForURL('https://www.weather.gov/');
++  expect(visits).toEqual([{ referer: undefined, hidden: true }]);
++
++  // location.replace puts no entry in the history, so Back skips the catalog and returns to the page before it.
++  await page.goBack();
++  await expect(page).toHaveURL(/\/sign-in$/);
++});
++
++test.describe('without JavaScript', () => {
++  test.use({ javaScriptEnabled: false });
++
++  test('Exit is a plain link to the neutral site', async ({ page }) => {
++    await page.goto('/sign-in');
++    await expect(exitLink(page)).toBeHidden();
++
++    await page.goto('/dev/components');
++    const exit = exitLink(page);
++    await expect(exit).toBeVisible();
++    await exit.click();
++    await page.waitForURL('https://www.weather.gov/');
++    expect(visits).toHaveLength(1);
++    expect(visits[0].referer).toBeUndefined();
++  });
++});
+diff --git a/tests/safety-ui.test.ts b/tests/safety-ui.test.ts
+new file mode 100644
+index 0000000..1cb4db9
+--- /dev/null
++++ b/tests/safety-ui.test.ts
+@@ -0,0 +1,64 @@
++import { createElement } from 'react';
++import { renderToStaticMarkup } from 'react-dom/server';
++import { describe, it, expect } from 'vitest';
++import en from '@/ui/en.json';
++import es from '@/ui/es.json';
++import { QuickExit } from '@/ui/quick-exit';
++import { quickExitCategories, quickExitScope, quickExitUrl, quickExitWindowMs, showsQuickExit } from '@/ui/safety';
++
++describe('quick exit scope', () => {
++  it('shows quick exit only for Safety and Housing & shelter codes', () => {
++    expect(showsQuickExit()).toBe(false);
++    expect(showsQuickExit([], ['food', 'health'])).toBe(false);
++    expect(showsQuickExit(['food'], ['health', 'safety'])).toBe(true);
++    expect(showsQuickExit(['housing_shelter'])).toBe(true);
++    expect(showsQuickExit(['Safety', 'housing'])).toBe(false); // codes, never labels or the legacy code
++    expect(quickExitScope(true)).toEqual({ 'data-quick-exit': '' });
++    expect(quickExitScope(false)).toEqual({});
++  });
++
++  it('holds the approved destination, window and categories', () => {
++    expect(quickExitUrl).toBe('https://www.weather.gov');
++    expect(quickExitWindowMs).toBe(1000);
++    expect(quickExitCategories).toEqual(['safety', 'housing_shelter']);
++  });
++});
++
++describe('QuickExit markup', () => {
++  const markup = renderToStaticMarkup(createElement(QuickExit, { label: en.exit, name: en.quickExitName }));
++
++  it('is a plain link to the neutral site that works before any script runs', () => {
++    expect(markup).toMatch(/^<a /);
++    expect(markup).toContain('class="quick-exit"');
++    expect(markup).toContain('href="https://www.weather.gov"');
++    expect(markup).toContain('rel="noreferrer"');
++    expect(markup).toContain('aria-label="Quick exit to a neutral website"');
++    expect(markup).toMatch(/<\/svg>Exit<\/a>$/);
++  });
++
++  it('draws the exit icon as a decorative inline SVG', () => {
++    const svg = /<svg [^>]*>/.exec(markup)?.[0] ?? '';
++    for (const attribute of ['width="18"', 'height="18"', 'viewBox="0 0 24 24"', 'fill="none"', 'stroke="currentColor"', 'stroke-width="1.8"', 'stroke-linecap="round"', 'stroke-linejoin="round"', 'aria-hidden="true"', 'focusable="false"']) {
++      expect(svg, attribute).toContain(attribute);
++    }
++    for (const path of ['M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4', 'M14 8l4 4-4 4', 'M18 12H9']) expect(markup, path).toContain('d="' + path + '"');
++  });
++
++  it('is named in English and Spanish, and the visible word is part of the name', () => {
++    for (const text of [en, es]) {
++      const rendered = renderToStaticMarkup(createElement(QuickExit, { label: text.exit, name: text.quickExitName }));
++      expect(rendered).toContain('aria-label="' + text.quickExitName + '"');
++      expect(text.quickExitName.toLowerCase()).toContain(text.exit.toLowerCase());
++    }
++    expect(en.exit).toBe('Exit');
++    expect(en.quickExitName).toBe('Quick exit to a neutral website');
++    expect(es.exit).toBe('Salir');
++    expect(es.quickExitName).toBe('Salir rápido a un sitio web neutral');
++  });
++});
++
++describe('language catalogs', () => {
++  it('keep identical key sets in English and Spanish', () => {
++    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
++  });
++});

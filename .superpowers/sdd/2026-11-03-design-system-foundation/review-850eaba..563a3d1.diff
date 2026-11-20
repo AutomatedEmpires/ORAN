@@ -1,0 +1,380 @@
+# Review package: 850eaba..HEAD
+
+## Commits
+563a3d1 feat: add a local-only component catalog route
+e244654 test: run browser specs against hydrated pages
+
+## Files changed
+ docs/ARCHITECTURE.md                    |  2 +
+ src/app/dev/components/page.tsx         | 97 +++++++++++++++++++++++++++++++++
+ src/app/dev/guard.ts                    | 17 ++++++
+ src/app/globals.css                     |  3 +
+ tests/browser/component-catalog.spec.ts | 91 +++++++++++++++++++++++++++++++
+ tests/browser/design-system.spec.ts     |  5 +-
+ tests/browser/support.ts                | 24 ++------
+ 7 files changed, 218 insertions(+), 21 deletions(-)
+
+## Diff
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 14fc192..7d35842 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -28,20 +28,22 @@ Public / exposes current checked resources or an honest empty/outage state. /pro
+ Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. PR check results are authoritative for each commit. No production deployment is configured.
+ 
+ ## Identity and route contract
+ 
+ Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+ 
+ One account may hold several memberships (admin, organization, community), each with its own scope and approval, and only approved memberships grant privileges. Independence rule: no admin or verifier is assigned, sees in a queue or verifies a listing of an organization they are affiliated with, whether that affiliation is approved or pending. Any future organization-membership grant or claim flow must release that organization's verification work currently assigned to the new member, using the same release logic as `approveContributor`.
+ 
+ The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
+ 
++GET /dev/components renders the design-system component catalog only in local launcher mode: config() accepts ORAN_LOCAL_DEV=1 (development stage, loopback database), NODE_ENV is not production, VERCEL is unset and the Host is loopback; otherwise it renders the not-found page. It reads no identity, profile or catalog data, is marked noindex and is not linked from navigation.
++
+ Framework agent-file generation is disabled to preserve AGENTS.md. next-env.d.ts and .next are generated/ignored; typecheck runs next typegen before TypeScript so it also works immediately after a fresh clone.
+ 
+ ## Native onboarding and browser isolation
+ 
+ scripts/run.ps1 prepares the exact Windows Node and pnpm pins in .local/toolchain, verifies the official Node archive SHA-256, and changes PATH only for its process. It works with the founder's existing global Node version untouched. A frozen install and helper version check were exercised on ARM64.
+ 
+ The browser launcher uses --test: an in-memory database, fixed port 3100 and ORAN_TEST_RUN=1 selecting .next-test. It never reuses the interactive development database/server. ORAN_TEST_RUN=1 also turns off Turbopack's saved dev cache (`experimental.turbopackFileSystemCacheForDev` in next.config.ts), so every browser run compiles cold. A cache that an earlier run left can make Next 16.4 answer each HMR subscribe with "restart", which reloads the page in a loop (vercel/next.js#100251). Normal development keeps the cache, binds explicitly to port 3000 and fails if that port is occupied. Test database creation for externally supplied integration credentials uses unique disposable database names, never an existing catalog; the CI credentials need CREATEDB. Both migration idempotence and repeated integration runs are checked.
+ 
+ ## Proposed conversational architecture (ADR-0004; not implemented)
+ 
+diff --git a/src/app/dev/components/page.tsx b/src/app/dev/components/page.tsx
+new file mode 100644
+index 0000000..5b9208e
+--- /dev/null
++++ b/src/app/dev/components/page.tsx
+@@ -0,0 +1,97 @@
++// Authorization policy: local-launcher development only (catalogAllowed); otherwise not found. No identity, profile or catalog data.
++import type { Metadata } from 'next';
++import { headers } from 'next/headers';
++import { notFound } from 'next/navigation';
++import { catalogAllowed } from '../guard';
++
++export const dynamic = 'force-dynamic';
++const metadata: Metadata = { title: 'Component catalog', robots: { index: false, follow: false } };
++
++// Metadata is still rendered when the page then calls notFound(), so the title and robots tag are given only to an
++// allowed request. A denied request gets the not-found page with Next's own noindex, as an unknown route would.
++export async function generateMetadata(): Promise<Metadata> {
++  return catalogAllowed(process.env, (await headers()).get('host')) ? metadata : {};
++}
++
++// The §3.1 colors of docs/DESIGN_SYSTEM.md, in table order. The browser spec compares this list with the document.
++const colors = [
++  '--color-bg', '--color-surface', '--color-surface-user', '--color-surface-neutral', '--color-scrim', '--color-text',
++  '--color-text-secondary', '--color-primary', '--color-primary-hover', '--color-primary-tint', '--color-primary-tint-strong',
++  '--color-on-primary', '--color-accent', '--color-on-accent', '--color-accent-tint', '--color-text-personal',
++  '--color-status-open', '--color-danger', '--color-danger-tint', '--color-border', '--color-border-subtle',
++  '--color-border-input', '--color-control-off',
++];
++
++const sizes = [['xs', '12px', '16px'], ['sm', '14px', '20px'], ['md', '16px', '24px'], ['lg', '18px', '24px'], ['xl', '24px', '30px']] as const;
++const weights = ['regular', 'semibold', 'bold', 'heavy'] as const;
++
++export default async function ComponentCatalog() {
++  if (!catalogAllowed(process.env, (await headers()).get('host'))) notFound();
++  return <section lang="en" aria-labelledby="catalog-title">
++    <h1 id="catalog-title">Component catalog</h1>
++    <p className="small">Development only. This page is not available in production or preview.</p>
++
++    <h2 id="catalog-colors">Color tokens</h2>
++    <ul className="catalog-swatches" aria-labelledby="catalog-colors">
++      {colors.map((name) => <li key={name}><span className="catalog-swatch" aria-hidden="true" style={{ background: `var(${name})` }} /><code>{name}</code></li>)}
++    </ul>
++
++    <h2>Typography</h2>
++    {sizes.map(([step, size, lineHeight]) => <p key={step} style={{ fontSize: `var(--font-size-${step})`, lineHeight: `var(--line-height-${step})` }}>{`Size ${step}: ${size}/${lineHeight}`}</p>)}
++    {weights.map((name) => <p key={name} style={{ fontWeight: `var(--font-weight-${name})` }}>{`Weight ${name}`}</p>)}
++
++    <h2>Form controls</h2>
++    <form action="/dev/components">
++      <label htmlFor="catalog-name">Resource name</label>
++      <input id="catalog-name" name="name" />
++      <label htmlFor="catalog-zip">ZIP code</label>
++      <input id="catalog-zip" name="zip" inputMode="numeric" autoComplete="postal-code" aria-describedby="catalog-zip-hint" />
++      <p id="catalog-zip-hint" className="small">Five digits</p>
++      <label htmlFor="catalog-website">Website</label>
++      <input id="catalog-website" name="website" aria-invalid="true" aria-describedby="catalog-website-error" defaultValue="example" />
++      <p id="catalog-website-error" className="error">Enter a full web address that starts with https://</p>
++      <label htmlFor="catalog-organization">Organization name</label>
++      <input id="catalog-organization" name="organization" readOnly defaultValue="Synthetic organization" />
++      <label htmlFor="catalog-method">Method</label>
++      <select id="catalog-method" name="method">
++        <option value="phone">Phone call</option>
++        <option value="website">Website review</option>
++        <option value="in_person">In person</option>
++      </select>
++      <label htmlFor="catalog-evidence">Evidence</label>
++      <textarea id="catalog-evidence" name="evidence" />
++      <fieldset aria-describedby="catalog-categories-hint">
++        <legend>Support categories</legend>
++        <p id="catalog-categories-hint">Choose at least one.</p>
++        <label><input type="checkbox" name="categories" value="food" />Food</label>
++        <label><input type="checkbox" name="categories" value="health" />Health</label>
++        <label><input type="checkbox" name="categories" value="work" />Work</label>
++      </fieldset>
++      <label><input type="checkbox" name="consent" value="yes" />I agree to store these preferences</label>
++    </form>
++
++    <h2>Surfaces</h2>
++    <div className="hero">
++      <p className="eyebrow">Eyebrow</p>
++      <p className="lede">A lede introduces a page in one or two plain sentences.</p>
++    </div>
++    <div className="grid">
++      <article className="card" aria-labelledby="catalog-card-short">
++        <span className="tag">98101</span>
++        <h3 id="catalog-card-short">Synthetic food pantry</h3>
++        <p>Sample listing text that shows how a card holds a short description.</p>
++        <p className="small">Checked by an ORAN contributor</p>
++        <p><a href="https://example.org" rel="noreferrer">Visit website</a></p>
++      </article>
++      <article className="card" aria-labelledby="catalog-card-long">
++        <h3 id="catalog-card-long">{'Synthetic' + 'resource'.repeat(15)}</h3>
++        <p>{'https://example.org/' + 'a-very-long-path-segment-'.repeat(6)}</p>
++      </article>
++    </div>
++    <div className="stack">
++      <p className="notice">A notice sits in the page flow without announcing itself.</p>
++      <p className="notice" role="status">A status notice is announced politely when it appears.</p>
++    </div>
++    <p className="error">An error states what went wrong and what to do next.</p>
++  </section>;
++}
+diff --git a/src/app/dev/guard.ts b/src/app/dev/guard.ts
+new file mode 100644
+index 0000000..517f2d4
+--- /dev/null
++++ b/src/app/dev/guard.ts
+@@ -0,0 +1,17 @@
++import { config } from '@/modules/platform';
++
++// Host header of the local launcher: a loopback name with an optional port, and nothing else (no userinfo, path or query).
++const loopbackHost = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/i;
++
++// Every condition is required and any exception means "no". Production and Vercel are refused before config() is asked.
++export function catalogAllowed(env: Record<string, string | undefined>, host: string | null): boolean {
++  try {
++    if (env.ORAN_LOCAL_DEV !== '1' || env.NODE_ENV === 'production' || env.VERCEL) return false;
++    const settings = config(env);
++    if (!settings.local || settings.stage !== 'development') return false;
++    if (!host || !loopbackHost.test(host)) return false;
++    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL('http://' + host).hostname);
++  } catch {
++    return false;
++  }
++}
+diff --git a/src/app/globals.css b/src/app/globals.css
+index a4b38d5..1663fc7 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -101,20 +101,23 @@ h3 { margin-block:var(--space-4) var(--space-2); font-size:var(--font-size-md);
+ .card h2 { margin-block-start:var(--space-2); }
+ .card > :first-child, .card > input[type=hidden]:first-child + * { margin-block-start:0; }
+ .card a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
+ .notice { max-inline-size:none; margin-block:var(--space-4); padding-block:var(--space-3); padding-inline:var(--space-4); border:1px solid var(--color-border); border-radius:var(--radius-card); background:var(--color-surface); }
+ .local-notice { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3); margin-block:var(--space-4) 0; margin-inline:max(var(--space-4), (100% - var(--size-chat-column)) / 2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); }
+ .local-notice a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
+ .local-notice form { display:inline; }
+ .local-notice button { margin:0; }
+ .grid, .stack { display:grid; gap:var(--space-3); }
+ .grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }
++.catalog-swatches { display:grid; gap:var(--space-3); margin:0; padding:0; list-style:none; }
++.catalog-swatches li { display:flex; align-items:center; gap:var(--space-3); }
++.catalog-swatch { display:inline-block; flex:none; inline-size:var(--space-7); block-size:var(--space-7); border:1px solid var(--color-border); border-radius:var(--radius-badge); }
+ .tag { display:inline; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-text-secondary); }
+ .small { font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
+ .error { display:flex; align-items:flex-start; gap:var(--space-2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-danger); }
+ .error::before { content:''; flex:none; inline-size:var(--space-4); block-size:var(--space-4); margin-block-start:calc((var(--line-height-sm) - var(--space-4)) / 2); background-color:currentColor; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 7v6M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat; }
+ label { display:block; margin-block:var(--space-4) var(--space-1); margin-inline:0; font-weight:var(--font-weight-semibold); }
+ label:where(:has(> input:is([type=checkbox],[type=radio]))) { display:flex; align-items:center; gap:var(--space-3); min-block-size:var(--size-target); margin-block:var(--space-4) 0; margin-inline:0; font-weight:var(--font-weight-regular); }
+ fieldset > label:where(:has(> input:is([type=checkbox],[type=radio]))) { margin:0; }
+ input:where([type=checkbox],[type=radio]) { inline-size:var(--space-5); block-size:var(--space-5); margin:0; flex:none; accent-color:var(--color-primary); }
+ input:where(:not([type=checkbox],[type=radio],[type=hidden])), select, textarea { inline-size:100%; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1.5px solid var(--color-border-input); border-radius:var(--radius-control); background:var(--color-surface); color:var(--color-text); font-family:inherit; font-size:var(--font-size-md); line-height:var(--line-height-md); }
+ input[readonly], textarea[readonly] { background:var(--color-bg); }
+diff --git a/tests/browser/component-catalog.spec.ts b/tests/browser/component-catalog.spec.ts
+new file mode 100644
+index 0000000..3df3f60
+--- /dev/null
++++ b/tests/browser/component-catalog.spec.ts
+@@ -0,0 +1,91 @@
++import { expect } from '@playwright/test';
++import { catalogAllowed } from '../../src/app/dev/guard';
++import { accessible, documentedColors, fitsWidth, test } from './support';
++
++test('catalog guard admits only the local launcher on loopback', () => {
++  const local = { ORAN_LOCAL_DEV: '1', ORAN_ENV: 'development', NODE_ENV: 'development', DATABASE_URL: 'postgresql://oran@127.0.0.1:5432/oran' };
++  for (const host of ['127.0.0.1:3100', 'localhost:3000', '[::1]:3100']) expect(catalogAllowed(local, host), host).toBe(true);
++
++  const denied = [
++    { ...local, NODE_ENV: 'production' },
++    { ...local, VERCEL: '1' },
++    { ...local, ORAN_ENV: 'preview' },
++    { ...local, ORAN_ENV: 'production' },
++    { ...local, ORAN_ENV: 'test' },
++    { ...local, ORAN_LOCAL_DEV: undefined },
++    { ...local, ORAN_LOCAL_DEV: '0' },
++    { ...local, DATABASE_URL: 'postgresql://u:p@db.example.com/oran' },
++  ];
++  for (const env of denied) expect(catalogAllowed(env, '127.0.0.1:3100'), JSON.stringify(env)).toBe(false);
++
++  for (const host of ['oran.example', 'oran.example:3100', '127.0.0.1.evil.example', 'localhost.evil.example', '', null]) {
++    expect(catalogAllowed(local, host), String(host)).toBe(false);
++  }
++});
++
++test('catalog renders tokens and base styles accessibly at every width', async ({ page }) => {
++  await page.setViewportSize({ width: 1280, height: 800 });
++  const response = await page.goto('/dev/components');
++  expect(response?.status()).toBe(200);
++
++  await expect(page.getByRole('heading', { level: 1, name: 'Component catalog', exact: true })).toBeVisible();
++  for (const name of ['Color tokens', 'Typography', 'Form controls', 'Surfaces']) {
++    await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
++  }
++  // The page is kept out of search indexes whenever it is served.
++  expect(await page.evaluate(() => document.querySelector('meta[name="robots"]')?.getAttribute('content'))).toMatch(/noindex/);
++
++  // One swatch per approved color, in the order DESIGN_SYSTEM.md §3.1 lists them.
++  await expect(page.getByRole('list', { name: 'Color tokens', exact: true }).getByRole('listitem')).toHaveText([...documentedColors().keys()]);
++
++  const website = page.getByRole('textbox', { name: 'Website', exact: true });
++  await expect(website).toHaveAttribute('aria-invalid', 'true');
++  await expect(website).toHaveAccessibleDescription('Enter a full web address that starts with https://');
++  await expect(website).toHaveCSS('border-top-color', 'rgb(180, 35, 24)');
++  await expect(page.getByRole('textbox', { name: 'ZIP code', exact: true })).toHaveAccessibleDescription('Five digits');
++  await expect(page.getByRole('textbox', { name: 'Organization name', exact: true })).toHaveCSS('background-color', 'rgb(242, 244, 245)');
++
++  const size = page.getByText('Size xl: 24px/30px', { exact: true });
++  await expect(size).toHaveCSS('font-size', '24px');
++  await expect(size).toHaveCSS('line-height', '30px');
++
++  for (const width of [360, 1280]) {
++    await page.setViewportSize({ width, height: 800 });
++    await accessible(page);
++  }
++
++  // The long unbroken card name and address must wrap inside the card instead of widening the page.
++  await page.setViewportSize({ width: 320, height: 800 });
++  await expect(page.getByRole('heading', { level: 3, name: /^Syntheticresourceresource/ })).toBeVisible();
++  expect(await fitsWidth(page)).toBe(true);
++});
++
++test('cards keep visible boundaries under forced colors', async ({ page }) => {
++  await page.goto('/dev/components');
++  const card = page.getByRole('article', { name: 'Synthetic food pantry', exact: true });
++  await expect(card).toBeVisible();
++  const edges = () => card.evaluate((element) => {
++    const computed = getComputedStyle(element);
++    return { shadow: computed.boxShadow, style: computed.borderTopStyle, width: computed.borderTopWidth, color: computed.borderTopColor };
++  });
++
++  const normal = await edges();
++  expect(normal.shadow, 'shadow').not.toBe('none');
++  expect(normal).toMatchObject({ style: 'solid', width: '1px' });
++
++  // Forced colors compute the shadow to none, so the 1px border is the card's only edge there. The author's transparent
++  // border color is replaced by a system color, which makes that edge visible.
++  await page.emulateMedia({ forcedColors: 'active' });
++  const forced = await edges();
++  expect(forced).toMatchObject({ style: 'solid', width: '1px' });
++  expect(forced.color, 'border color under forced colors').not.toBe(normal.color);
++});
++
++test('the catalog is not linked from the app', async ({ page }) => {
++  for (const path of ['/', '/sign-in']) {
++    await page.goto(path);
++    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
++    await expect(page.getByRole('link', { name: /catalog/i }), path).toHaveCount(0);
++    await expect(page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('link'), path).toHaveCount(5);
++  }
++});
+diff --git a/tests/browser/design-system.spec.ts b/tests/browser/design-system.spec.ts
+index c146171..ecb9aea 100644
+--- a/tests/browser/design-system.spec.ts
++++ b/tests/browser/design-system.spec.ts
+@@ -1,13 +1,13 @@
+ import { readFileSync } from 'node:fs';
+ import { expect } from '@playwright/test';
+-import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, hydratedTest, normalized, readTokens, resolveAs, ring, test } from './support';
++import { accessible, contrast, documentedColors, documentedTokenNames, enterAs, fitsWidth, focusByKeyboard, normalized, readTokens, resolveAs, ring, test } from './support';
+ 
+ // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
+ const blendTokens: Record<string, string> = {
+   '--font-family-base': "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+   '--font-weight-regular': '400',
+   '--font-weight-semibold': '600',
+   '--font-weight-bold': '700',
+   '--font-weight-heavy': '800',
+   '--font-size-xs': '12px',
+   '--font-size-sm': '14px',
+@@ -229,22 +229,21 @@ test('existing pages pass axe and reflow at phone and desktop widths', async ({
+     await page.setViewportSize({ width: 320, height: 800 });
+     await open(path);
+     expect(await fitsWidth(page), path + ' fits 320px').toBe(true);
+   };
+ 
+   for (const path of ['/', '/sign-in', '/no-such-page']) await check(path);
+   await enterAs(page, 'Admin');
+   for (const path of ['/admin', '/organization', '/community', '/profile']) await check(path);
+ });
+ 
+-// Uses the hydrated `test`: choosing "A website" runs React state, which the blocked Fast Refresh socket would prevent.
+-hydratedTest('controls follow the Blend button and field specs', async ({ page }) => {
++test('controls follow the Blend button and field specs', async ({ page }) => {
+   await page.setViewportSize({ width: 360, height: 800 });
+   await enterAs(page, 'Admin');
+   await page.goto('/admin');
+   const primary = page.getByRole('button', { name: 'Add resource', exact: true });
+   await expect(primary).toBeVisible();
+   await expect(primary).toHaveCSS('background-color', 'rgb(23, 89, 107)');
+   await expect(primary).toHaveCSS('color', 'rgb(255, 255, 255)');
+   await expect(primary).toHaveCSS('border-radius', '12px');
+   await expect(primary).toHaveCSS('font-weight', '700');
+   await expect(primary).toHaveCSS('font-size', '16px');
+diff --git a/tests/browser/support.ts b/tests/browser/support.ts
+index 95dc4d1..bdb3f3f 100644
+--- a/tests/browser/support.ts
++++ b/tests/browser/support.ts
+@@ -1,31 +1,19 @@
+ import { readFileSync } from 'node:fs';
+-import { test as base, expect, type Locator, type Page } from '@playwright/test';
++import { test, expect, type Locator, type Page } from '@playwright/test';
+ import AxeBuilder from '@axe-core/playwright';
+ 
+-// `test` for specs that read a page right after it loads. Next's dev server keeps a Fast Refresh socket open to every
+-// page. Over a Turbopack dev cache that an earlier run left behind, Next 16.4 answers every HMR subscribe with
+-// "restart", so the page reloads forever and destroys any evaluate in flight (vercel/next.js#100251). PR #15 fixed that
+-// cause: browser test runs now compile without the saved dev cache (next.config.ts). This override stays in PR A so the
+-// evidence gathered with it stays valid, and PR B removes it after one gated run passes without it. These specs want a
+-// static page, so their pages get no Fast Refresh channel. workflow.spec.ts still uses Playwright's own `test`.
+-export const test = base.extend({
+-  page: async ({ page }, provide) => {
+-    await page.routeWebSocket(/\/_next\//, () => undefined);
+-    await provide(page);
+-  },
+-});
+-
+-// Specs that need React to hydrate use Playwright's own `test`. With the socket above blocked, hydration never started on
+-// /admin (a click on a controlled radio never reached React state), so a client component cannot change the page.
+-// PR #15 removed the reload loop, so these specs do not need the override.
+-export const hydratedTest = base;
++// Every spec runs against a hydrated page with Playwright's own `test`. Blocking the dev server's /_next/ socket used to
++// keep a Turbopack reload loop away (vercel/next.js#100251), but it also stopped React from hydrating, so those specs
++// tested a page that never became interactive. PR #15 fixed the loop at its cause: test runs compile without the saved
++// dev cache (next.config.ts).
++export { test };
+ 
+ // The text of docs/DESIGN_SYSTEM.md from "## <title>" to the next "## " heading.
+ // The path is relative to the working directory, which is the repository root for Playwright.
+ export function designSystemSection(title: string): string {
+   const lines = readFileSync('docs/DESIGN_SYSTEM.md', 'utf8').split(/\r?\n/);
+   const start = lines.indexOf('## ' + title);
+   if (start === -1) throw new Error('DESIGN_SYSTEM.md has no "## ' + title + '" section.');
+   const end = lines.findIndex((line, index) => index > start && line.startsWith('## '));
+   return lines.slice(start, end === -1 ? undefined : end).join('\n');
+ }

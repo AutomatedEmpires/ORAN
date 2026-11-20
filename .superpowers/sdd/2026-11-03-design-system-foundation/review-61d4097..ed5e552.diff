@@ -1,0 +1,305 @@
+# Review package: 61d4097..HEAD
+
+## Commits
+ed5e552 feat: self-host Figtree in four Latin weights
+
+## Files changed
+ docs/ARCHITECTURE.md                |  3 ++-
+ package.json                        |  1 +
+ pnpm-lock.yaml                      |  8 +++++++
+ src/app/globals.css                 |  2 +-
+ src/app/layout.tsx                  |  4 ++++
+ tests/browser/design-system.spec.ts | 48 ++++++++++++++++++++++++++++++++++++-
+ tests/browser/support.ts            |  7 ++++++
+ 7 files changed, 70 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index d5e3cf5..80aee1e 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -10,22 +10,23 @@ The target blueprint is implemented incrementally under ADR-0003. The developmen
+ | @clerk/nextjs | Hosted identity adapter; no development credentials committed |
+ | kysely, pg | Parameterized queries over one application PostgreSQL pool |
+ | zod | Validate untrusted input at boundaries |
+ | @electric-sql/pglite, pglite-socket, pglite-postgis | Development/test-only isolated PostgreSQL with loopback access; PostGIS WASM is experimental and does not replace standard PostgreSQL/PostGIS CI |
+ | kysely-codegen | Generate types from the migrated schema; no hand-maintained ORM schema |
+ | tsx | Cross-platform Node development scripts |
+ | typescript, @types/node, @types/pg, @types/react, @types/react-dom | Static checks and library declarations |
+ | eslint, eslint-config-next | Framework, React, accessibility and TypeScript checks |
+ | vitest | Domain/data tests added with the resource workflow |
+ | @playwright/test, @axe-core/playwright | Browser workflow and accessibility verification; development only |
++| @fontsource/figtree | Self-hosted Figtree (SIL OFL 1.1): Latin files for weights 400, 600, 700 and 800, bundled at build; no runtime third-party font requests |
+ 
+-Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. System fonts avoid build-time font downloads. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
++Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. Figtree is self-hosted from the pinned @fontsource/figtree package (Latin, four weights, font-display: swap), so neither the build nor the browser contacts a font service. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
+ 
+ ## Current routes and checks
+ 
+ Public / exposes current checked resources or an honest empty/outage state. /profile requires identity and accesses only that user's preferences. /organization and /resources/[id]/edit require scoped organization/admin control. /community requires approved geographic/category membership for verification; /admin requires the database admin role, and category creation there is admin-only. Server actions independently authenticate and recheck authorization inside the catalog services. Resource creation, edits, category creation, approval, verification and profile deletion refresh affected views. No role or profile-user ID is trusted from form input.
+ 
+ Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. PR check results are authoritative for each commit. No production deployment is configured.
+ 
+ ## Identity and route contract
+ 
+ Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+diff --git a/package.json b/package.json
+index 0f6a3eb..a21d7ac 100644
+--- a/package.json
++++ b/package.json
+@@ -19,20 +19,21 @@
+     "test:e2e": "playwright test",
+     "dev:remote": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next dev --hostname 127.0.0.1",
+     "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
+     "db:types": "tsx scripts/types.ts",
+     "db:types:check": "tsx scripts/types.ts --verify",
+     "admin:grant": "node --env-file-if-exists=.env.local --import tsx scripts/grant-admin.ts",
+     "test:integration": "vitest run tests/catalog.test.ts tests/migrations.test.ts"
+   },
+   "dependencies": {
+     "@clerk/nextjs": "7.9.23",
++    "@fontsource/figtree": "5.3.0",
+     "kysely": "0.29.8",
+     "next": "16.4.4",
+     "pg": "8.23.1",
+     "react": "19.3.1",
+     "react-dom": "19.3.1",
+     "zod": "4.6.7"
+   },
+   "devDependencies": {
+     "@axe-core/playwright": "4.14.0",
+     "@electric-sql/pglite": "0.5.14",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index a49e6c1..2e917a6 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -4,20 +4,23 @@ settings:
+   autoInstallPeers: true
+   excludeLinksFromLockfile: false
+ 
+ importers:
+ 
+   .:
+     dependencies:
+       '@clerk/nextjs':
+         specifier: 7.9.23
+         version: 7.9.23(next@16.4.4(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
++      '@fontsource/figtree':
++        specifier: 5.3.0
++        version: 5.3.0
+       kysely:
+         specifier: 0.29.8
+         version: 0.29.8
+       next:
+         specifier: 16.4.4
+         version: 16.4.4(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+       pg:
+         specifier: 8.23.1
+         version: 8.23.1
+       react:
+@@ -434,20 +437,23 @@ packages:
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
+   '@eslint/object-schema@2.1.7':
+     resolution: {integrity: sha512-VtAOaymWVfZcmZbp6E2mympDIHvyjXs/12LqWYjVw6qjrfF+VK+fyG33kChz3nnK+SU5/NeHOqrTEHS8sXO3OA==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
+   '@eslint/plugin-kit@0.4.1':
+     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+ 
++  '@fontsource/figtree@5.3.0':
++    resolution: {integrity: sha512-/iTcTXL1eRBGhvD7NN9dnKzXzWqDLVZVEUFI9xIxAC1G/hXU8tCyYeXCAuPOuvSYPInFUP7H6KLGgygmDfy1SA==}
++
+   '@humanfs/core@0.19.2':
+     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
+     engines: {node: '>=18.18.0'}
+ 
+   '@humanfs/node@0.16.8':
+     resolution: {integrity: sha512-gE1eQNZ3R++kTzFUpdGlpmy8kDZD/MLyHqDwqjkVQI0JMdI1D51sy1H958PNXYkM2rAac7e5/CnIKZrHtPh3BQ==}
+     engines: {node: '>=18.18.0'}
+ 
+   '@humanfs/types@0.15.0':
+     resolution: {integrity: sha512-ZZ1w0aoQkwuUuC7Yf+7sdeaNfqQiiLcSRbfI08oAxqLtpXQr9AIVX7Ay7HLDuiLYAaFPu8oBYNq/QIi9URHJ3Q==}
+@@ -2918,20 +2924,22 @@ snapshots:
+ 
+   '@eslint/js@9.39.5': {}
+ 
+   '@eslint/object-schema@2.1.7': {}
+ 
+   '@eslint/plugin-kit@0.4.1':
+     dependencies:
+       '@eslint/core': 0.17.0
+       levn: 0.4.1
+ 
++  '@fontsource/figtree@5.3.0': {}
++
+   '@humanfs/core@0.19.2':
+     dependencies:
+       '@humanfs/types': 0.15.0
+ 
+   '@humanfs/node@0.16.8':
+     dependencies:
+       '@humanfs/core': 0.19.2
+       '@humanfs/types': 0.15.0
+       '@humanwhocodes/retry': 0.4.3
+ 
+diff --git a/src/app/globals.css b/src/app/globals.css
+index bf1bdd0..ae53fd5 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -65,21 +65,21 @@
+   --motion-base: 200ms;
+   --motion-easing: cubic-bezier(.2, 0, 0, 1);
+   --layer-bar: 10;
+   --layer-map-overlay: 20;
+   --layer-sheet: 30;
+   --layer-drawer: 40;
+   --layer-dialog: 50;
+   --layer-toast: 60;
+ }
+ * { box-sizing:border-box; }
+-body { margin:0; background:var(--paper); color:var(--ink); font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; }
++body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--font-family-base); font-size:16px; line-height:1.6; }
+ a { color:var(--accent); text-underline-offset:4px; }
+ a:hover { text-decoration-thickness:2px; }
+ :focus-visible { outline:3px solid #95641b; outline-offset:4px; }
+ header { max-width:1240px; margin:auto; padding:28px 36px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+ .brand { font-size:30px; font-weight:800; letter-spacing:-1px; text-decoration:none; line-height:1.1; }
+ .brand span { display:block; margin-top:8px; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:500; }
+ nav { display:flex; gap:20px; flex-wrap:wrap; }
+ nav a { font-size:14px; text-decoration:none; padding:10px 0; }
+ main { max-width:1168px; margin:auto; padding:48px 36px 80px; min-height:65vh; }
+ h1,h2,h3 { line-height:1.15; letter-spacing:-.04em; }
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index bc69412..ff89104 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,15 +1,19 @@
+ import type { Metadata } from 'next';
+ import Link from 'next/link';
+ import { ClerkProvider } from '@clerk/nextjs';
+ import { messages, changeLanguage } from '@/server/language';
+ import { LocaleProvider } from '@/ui/locale';
++import '@fontsource/figtree/latin-400.css';
++import '@fontsource/figtree/latin-600.css';
++import '@fontsource/figtree/latin-700.css';
++import '@fontsource/figtree/latin-800.css';
+ import './globals.css';
+ export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
+ export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {
+  const {locale,text:t}=await messages();
+  const local=process.env.ORAN_LOCAL_DEV==='1';
+  const body=<LocaleProvider locale={locale}>
+   <a className="skip" href="#main">{t.skip}</a>
+   <header><Link className="brand" href="/">ORAN<span>{t.brand}</span></Link>
+    <nav aria-label={t.navigation}><Link href="/">{t.find}</Link><Link href="/profile">{t.profile}</Link><Link href="/organization">{t.organization}</Link><Link href="/community">{t.community}</Link><Link href="/admin">{t.admin}</Link></nav>
+    <form action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><button>{t.apply}</button></form>
+diff --git a/tests/browser/design-system.spec.ts b/tests/browser/design-system.spec.ts
+index b4b2841..23fc685 100644
+--- a/tests/browser/design-system.spec.ts
++++ b/tests/browser/design-system.spec.ts
+@@ -1,13 +1,13 @@
+ import { readFileSync } from 'node:fs';
+ import { test, expect } from '@playwright/test';
+-import { contrast, documentedColors, documentedTokenNames, normalized, readTokens, resolveAs } from './support';
++import { contrast, documentedColors, documentedTokenNames, enterAs, normalized, readTokens, resolveAs } from './support';
+ 
+ // The non-color values approved in docs/DESIGN_SYSTEM.md §3.3 and §3.4. The colors are read from the document itself.
+ const blendTokens: Record<string, string> = {
+   '--font-family-base': "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+   '--font-weight-regular': '400',
+   '--font-weight-semibold': '600',
+   '--font-weight-bold': '700',
+   '--font-weight-heavy': '800',
+   '--font-size-xs': '12px',
+   '--font-size-sm': '14px',
+@@ -147,10 +147,56 @@ test('implemented colors keep the DESIGN_SYSTEM §3.2 contrast ratios', async ({
+   expect(failures).toEqual([]);
+   // Link hover on the page ground (Task 3).
+   expect(ratio('primary-hover', 'bg')).toBeGreaterThanOrEqual(4.5);
+ });
+ 
+ test('forces the light color scheme', async ({ page }) => {
+   await page.emulateMedia({ colorScheme: 'dark' });
+   await page.goto('/');
+   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+ });
++
++const figtreeStack = /^["']?Figtree["']?,/;
++const googleFonts = /fonts\.(googleapis|gstatic)\.com/;
++
++test('seeker pages load self-hosted Figtree and never contact Google Fonts', async ({ page }) => {
++  const requested: string[] = [];
++  page.on('request', (request) => requested.push(request.url()));
++
++  const checkFigtree = async (path: string) => {
++    expect(new URL(page.url()).pathname).toBe(path);
++    await page.evaluate(() => document.fonts.ready);
++    const faces = await page.evaluate(() =>
++      [...document.fonts]
++        .filter((face) => face.family.replace(/["']/g, '') === 'Figtree')
++        .map(({ weight, display, style, status }) => ({ weight, display, style, status })),
++    );
++    expect(faces.map((face) => face.weight).sort(), path + ' faces').toEqual(['400', '600', '700', '800']);
++    expect(faces.map((face) => face.display), path + ' display').toEqual(['swap', 'swap', 'swap', 'swap']);
++    expect(faces.map((face) => face.style), path + ' style').toEqual(['normal', 'normal', 'normal', 'normal']);
++    expect(faces.find((face) => face.weight === '400')?.status, path + ' regular face').toBe('loaded');
++    expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily), path + ' body font').toMatch(figtreeStack);
++  };
++
++  await page.goto('/');
++  await checkFigtree('/');
++  await page.goto('/sign-in');
++  await checkFigtree('/sign-in');
++  await enterAs(page, 'My profile');
++  await checkFigtree('/profile');
++
++  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
++  const fontFiles = requested.filter((url) => /\.woff2?$/.test(new URL(url).pathname));
++  expect(fontFiles.filter((url) => new URL(url).origin !== 'http://127.0.0.1:3100')).toEqual([]);
++  expect(fontFiles.some((url) => new URL(url).pathname.endsWith('.woff2'))).toBe(true);
++});
++
++test('text renders in the fallback stack when font files fail', async ({ page }) => {
++  const requested: string[] = [];
++  page.on('request', (request) => requested.push(request.url()));
++  await page.route(/\.woff2?(\?.*)?$/, (route) => route.abort());
++
++  await page.goto('/');
++  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
++  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(figtreeStack);
++  expect(requested.filter((url) => googleFonts.test(url))).toEqual([]);
++});
+diff --git a/tests/browser/support.ts b/tests/browser/support.ts
+index 743a23a..2cac28f 100644
+--- a/tests/browser/support.ts
++++ b/tests/browser/support.ts
+@@ -19,20 +19,27 @@ export function documentedColors(): Map<string, string> {
+     if (row) colors.set(row[1], row[2]);
+   }
+   return colors;
+ }
+ 
+ // Every custom property the approved document names anywhere in §3.
+ export function documentedTokenNames(): Set<string> {
+   return new Set([...designSystemSection('3. Tokens').matchAll(/`(--[a-z0-9-]+)/g)].map((match) => match[1]));
+ }
+ 
++// Signs in through the local identity chooser and waits until the redirect has left /sign-in.
++export async function enterAs(page: Page, identity: 'Admin' | 'Organization' | 'Community' | 'My profile'): Promise<void> {
++  await page.goto('/sign-in');
++  await page.getByRole('button', { name: 'Enter as ' + identity, exact: true }).click();
++  await page.waitForURL((url) => !url.href.includes('/sign-in'));
++}
++
+ export async function readTokens(page: Page, names: Iterable<string>): Promise<Map<string, string>> {
+   const list = [...names];
+   const values = await page.evaluate(
+     (tokenNames) => tokenNames.map((name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()),
+     list,
+   );
+   return new Map(list.map((name, index) => [name, values[index]]));
+ }
+ 
+ export function normalized(value: string): string {

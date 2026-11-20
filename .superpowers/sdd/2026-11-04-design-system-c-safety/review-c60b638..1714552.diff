@@ -1,0 +1,744 @@
+# Review package: c60b638..HEAD
+
+## Commits
+1714552 feat: offer Get help now on Profile, in the footer and on outage screens
+
+## Files changed
+ README.md                       |   2 +-
+ docs/ARCHITECTURE.md            |   2 +-
+ docs/DESIGN_SYSTEM.md           |   9 +-
+ src/app/dev/components/page.tsx |   6 +-
+ src/app/error.tsx               |   3 +-
+ src/app/globals.css             |  10 +++
+ src/app/layout.tsx              |   5 +-
+ src/app/page.tsx                |   3 +-
+ src/app/profile/page.tsx        |   3 +-
+ src/ui/en.json                  |   9 +-
+ src/ui/es.json                  |   9 +-
+ src/ui/get-help-now.tsx         |  66 +++++++++++++++
+ tests/browser/safety.spec.ts    | 178 +++++++++++++++++++++++++++++++++++++++-
+ tests/safety-ui.test.ts         |  43 ++++++++++
+ 14 files changed, 334 insertions(+), 14 deletions(-)
+
+## Diff
+diff --git a/README.md b/README.md
+index eb0a27f..356f885 100644
+--- a/README.md
++++ b/README.md
+@@ -49,21 +49,21 @@ Organization staff create and edit only their own resources. Approved community
+ .\scripts\run.ps1 build
+ .\scripts\run.ps1 test:e2e
+ ```
+ 
+ Browser tests use a separate fresh database, port 3100 and .next-test build folder. Windows uses installed Microsoft Edge when available; otherwise install the Playwright Chromium browser with the package runner. CI installs Chromium explicitly. Test traces are ignored.
+ 
+ CI checks Windows and Linux, standard PostgreSQL 17/PostGIS 3.6 integration and browser accessibility. Native Windows ARM64 has also been exercised locally. See the PR checks for the exact current result; a Linux build alone is not ARM64 evidence.
+ 
+ ## Current scope
+ 
+-Implemented: direct admin/organization/community resource entry; organization-scoped edits; approved ZIP/category verification assignments; evidence and due dates; public checked-resource discovery; consented minimal matching preferences and deletion; deterministic explained matching; English/Spanish catalogs; admin-extendable categories (10 seeded, English and Spanish labels, multiple per resource); accounts holding several role memberships (admin, organization, community); staff, admins included, never verify their own organization's listings.
++Implemented: direct admin/organization/community resource entry; organization-scoped edits; approved ZIP/category verification assignments; evidence and due dates; public checked-resource discovery; consented minimal matching preferences and deletion; deterministic explained matching; English/Spanish catalogs; admin-extendable categories (10 seeded, English and Spanish labels, multiple per resource); accounts holding several role memberships (admin, organization, community); staff, admins included, never verify their own organization's listings; quick exit with an Esc-twice shortcut on Safety and Housing & shelter results; "Get help now" on Profile, in the footer and on outage and error screens.
+ 
+ Still to build: the Seek/Chat/Map/Profile experience; richer profiles and saved resources; evaluated resource-focused model integration and permission-aware web discovery/proposals; real organization registration/claims and staff invitations; contributor application/revocation UI; reminders and full risk tiers; licensed external imports; production runtime roles, operations and deployment. No live model calls or institutional agreement are required for this bootstrap. Spanish requires native-speaker review before public release.
+ 
+ For dedicated remote development, copy .env.example to .env.local, configure an isolated non-production database and Clerk development instance, then use dev:remote. The db:migrate and admin:grant commands refuse production stage. Production readiness and unresolved founder decisions remain separate from this development handoff.
+ 
+ ## Repository contracts
+ 
+ | Document | Purpose |
+ | --- | --- |
+ | [AGENTS.md](AGENTS.md) | Contributor authority, native environment and working rules |
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 7d35842..f791402 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -18,21 +18,21 @@ The target blueprint is implemented incrementally under ADR-0003. The developmen
+ | vitest | Domain/data tests added with the resource workflow |
+ | @playwright/test, @axe-core/playwright | Browser workflow and accessibility verification; development only |
+ | @fontsource/figtree | Self-hosted Figtree (SIL OFL 1.1): Latin files for weights 400, 600, 700 and 800, bundled at build; no runtime third-party font requests |
+ 
+ Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. Figtree is self-hosted from the pinned @fontsource/figtree package (Latin, four weights, font-display: swap), so neither the build nor the browser contacts a font service. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
+ 
+ ## Current routes and checks
+ 
+ Public / exposes current checked resources or an honest empty/outage state. /profile requires identity and accesses only that user's preferences. /organization and /resources/[id]/edit require scoped organization/admin control. /community requires approved geographic/category membership for verification; /admin requires the database admin role, and category creation there is admin-only. Server actions independently authenticate and recheck authorization inside the catalog services. Resource creation, edits, category creation, approval, verification and profile deletion refresh affected views. No role or profile-user ID is trusted from form input.
+ 
+-Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. PR check results are authoritative for each commit. No production deployment is configured.
++Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. Browser tests also check quick exit (one Esc never leaves; two within one second replace the page with https://www.weather.gov, intercepted and never contacted; it shows only on Safety and Housing & shelter results) and that the footer, Profile and outage and error screens list 988, 911, the domestic violence hotline and 211. PR check results are authoritative for each commit. No production deployment is configured.
+ 
+ ## Identity and route contract
+ 
+ Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+ 
+ One account may hold several memberships (admin, organization, community), each with its own scope and approval, and only approved memberships grant privileges. Independence rule: no admin or verifier is assigned, sees in a queue or verifies a listing of an organization they are affiliated with, whether that affiliation is approved or pending. Any future organization-membership grant or claim flow must release that organization's verification work currently assigned to the new member, using the same release logic as `approveContributor`.
+ 
+ The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
+ 
+ GET /dev/components renders the design-system component catalog only in local launcher mode: config() accepts ORAN_LOCAL_DEV=1 (development stage, loopback database), NODE_ENV is not production, VERCEL is unset and the Host is loopback; otherwise it renders the not-found page. It reads no identity, profile or catalog data, is marked noindex and is not linked from navigation.
+diff --git a/docs/DESIGN_SYSTEM.md b/docs/DESIGN_SYSTEM.md
+index 4566c1d..8a0edd3 100644
+--- a/docs/DESIGN_SYSTEM.md
++++ b/docs/DESIGN_SYSTEM.md
+@@ -228,22 +228,23 @@ Use the organization name alone, without the "by" prefix the chat mockups use. N
+ 
+ ### 5.6 Safety (D24, ADR-0007)
+ 
+ ORAN is a resource guide, not crisis care. Crisis help is always available, but it is never a core focus of the interface.
+ 
+ **GetHelpNow.** "Get help now" with a life-buoy icon.
+ - **Where, menu only:**
+   - a row in the ChatHistoryDrawer and on the Profile screen on phones;
+   - a row in the SideNav footer on desktop.
+   - It never appears in a TopBar.
+-- **Panel:** static crisis numbers (988, 911, the domestic violence hotline and the local 211). No classifier is involved.
+-- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Use it only:
++- **Interim:** until the SideNav and ChatHistoryDrawer exist, a collapsed "Get help now" disclosure ends the footer of every page, so help stays in one place (§9, WCAG 3.2.6). It moves into those menus when they ship.
++- **Panel:** static crisis numbers (988, 911, the domestic violence hotline and the local 211). No classifier is involved. Each line gives the number as text and a "Call {phone}" secondary button (`tel:`).
++- **Inline variant:** a `--color-primary-tint` card (`--radius-card`, life-buoy icon, a heading, the numbers as 44px secondary call buttons), with no pulsing or alarming motion. Inside the card the call buttons use `--color-surface`, so their edges show against the tint. Use it only:
+   - inside the assistant's reply when someone in a chat shows signs of immediate danger (never as a modal);
+   - in OutageState and Offline, which C19 requires.
+   - Never use it on category results or searches.
+ 
+ **QuickExit.** "Exit" with an exit icon.
+ - **Look:** `--color-surface-neutral`, `--color-text`, sm/700, 44px tall. The phone mockup's 36px is fixed to 44px.
+ - **Name:** "Quick exit to a neutral website".
+ - **Where:** the chat TopBar on phones and the chat header on desktop; the TopBar on Safety and Housing & shelter results and their listings. Domestic violence resources fall under Safety.
+ - **Shortcut:** pressing Esc twice within one second, at least wherever the button shows. A single Esc still closes drawers and dialogs.
+ - **Behavior:** it replaces the page and its history entry with `https://www.weather.gov` (`location.replace`) at once, with no confirmation (ADR-0007).
+@@ -286,20 +287,21 @@ All seeker strings live in the EN and ES message catalogs (`src/ui/en.json`, `sr
+ |---|---|---|
+ | TrustLabel | "Verified · {N} days ago"; after a check, "Verified · today" | ADR-0006 §2, §4 |
+ | TrustLabel | "Not independently verified by ORAN community" | ADR-0005, ADR-0006 |
+ | Trust lines | "Last verified {date}"; "Updated by the organization · {N} days ago" | ADR-0006 §2 |
+ | StatusNote | "Reported closed — call ahead"; "May be closed — call ahead"; "Some details may have changed — call ahead"; "Temporarily closed" | ADR-0005, ADR-0006 §3–§4 |
+ | Location | "Call for location" | ADR-0005, ADR-0006 §1 |
+ | AccuracyNote | Full: "Details can change. Confirm with the provider before relying on this information." Short: "Confirm before you go." | ADR-0006 §2 |
+ | FlagForm reasons | "Closed", "Wrong phone", "Wrong hours", "Wrong address", "Not as described", "Other" | ADR-0006 §4 |
+ | Follow-up | "Did it help?"; the answer "It was closed" creates a Closed flag | ADR-0005, ADR-0006 §4 |
+ | Features | "Helping someone else"; "Share this list"; "Get help now" | ADR-0005 |
++| GetHelpNow panel | "Suicide & Crisis Lifeline: call or text {phone}"; "In immediate danger: call {phone}"; "National Domestic Violence Hotline: {phone}"; "Local help with food, housing and bills: {phone}"; "Call {phone}" | This document |
+ | HoursTable | "24/7"; "By appointment"; "Today"; "Closed" | ADR-0006 §1; mockup |
+ | Composer | "ORAN can make mistakes. Confirm details with the provider."; placeholder "Type what you need…"; label "Message ORAN" | Mockup |
+ | MemoryNote | "Remembered: {items}" · "Undo" (name: "Undo remembering {items}") | Mockup |
+ | Seek | "Find support"; "Search food, rent help, clinics…"; "Using your profile"; "Why it fits:"; "Sort: Closest"; "Filters"; "{N} places"; "Open now"; "Open until {time}"; "Opens tomorrow {time}" | Mockup |
+ | Map | "{N} places offering help near you"; "You're not alone."; "List"; "Details"; "Selected place" | Mockup |
+ | Detail | "Back to results"; "Call {phone}"; "Directions"; "Website"; "Share"; "Who it's for"; "How to get help"; "What to bring"; "Hours"; "Address"; "Something wrong with this listing?" | Mockup |
+ | Chat | "See {N} more options" (singular: "See 1 more option"); "New chat"; "Search chats"; "Exit"; "Today"; "Previous 7 days"; "Older"; "Your chats are private to your account. Delete any chat from its menu."; "Profile and memory" | Mockup |
+ | Profile | "What ORAN remembers"; "Let ORAN remember things to personalize your help"; "Searches won't be saved to your memory"; "Saved"; "Delete everything ORAN remembers" | Mockup |
+ | Memory opt-in helper | "This can include details like your health or immigration status. You can review, edit or delete anything here." | ADR-0007 |
+ | Accessible names | "Quick exit to a neutral website"; "Open chat history"; "Close chat history"; "Copy answer"; "This helped"; "This did not help"; "Read answer aloud"; "Speak your message"; "Send message"; "Search for support"; "Save {name}"; "Turn off Using your profile"; "Options for {chat title}"; "Filters, {N} active"; "Edit {item}"; "Delete {item}"; "Collapse sidebar" | Mockup |
+@@ -333,27 +335,28 @@ Every screen designs all seven states: **loading**, **empty** (no input yet), **
+ 
+ ## 10. Implementation notes
+ 
+ - Tokens are CSS custom properties in the `:root` block of `src/app/globals.css`; `tests/browser/design-system.spec.ts` keeps them in step with §3.
+ - **Framework-agnostic.** Components are specified as semantic HTML plus tokens. The Tailwind and Radix choice is open under D6; whichever is chosen must consume these tokens, and lint must block raw colors, sizes and off-scale spacing.
+ - **Icons.** Inline SVG on a 24×24 viewBox, `fill="none"`, `stroke="currentColor"`, stroke 1.8 (default) to 2.1 (active or small), round caps and joins, `aria-hidden="true"`, with the name on the control. Lucide style; no icon fonts.
+ - **Fonts.** Self-host Figtree (SIL OFL 1.1). The mockups load Google Fonts; production must not, so seeker IP addresses are not sent to a third party.
+ - **Component catalog.** A development-only route renders every component in every state, with Playwright visual tests and axe (BLUEPRINT §12.3).
+ - Server-render seeker pages. Seek search and Detail work without client JavaScript. Chat streaming and the map are enhancements.
+ - Force `color-scheme: light` until a dark theme is designed.
++- QuickExit renders in every TopBar and shows only while the page holds an element with `data-quick-exit` (CSS `:has()`; browsers without it show it everywhere). Seeker pages add it with `quickExitScope(showsQuickExit(…))` from `src/ui/safety.ts`.
+ 
+ ## 11. Open items
+ 
+ **Not designed yet:**
+ - **Themes and layouts:** the dark theme; the tablet layout, collapsed SideNav and desktop Seek, Map, Profile and Detail; the Filters panel and expanded BottomSheet; staff workspace layouts.
+ - **Flows:** the chat welcome (BLUEPRINT proposes "What would help today?"); the "Did it help?" follow-up; the "Share this list" output; the "Helping someone else" indicator in Chat and Seek; delete confirmations; how a saved but permanently closed listing appears.
+-- **Copy:** the anonymous drawer and sidebar; the GetHelpNow panel; FlagForm buttons, warning and confirmation; remote, phone-only and service-area listings; holiday exceptions.
++- **Copy:** the anonymous drawer and sidebar; FlagForm buttons, warning and confirmation; remote, phone-only and service-area listings; holiday exceptions.
+ - **Policy:** whether chat may show unpublished web discoveries, and with what label (D21).
+ 
+ **Decisions:**
+ - **Spanish review:** all strings need native-speaker review. Test the longer labels at 360px.
+ - **Icon library:** decide whether to depend on lucide (ISC) or hand-draw the icons (D6, C13).
+ - **Map vendor:** tiles and geocoding are under D6. Recheck pin contrast and the cluster design once tiles are chosen.
+ 
+ **Changes from the mockups:**
+ 
+ | Mockup | This document | Why |
+diff --git a/src/app/dev/components/page.tsx b/src/app/dev/components/page.tsx
+index 60aded9..4192e17 100644
+--- a/src/app/dev/components/page.tsx
++++ b/src/app/dev/components/page.tsx
+@@ -1,15 +1,17 @@
+ // Authorization policy: local-launcher development only (catalogAllowed); otherwise not found. No identity, profile or catalog data.
+ import type { Metadata } from 'next';
+ import { headers } from 'next/headers';
+ import { notFound } from 'next/navigation';
+ import { Button, buttonClassName } from '@/ui/button';
++import en from '@/ui/en.json';
++import { GetHelpNow } from '@/ui/get-help-now';
+ import { quickExitScope } from '@/ui/safety';
+ import { catalogAllowed } from '../guard';
+ 
+ export const dynamic = 'force-dynamic';
+ const metadata: Metadata = { title: 'Component catalog', robots: { index: false, follow: false } };
+ 
+ // The one place that asks the guard, for this request's environment and host. The page and its metadata both use it.
+ async function allowed(): Promise<boolean> {
+   return catalogAllowed(process.env, (await headers()).get('host'));
+ }
+@@ -117,14 +119,16 @@ export default async function ComponentCatalog() {
+       </article>
+     </div>
+     <div className="stack">
+       <p className="notice">A notice sits in the page flow without announcing itself.</p>
+       <p className="notice" role="status">A status notice is announced politely when it appears.</p>
+     </div>
+     <p className="error">An error states what went wrong and what to do next.</p>
+ 
+     <section aria-labelledby="catalog-safety" {...quickExitScope(true)}>
+       <h2 id="catalog-safety">Safety</h2>
+-      <p className="small">This section marks the page as Safety results, so the top bar shows Exit and pressing Esc twice leaves for the neutral site.</p>
++      <p className="small">This section marks the page as Safety results, so the top bar shows Exit and pressing Esc twice leaves for the neutral site. Get help now appears as a menu row and as the card for outage and error screens.</p>
++      <GetHelpNow text={en} variant="row" />
++      <GetHelpNow text={en} variant="inline" />
+     </section>
+   </section>;
+ }
+diff --git a/src/app/error.tsx b/src/app/error.tsx
+index 4f5d822..5f1e664 100644
+--- a/src/app/error.tsx
++++ b/src/app/error.tsx
+@@ -1,3 +1,4 @@
+ 'use client';
++import { GetHelpNow } from '@/ui/get-help-now';
+ import { useMessages } from '@/ui/locale';
+-export default function ErrorPage({reset}:{reset:()=>void}) { const t=useMessages();return <section role="alert"><h1>{t.error}</h1><p>{t.retryHelp}</p><button onClick={reset}>{t.retry}</button></section>; }
++export default function ErrorPage({reset}:{reset:()=>void}) { const t=useMessages();return <><section role="alert"><h1>{t.error}</h1><p>{t.retryHelp}</p><button onClick={reset}>{t.retry}</button></section><GetHelpNow text={t} variant="inline"/></>; }
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 7e3aea0..0219c7b 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -142,16 +142,26 @@ button:disabled, button:disabled:hover, button:disabled:active { background-colo
+ .button-quiet { background-color:transparent; color:var(--color-primary); }
+ .button-quiet:hover, .button-quiet:active { background-color:var(--color-primary-tint); color:var(--color-primary); }
+ .button-destructive { background-color:transparent; color:var(--color-danger); }
+ .button-destructive:hover, .button-destructive:active { background-color:var(--color-danger-tint); color:var(--color-danger); }
+ .button-destructive-confirm, .button-destructive-confirm:hover, .button-destructive-confirm:active { background-color:var(--color-danger); color:var(--color-on-primary); }
+ .button[aria-disabled=true]:not([aria-busy=true]) { background-color:var(--color-surface-neutral); color:var(--color-text-secondary); cursor:not-allowed; }
+ .button[aria-busy=true] { cursor:progress; }
+ .button[aria-busy=true]::before { content:''; flex:none; box-sizing:border-box; inline-size:var(--space-4); block-size:var(--space-4); border:2px solid currentColor; border-inline-end-color:transparent; border-radius:var(--radius-full); animation:button-spin calc(var(--motion-base) * 4) linear infinite; }
+ @keyframes button-spin { to { transform:rotate(1turn); } }
+ footer { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6); padding-inline:var(--space-4); border-block-start:1px solid var(--color-border); font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
++.get-help { margin-block:var(--space-4); }
++.get-help summary { min-block-size:var(--size-target); color:var(--color-primary); font-weight:var(--font-weight-bold); cursor:pointer; }
++.get-help summary > span { display:inline-flex; align-items:center; gap:var(--space-2); min-block-size:var(--size-target); vertical-align:middle; }
++.get-help-row { padding-inline:var(--space-4); border:1px solid transparent; border-radius:var(--radius-card); background:var(--color-surface); box-shadow:var(--shadow-1); }
++.help-lines { display:grid; gap:var(--space-3); margin:0; padding:0; list-style:none; }
++.get-help .help-lines { padding-block-end:var(--space-4); }
++.help-lines li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--space-2) var(--space-3); }
++.get-help-inline { margin-block:var(--space-4); padding:var(--space-3) var(--space-4); border:1px solid transparent; border-radius:var(--radius-card); background:var(--color-primary-tint); color:var(--color-text); }
++.get-help-inline h2 { display:flex; align-items:center; gap:var(--space-2); margin-block:0 var(--space-3); }
++.get-help-inline .button-secondary:not(:hover, :active) { background-color:var(--color-surface); }
+ .visually-hidden { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+ .skip { position:absolute; inset-block-start:calc(-2 * var(--size-target)); inset-inline-start:var(--space-2); }
+ .skip:focus { inset-block-start:var(--space-2); z-index:var(--layer-toast); }
+ @media (width < 380px) { .brand-name { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; } }
+ @media (forced-colors: active) { .error::before { background-color:CanvasText; } nav a[aria-current=page] { text-decoration:underline; text-decoration-thickness:2px; } .button[aria-disabled=true]:not([aria-busy=true]) { border-color:GrayText; } .button[aria-busy=true]::before { border-inline-end-color:ButtonFace; } }
+ @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration:0s !important; animation:none !important; scroll-behavior:auto !important; } }
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index 78ca1aa..daf87d4 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,28 +1,29 @@
+ import type { Metadata } from 'next';
+ import Link from 'next/link';
+ import { ClerkProvider } from '@clerk/nextjs';
+ import { messages, changeLanguage } from '@/server/language';
+ import { Button } from '@/ui/button';
++import { GetHelpNow } from '@/ui/get-help-now';
+ import { LocaleProvider } from '@/ui/locale';
+ import { LogoMark } from '@/ui/logo';
+ import { DomainNav } from '@/ui/nav';
+ import { QuickExit } from '@/ui/quick-exit';
+ import '@fontsource/figtree/latin-400.css';
+ import '@fontsource/figtree/latin-600.css';
+ import '@fontsource/figtree/latin-700.css';
+ import '@fontsource/figtree/latin-800.css';
+ import './globals.css';
+ export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
+ export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {
+  const {locale,text:t}=await messages();
+  const local=process.env.ORAN_LOCAL_DEV==='1';
+  const body=<LocaleProvider locale={locale}>
+   <a className="skip" href="#main">{t.skip}</a>
+   <header><Link className="brand" href="/"><LogoMark/><span className="brand-name">ORAN</span>{' '}<span className="visually-hidden">{t.brand}</span></Link>
+    <div className="topbar-actions"><QuickExit label={t.exit} name={t.quickExitName}/>
+-    <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><Button variant="secondary" size="compact">{t.apply}</Button></form></div>
++    <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select key={locale} id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><Button variant="secondary" size="compact">{t.apply}</Button></form></div>
+    <DomainNav label={t.navigation} items={[{href:'/',label:t.find},{href:'/profile',label:t.profile},{href:'/organization',label:t.organization},{href:'/community',label:t.community},{href:'/admin',label:t.admin}]}/>
+-  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><Button variant="secondary" size="compact">{t.signOut}</Button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
++  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><Button variant="secondary" size="compact">{t.signOut}</Button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><GetHelpNow text={t}/></footer>
+  </LocaleProvider>;
+  return <html lang={locale}><body>{!local && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?<ClerkProvider>{body}</ClerkProvider>:body}</body></html>;
+ }
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index a7c6dd5..f182c75 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,9 +1,10 @@
+ import { publicResources } from '@/modules/catalog';
+ import { messages } from '@/server/language';
++import { OutageState } from '@/ui/get-help-now';
+ import { ResourceCards } from '@/ui/resources';
+ import { quickExitScope,showsQuickExit } from '@/ui/safety';
+ export default async function Home(){
+  const {text:t}=await messages();let resources:Awaited<ReturnType<typeof publicResources>>=[],available=true;
+  try{resources=await publicResources();}catch{available=false;}
+- return <section {...quickExitScope(showsQuickExit(...resources.map(r=>r.categories)))}><div className="hero"><p className="eyebrow">{t.eyebrow}</p><h1>{t.headline}</h1><p className="lede">{t.lede}</p></div>{!available?<p className="notice" role="status">{t.unavailable}</p>:resources.length?<ResourceCards resources={resources}/>:<p className="notice">{t.empty}</p>}</section>;
++ return <section {...quickExitScope(showsQuickExit(...resources.map(r=>r.categories)))}><div className="hero"><p className="eyebrow">{t.eyebrow}</p><h1>{t.headline}</h1><p className="lede">{t.lede}</p></div>{!available?<OutageState text={t}/>:resources.length?<ResourceCards resources={resources}/>:<p className="notice">{t.empty}</p>}</section>;
+ }
+diff --git a/src/app/profile/page.tsx b/src/app/profile/page.tsx
+index 780e7ae..1a21f29 100644
+--- a/src/app/profile/page.tsx
++++ b/src/app/profile/page.tsx
+@@ -1,14 +1,15 @@
+ import { requireActor } from '@/server/session';
+ import { messages } from '@/server/language';
+ import { profileFor } from '@/modules/profiles';
+ import { listCategories,publicResources } from '@/modules/catalog';
+ import { explainMatch } from '@/modules/matching';
+ import { eraseProfileAction } from '@/server/actions';
+ import { ProfileForm } from '@/ui/forms';
++import { GetHelpNow } from '@/ui/get-help-now';
+ import { ResourceCards } from '@/ui/resources';
+ import { quickExitScope,showsQuickExit } from '@/ui/safety';
+ export default async function Profile(){
+  const actor=await requireActor(),{text:t,locale}=await messages(),categories=await listCategories(locale),profile=await profileFor(actor.user_id);
+  const resources=profile?(await publicResources({postal_code:profile.postal_code,needs:profile.needs})).filter(r=>explainMatch(r,profile)):[];
+- return <section {...quickExitScope(showsQuickExit(profile?.needs??[],...resources.map(r=>r.categories)))}><p className="eyebrow">{t.profile}</p><h1>{t.preferences}</h1><p>{t.profileIntro}</p><ProfileForm categories={categories} key={profile?.updated_at.toISOString()??'empty'} profile={profile}/>{profile?<form action={eraseProfileAction}><button className="secondary">{t.deleteProfile}</button></form>:null}<h2>{t.matches}</h2>{resources.length?<><p>{t.needReason} {t.zipReason}</p><ResourceCards resources={resources}/></>:<p>{t.noMatches}</p>}</section>;
++ return <section {...quickExitScope(showsQuickExit(profile?.needs??[],...resources.map(r=>r.categories)))}><p className="eyebrow">{t.profile}</p><h1>{t.preferences}</h1><p>{t.profileIntro}</p><ProfileForm categories={categories} key={profile?.updated_at.toISOString()??'empty'} profile={profile}/><GetHelpNow text={t} variant="row"/>{profile?<form action={eraseProfileAction}><button className="secondary">{t.deleteProfile}</button></form>:null}<h2>{t.matches}</h2>{resources.length?<><p>{t.needReason} {t.zipReason}</p><ResourceCards resources={resources}/></>:<p>{t.noMatches}</p>}</section>;
+ }
+diff --git a/src/ui/en.json b/src/ui/en.json
+index ed6dbe8..2dfd0c9 100644
+--- a/src/ui/en.json
++++ b/src/ui/en.json
+@@ -1,20 +1,27 @@
+ {
+   "brand": "Open Resource Access Network",
+   "skip": "Skip to content",
+   "find": "Find support",
+   "profile": "My profile",
+   "organization": "Organization",
+   "community": "Community",
+   "admin": "Admin",
+   "tagline": "By the people. For the people.",
+-  "crisis": "If you are in immediate danger, call 911. For crisis support, call or text 988. For local assistance, call 211.",
++  "getHelpNow": "Get help now",
++  "call": "Call {phone}",
++  "helpLines": {
++    "988": "Suicide & Crisis Lifeline: call or text {phone}",
++    "911": "In immediate danger: call {phone}",
++    "dv": "National Domestic Violence Hotline: {phone}",
++    "211": "Local help with food, housing and bills: {phone}"
++  },
+   "eyebrow": "A community that shows up",
+   "headline": "Find your next step forward.",
+   "lede": "Local support, maintained by the people who know their community.",
+   "scaffold": "This development workspace has no resource catalog connected yet.",
+   "notFound": "Page not found",
+   "moved": "This page may have moved.",
+   "returnHome": "Return to resource search",
+   "error": "We couldn’t load this page",
+   "retryHelp": "Please try again. For local assistance, call 211.",
+   "retry": "Try again",
+diff --git a/src/ui/es.json b/src/ui/es.json
+index 77c31c2..b2d7df2 100644
+--- a/src/ui/es.json
++++ b/src/ui/es.json
+@@ -1,20 +1,27 @@
+ {
+   "brand": "Red de Acceso a Recursos",
+   "skip": "Saltar al contenido",
+   "find": "Buscar apoyo",
+   "profile": "Mi perfil",
+   "organization": "Organización",
+   "community": "Comunidad",
+   "admin": "Administración",
+   "tagline": "Por la gente. Para la gente.",
+-  "crisis": "Si estás en peligro inmediato, llama al 911. Para apoyo en una crisis, llama o envía un mensaje al 988. Para asistencia local, llama al 211.",
++  "getHelpNow": "Obtén ayuda ahora",
++  "call": "Llamar al {phone}",
++  "helpLines": {
++    "988": "Línea de Prevención del Suicidio y Crisis: llama o envía un mensaje de texto al {phone}",
++    "911": "En peligro inmediato: llama al {phone}",
++    "dv": "Línea Nacional sobre la Violencia Doméstica: {phone}",
++    "211": "Ayuda local con alimentos, vivienda y facturas: {phone}"
++  },
+   "eyebrow": "Una comunidad que te acompaña",
+   "headline": "Encuentra tu próximo paso.",
+   "lede": "Apoyo local, actualizado por quienes conocen su comunidad.",
+   "scaffold": "Este espacio de desarrollo aún no tiene un catálogo de recursos conectado.",
+   "notFound": "Página no encontrada",
+   "moved": "Es posible que esta página haya cambiado de ubicación.",
+   "returnHome": "Volver a buscar recursos",
+   "error": "No pudimos cargar esta página",
+   "retryHelp": "Inténtalo de nuevo. Para asistencia local, llama al 211.",
+   "retry": "Intentar de nuevo",
+diff --git a/src/ui/get-help-now.tsx b/src/ui/get-help-now.tsx
+new file mode 100644
+index 0000000..8d9cc38
+--- /dev/null
++++ b/src/ui/get-help-now.tsx
+@@ -0,0 +1,66 @@
++// No directive: server pages and the client error page both render this module.
++import type en from './en.json';
++import { buttonClassName } from './button';
++
++export type Messages = typeof en;
++export type HelpNumber = { key: '988' | '911' | 'dv' | '211'; phone: string; tel: string };
++
++// Static crisis numbers in the DESIGN_SYSTEM §5.6 order. No classifier chooses among them.
++export const helpNumbers: readonly HelpNumber[] = [
++  { key: '988', phone: '988', tel: 'tel:988' },
++  { key: '911', phone: '911', tel: 'tel:911' },
++  { key: 'dv', phone: '1-800-799-7233', tel: 'tel:+18007997233' },
++  { key: '211', phone: '211', tel: 'tel:211' },
++];
++
++// A hand-drawn life buoy, drawn like the exit icon (§10), so the app adds no icon library.
++const icon = (
++  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
++    <circle cx="12" cy="12" r="9" />
++    <circle cx="12" cy="12" r="4" />
++    <path d="M5.6 5.6l3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6" />
++  </svg>
++);
++
++// Each number is plain text a person can select and copy, next to a 44px button that calls it.
++function Lines({ text }: { text: Messages }): React.JSX.Element {
++  return (
++    <ul className="help-lines">
++      {helpNumbers.map(({ key, phone, tel }) => (
++        <li key={key}>
++          <span>{text.helpLines[key].replace('{phone}', phone)}</span>
++          <a className={buttonClassName('secondary')} href={tel}>{text.call.replace('{phone}', phone)}</a>
++        </li>
++      ))}
++    </ul>
++  );
++}
++
++// "Get help now" (§5.6, ADR-0007 §2). The disclosure and the row are native <details>, closed until opened and still: nothing animates.
++// The inline card is for the outage and error screens only (C19); it is never shown on category results or searches.
++export function GetHelpNow({ text, variant = 'disclosure' }: { text: Messages; variant?: 'disclosure' | 'row' | 'inline' }): React.JSX.Element {
++  if (variant === 'inline') {
++    return (
++      <div className="get-help-inline">
++        <h2>{icon}{text.getHelpNow}</h2>
++        <Lines text={text} />
++      </div>
++    );
++  }
++  return (
++    <details className={'get-help' + (variant === 'row' ? ' get-help-row' : '')}>
++      <summary><span>{icon}{text.getHelpNow}</span></summary>
++      <Lines text={text} />
++    </details>
++  );
++}
++
++// An honest outage message with the numbers beside it, so a person is not left with only an error (C19, BLUEPRINT §12.5).
++export function OutageState({ text }: { text: Messages }): React.JSX.Element {
++  return (
++    <>
++      <p className="notice" role="status">{text.unavailable}</p>
++      <GetHelpNow text={text} variant="inline" />
++    </>
++  );
++}
+diff --git a/tests/browser/safety.spec.ts b/tests/browser/safety.spec.ts
+index f38ea5a..8df6285 100644
+--- a/tests/browser/safety.spec.ts
++++ b/tests/browser/safety.spec.ts
+@@ -1,16 +1,16 @@
+ import { randomUUID } from 'node:crypto';
+ import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
+ import { accessible, enterAs, fitsWidth, focusByKeyboard, hydrated, ring, saveNeeds, test } from './support';
+ 
+ const exitName = 'Quick exit to a neutral website';
+-const exitLink = (page: Page) => page.getByRole('banner').getByRole('link', { name: exitName, exact: true, includeHidden: true });
++const exitLink = (page: Page, name = exitName) => page.getByRole('banner').getByRole('link', { name, exact: true, includeHidden: true });
+ 
+ // What a visit records instead of a flag when the browser has no Navigation API, so the failure names its cause.
+ const noNavigationApi = 'window.navigation is missing, so the hidden check cannot run';
+ type Visit = { referer: string | undefined; hidden: boolean | string | null };
+ 
+ // Stands in for the neutral site, so no run contacts the real host. For every request it records the Referer header and
+ // whether the ORAN page was hidden at the moment it started to leave (null without JavaScript, where nothing can hide it).
+ // The route is on the context, so a tab that a stray click opens is answered here too and never reaches the real host.
+ //
+ // The hidden state cannot be read with page.evaluate here: while a navigation request is held in a route handler, Chromium
+@@ -369,20 +369,196 @@ test('Exit follows the saved Safety and Housing & shelter needs', async ({ page
+   await page.goto('/profile');
+   await expect(exit).toBeVisible();
+   await saveNeeds(page, ['Food']);
+   await expect(exit, noSafetyListing).toBeHidden();
+   await saveNeeds(page, ['Housing & shelter']);
+   await expect(exit).toBeVisible();
+   await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
+   await expect(exit).toBeHidden();
+ });
+ 
++// Get help now (§5.6, ADR-0007 §2): a collapsed disclosure ends every page, the Profile row and the outage and error cards list the numbers.
++const callNames = ['Call 988', 'Call 911', 'Call 1-800-799-7233', 'Call 211'];
++const callHrefs = ['tel:988', 'tel:911', 'tel:+18007997233', 'tel:211'];
++const footerHelp = (page: Page, text = 'Get help now') => page.getByRole('contentinfo').locator('summary', { hasText: text });
++
++test('every page ends with a closed Get help now in the footer', async ({ page }) => {
++  async function closedInFooter(): Promise<void> {
++    const footer = page.getByRole('contentinfo');
++    const summary = footerHelp(page);
++    await expect(summary).toBeVisible();
++    expect((await summary.boundingBox())?.height, 'summary height').toBeGreaterThanOrEqual(44);
++    await expect(footer.locator('details')).toHaveJSProperty('open', false);
++    await expect(footer.getByRole('link', { name: 'Call 988', exact: true })).toBeHidden();
++    await expect(page.getByText('If you are in immediate danger')).toHaveCount(0);
++    await expect(page.getByRole('banner').getByText('Get help now')).toHaveCount(0);
++  }
++  for (const path of ['/', '/sign-in', '/no-such-page']) {
++    await page.goto(path);
++    await closedInFooter();
++  }
++  await enterAs(page, 'My profile');
++  await page.goto('/profile');
++  await closedInFooter();
++});
++
++test('the footer panel lists the four numbers as text and call buttons', async ({ page }) => {
++  await page.setViewportSize({ width: 1280, height: 800 });
++  await page.goto('/sign-in');
++  const footer = page.getByRole('contentinfo');
++  const details = footer.locator('details');
++  const summary = footerHelp(page);
++
++  await focusByKeyboard(page, summary);
++  expect(await ring(summary), 'focus ring').toEqual({ style: 'solid', width: '3px', color: 'rgb(23, 89, 107)', offset: '2px' });
++  await page.keyboard.press('Enter');
++  await expect(details).toHaveJSProperty('open', true);
++
++  const links = footer.getByRole('link');
++  await expect(links).toHaveText(callNames);
++  expect(await links.evaluateAll((elements) => elements.map((element) => element.getAttribute('href')))).toEqual(callHrefs);
++  for (const name of callNames) {
++    const link = footer.getByRole('link', { name, exact: true });
++    expect((await link.boundingBox())?.height, name + ' height').toBeGreaterThanOrEqual(44);
++    await expect(link).toHaveCSS('background-color', 'rgb(226, 238, 240)');
++  }
++
++  // The number is plain text a person can select and copy, next to its button.
++  const lines = footer.locator('li > span');
++  await expect(lines).toHaveText([/\b988\b/, /\b911\b/, /1-800-799-7233/, /\b211\b/]);
++  expect(await lines.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).userSelect))).not.toContain('none');
++
++  expect(await details.evaluate((element) => element.getAnimations({ subtree: true }).length), 'running animations').toBe(0);
++  await accessible(page);
++  await page.keyboard.press('Enter');
++  await expect(details).toHaveJSProperty('open', false);
++});
++
++test('Profile has a Get help now row before Delete', async ({ page }) => {
++  await enterAs(page, 'My profile');
++  await saveNeeds(page, ['Food']);
++  const row = page.getByRole('main').locator('details', { has: page.locator('summary', { hasText: 'Get help now' }) });
++  const summary = row.locator('summary');
++  await expect(row).toHaveCSS('background-color', 'rgb(255, 255, 255)');
++
++  // §4 puts the row after the saved preferences and before Delete.
++  const save = await page.getByRole('button', { name: 'Save', exact: true }).boundingBox();
++  const remove = await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).boundingBox();
++  const box = await summary.boundingBox();
++  if (!save || !remove || !box) throw new Error('Save, Delete or the Get help now row has no box.');
++  expect(box.y, 'the row is below Save').toBeGreaterThanOrEqual(save.y + save.height);
++  expect(box.y + box.height, 'the row is above Delete').toBeLessThanOrEqual(remove.y);
++
++  await summary.click();
++  const links = row.getByRole('link');
++  await expect(links).toHaveText(callNames);
++  for (const name of callNames) await expect(row.getByRole('link', { name, exact: true })).toBeVisible();
++  await accessible(page);
++  await page.getByRole('button', { name: 'Delete my saved preferences', exact: true }).click();
++});
++
++test('the outage card keeps visible edges and stays still', async ({ page }) => {
++  await page.goto('/dev/components');
++  const card = page.getByRole('main').getByRole('heading', { name: 'Get help now', level: 2 }).locator('..');
++  const links = card.getByRole('link');
++  await expect(links).toHaveText(callNames);
++  await expect(card).toHaveCSS('background-color', 'rgb(226, 238, 240)');
++  await expect(card).toHaveCSS('border-radius', '14px');
++  for (const name of callNames) {
++    const link = card.getByRole('link', { name, exact: true });
++    // The call buttons are white on the tint card, so each one has an edge to find.
++    await expect(link).toHaveCSS('background-color', 'rgb(255, 255, 255)');
++    await expect(link).toHaveCSS('color', 'rgb(23, 89, 107)');
++    expect((await link.boundingBox())?.height, name + ' height').toBeGreaterThanOrEqual(44);
++  }
++
++  await page.emulateMedia({ forcedColors: 'active' });
++  await expect(card).toHaveCSS('border-top-style', 'solid');
++  await expect(card).toHaveCSS('border-top-width', '1px');
++  await page.emulateMedia({ forcedColors: 'none' });
++
++  await page.emulateMedia({ reducedMotion: 'reduce' });
++  for (const duration of await links.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).transitionDuration))) expect(duration).toMatch(/^0s(, 0s)*$/);
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++
++  await page.getByRole('main').locator('summary', { hasText: 'Get help now' }).click();
++  await accessible(page);
++});
++
++test('Exit and Get help now reflow at 320px in English and Spanish', async ({ page }) => {
++  await enterAs(page, 'My profile');
++  await saveNeeds(page, ['Safety']);
++  await page.setViewportSize({ width: 320, height: 800 });
++
++  async function reflows(help: string, exit: string): Promise<void> {
++    const main = page.getByRole('main');
++    await main.locator('summary', { hasText: help }).click();
++    await footerHelp(page, help).click();
++    expect(await fitsWidth(page), 'fits 320px').toBe(true);
++    const calls = main.locator('details').getByRole('link');
++    await expect(calls).toHaveCount(4);
++    for (const box of await Promise.all((await calls.all()).map((call) => call.boundingBox()))) {
++      if (!box) throw new Error('A call link in the main row has no box.');
++      expect(box.x + box.width, 'call link right edge').toBeLessThanOrEqual(320);
++    }
++    await page.evaluate(() => window.scrollTo(0, 0));
++    await expect(exitLink(page, exit)).toBeInViewport();
++  }
++  await reflows('Get help now', exitName);
++  await expect(page.getByRole('main').getByRole('link', { name: 'Call 1-800-799-7233', exact: true })).toBeVisible();
++
++  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
++  await page.getByRole('button', { name: 'Apply', exact: true }).click();
++  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++  await page.goto('/profile');
++  await reflows('Obtén ayuda ahora', 'Salir rápido a un sitio web neutral');
++  await expect(page.getByRole('main').getByRole('link', { name: 'Llamar al 1-800-799-7233', exact: true })).toBeVisible();
++  await page.getByRole('button', { name: 'Borrar mis preferencias guardadas', exact: true }).click();
++});
++
++// The values a select holds on each of the next frames. React resets a form after the paint that shows the action's result, so one read
++// made as soon as the new language appears can see the right value just before it is lost.
++async function valuesOverFrames(select: Locator): Promise<string[]> {
++  return select.evaluate((element) => new Promise<string[]>((resolve) => {
++    const values: string[] = [];
++    const sample = () => {
++      values.push((element as HTMLSelectElement).value);
++      if (values.length < 20) requestAnimationFrame(sample);
++      else resolve(values);
++    };
++    sample();
++  }));
++}
++
++test('the language select shows the chosen language after Apply, without a reload', async ({ page }) => {
++  await page.goto('/sign-in');
++  const english = page.getByRole('combobox', { name: 'Language', exact: true });
++  await hydrated(english);
++  await expect(english).toHaveValue('en');
++  await english.selectOption('es');
++  await page.evaluate(() => { (window as unknown as { sameDocument: boolean }).sameDocument = true; });
++  await page.getByRole('button', { name: 'Apply', exact: true }).click();
++
++  // The layout persists across the action's redirect, so a select that only sets defaultValue is reset to the language it was first drawn in.
++  // A reload would draw the select afresh and hide that, so the test also checks that this is the same document.
++  const spanish = page.getByRole('combobox', { name: 'Idioma', exact: true });
++  await expect(spanish).toBeVisible();
++  expect(await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument), 'the page was not reloaded').toBe(true);
++  expect(new Set(await valuesOverFrames(spanish)), 'the select value on the frames after the change').toEqual(new Set(['es']));
++
++  await spanish.selectOption('en');
++  await page.getByRole('button', { name: 'Aplicar', exact: true }).click();
++  const back = page.getByRole('combobox', { name: 'Language', exact: true });
++  await expect(back).toBeVisible();
++  expect(new Set(await valuesOverFrames(back)), 'the select value on the frames after switching back').toEqual(new Set(['en']));
++});
++
+ // Publishes a Safety listing the way workflow.spec.ts publishes its first listing: an admin adds it, with a phone call as the source,
+ // and records the verification that makes it public. It ticks Safety and any other categories given. Returns the listing's name.
+ async function publishSafetyListing(page: Page, alsoIn: readonly string[] = []): Promise<string> {
+   const name = 'Synthetic safety listing ' + randomUUID();
+   await enterAs(page, 'Admin');
+   await expect(page.getByRole('heading', { name: 'Add resource', exact: true })).toBeVisible();
+   await page.getByLabel('Resource name', { exact: true }).fill(name);
+   await page.getByLabel('Organization name', { exact: true }).fill('Synthetic browser organization');
+   await page.getByLabel('Service ZIP code', { exact: true }).fill('98101');
+   await page.getByLabel('Website', { exact: true }).fill('https://example.org');
+diff --git a/tests/safety-ui.test.ts b/tests/safety-ui.test.ts
+index 1cb4db9..74b9703 100644
+--- a/tests/safety-ui.test.ts
++++ b/tests/safety-ui.test.ts
+@@ -1,15 +1,17 @@
+ import { createElement } from 'react';
+ import { renderToStaticMarkup } from 'react-dom/server';
+ import { describe, it, expect } from 'vitest';
++import ErrorPage from '@/app/error';
+ import en from '@/ui/en.json';
+ import es from '@/ui/es.json';
++import { OutageState } from '@/ui/get-help-now';
+ import { QuickExit } from '@/ui/quick-exit';
+ import { quickExitCategories, quickExitScope, quickExitUrl, quickExitWindowMs, showsQuickExit } from '@/ui/safety';
+ 
+ describe('quick exit scope', () => {
+   it('shows quick exit only for Safety and Housing & shelter codes', () => {
+     expect(showsQuickExit()).toBe(false);
+     expect(showsQuickExit([], ['food', 'health'])).toBe(false);
+     expect(showsQuickExit(['food'], ['health', 'safety'])).toBe(true);
+     expect(showsQuickExit(['housing_shelter'])).toBe(true);
+     expect(showsQuickExit(['Safety', 'housing'])).toBe(false); // codes, never labels or the legacy code
+@@ -55,10 +57,51 @@ describe('QuickExit markup', () => {
+     expect(es.exit).toBe('Salir');
+     expect(es.quickExitName).toBe('Salir rápido a un sitio web neutral');
+   });
+ });
+ 
+ describe('language catalogs', () => {
+   it('keep identical key sets in English and Spanish', () => {
+     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
+   });
+ });
++
++describe('Get help now', () => {
++  const keys = ['988', '911', 'dv', '211'] as const;
++
++  it('gives every help number English and Spanish text', () => {
++    for (const text of [en, es]) {
++      expect(text.call).toContain('{phone}');
++      for (const key of keys) expect(text.helpLines[key], key).toContain('{phone}');
++    }
++    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
++    expect(Object.keys(es.helpLines).sort()).toEqual(Object.keys(en.helpLines).sort());
++    expect('crisis' in en).toBe(false);
++    expect('crisis' in es).toBe(false);
++  });
++
++  it('renders the outage state with the crisis numbers in order', () => {
++    const html = renderToStaticMarkup(createElement(OutageState, { text: en }));
++    expect(html).toContain('role="status"');
++    expect(html).toContain(en.unavailable);
++    expect(html).toContain('Suicide &amp; Crisis Lifeline: call or text 988');
++    expect(html).toContain('>Call 1-800-799-7233<');
++    const order = ['href="tel:988"', 'href="tel:911"', 'href="tel:+18007997233"', 'href="tel:211"'].map((link) => html.indexOf(link));
++    expect(order.every((index) => index >= 0), 'every call link is present').toBe(true);
++    expect(order, 'the links are in the §5.6 order').toEqual([...order].sort((a, b) => a - b));
++    expect(html).not.toContain('{phone}');
++    expect(html).not.toContain('<details');
++
++    const spanish = renderToStaticMarkup(createElement(OutageState, { text: es }));
++    expect(spanish).toContain('Obtén ayuda ahora');
++    expect(spanish).toContain('>Llamar al 988<');
++  });
++
++  it('keeps the crisis numbers outside the error alert', () => {
++    const html = renderToStaticMarkup(createElement(ErrorPage, { reset() {} }));
++    expect(html).toContain('role="alert"');
++    expect(html).toContain('Try again');
++    expect(html).toContain('href="tel:988"');
++    expect(html.indexOf('</section>')).toBeGreaterThanOrEqual(0);
++    expect(html.indexOf('</section>')).toBeLessThan(html.indexOf('Get help now'));
++  });
++});

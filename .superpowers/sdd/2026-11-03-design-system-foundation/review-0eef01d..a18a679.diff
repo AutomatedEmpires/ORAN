@@ -1,0 +1,332 @@
+# Review package: 0eef01d..HEAD
+
+## Commits
+a18a679 feat: give the header the Blend top bar and current-page navigation
+
+## Files changed
+ docs/ARCHITECTURE.md                |  2 +-
+ src/app/globals.css                 | 33 ++++++++-----
+ src/app/layout.tsx                  | 10 ++--
+ src/ui/logo.tsx                     | 12 +++++
+ src/ui/nav.tsx                      | 22 +++++++++
+ tests/browser/design-system.spec.ts | 99 +++++++++++++++++++++++++++++++++++++
+ 6 files changed, 162 insertions(+), 16 deletions(-)
+
+## Diff
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 80aee1e..0eb64e7 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -18,21 +18,21 @@ The target blueprint is implemented incrementally under ADR-0003. The developmen
+ | vitest | Domain/data tests added with the resource workflow |
+ | @playwright/test, @axe-core/playwright | Browser workflow and accessibility verification; development only |
+ | @fontsource/figtree | Self-hosted Figtree (SIL OFL 1.1): Latin files for weights 400, 600, 700 and 800, bundled at build; no runtime third-party font requests |
+ 
+ Exact versions live in package.json and pnpm-lock.yaml. Node 24.22.2 and pnpm 10.34.9 are pinned. Figtree is self-hosted from the pinned @fontsource/figtree package (Latin, four weights, font-display: swap), so neither the build nor the browser contacts a font service. English/Spanish catalogs cover the shared shell; Spanish requires a native-speaker review before public release.
+ 
+ ## Current routes and checks
+ 
+ Public / exposes current checked resources or an honest empty/outage state. /profile requires identity and accesses only that user's preferences. /organization and /resources/[id]/edit require scoped organization/admin control. /community requires approved geographic/category membership for verification; /admin requires the database admin role, and category creation there is admin-only. Server actions independently authenticate and recheck authorization inside the catalog services. Resource creation, edits, category creation, approval, verification and profile deletion refresh affected views. No role or profile-user ID is trusted from form input.
+ 
+-Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. PR check results are authoritative for each commit. No production deployment is configured.
++Native Windows ARM64 typecheck, lint, PostgreSQL/PostGIS domain tests and browser workflow checks have been exercised using Node 24.22.2. CI separately checks Windows/Linux and standard PostgreSQL/PostGIS. Browser tests inspect public/admin/community/profile accessibility, language switching, mobile width and denied access. Browser tests also check every DESIGN_SYSTEM token and contrast pair, 44px targets, the focus ring, reduced motion, forced colors, reflow at 320px in English and Spanish, and that no page requests Google Fonts. PR check results are authoritative for each commit. No production deployment is configured.
+ 
+ ## Identity and route contract
+ 
+ Clerk verifies hosted account identity; application roles are always loaded from the private membership table, never user-editable metadata. A new verified user gets an account with no memberships; roles come only from approved memberships in the private membership table. The non-production admin bootstrap command can register/promote the founder's exact Clerk user ID.
+ 
+ One account may hold several memberships (admin, organization, community), each with its own scope and approval, and only approved memberships grant privileges. Independence rule: no admin or verifier is assigned, sees in a queue or verifies a listing of an organization they are affiliated with, whether that affiliation is approved or pending. Any future organization-membership grant or claim flow must release that organization's verification work currently assigned to the new member, using the same release logic as `approveContributor`.
+ 
+ The local launcher instead creates a random process secret and enables synthetic identities only on loopback. POST /api/dev-session requires that mode, a loopback request URL, and the exact configured Origin; it issues an HTTP-only SameSite=Strict signed one-hour session. It is rejected in production and hosted environments. No role is taken from a session token; membership is reloaded per request. GET /sign-in renders local identity choices only in that local mode, otherwise the configured Clerk sign-in or an honest configuration notice. GET /api/health is public and reports only dependency health, with 503 on failure.
+ 
+ Framework agent-file generation is disabled to preserve AGENTS.md. next-env.d.ts and .next are generated/ignored; typecheck runs next typegen before TypeScript so it also works immediately after a fresh clone.
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 34656de..2ee8806 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -1,11 +1,10 @@
+-:root { --line:#d6e1d8; --muted:#5a6e67; }
+ :root {
+   color-scheme: light;
+   --color-bg: #F2F4F5;
+   --color-surface: #FFFFFF;
+   --color-surface-user: #EEF1F3;
+   --color-surface-neutral: #EBEEF1;
+   --color-scrim: rgba(28, 39, 51, 0.45);
+   --color-text: #1C2733;
+   --color-text-secondary: #4A5563;
+   --color-primary: #17596B;
+@@ -69,40 +68,51 @@
+   --layer-sheet: 30;
+   --layer-drawer: 40;
+   --layer-dialog: 50;
+   --layer-toast: 60;
+ }
+ * { box-sizing:border-box; }
+ body { margin:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-family-base); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-regular); }
+ a { color:var(--color-primary); text-underline-offset:var(--space-1); transition:color var(--motion-fast) var(--motion-easing); }
+ a:hover, a:active { color:var(--color-primary-hover); text-decoration-thickness:2px; }
+ :focus-visible { outline:3px solid var(--color-primary); outline-offset:2px; }
+-header { max-width:1240px; margin:auto; padding:28px 36px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+-.brand { font-size:30px; font-weight:800; letter-spacing:-1px; text-decoration:none; line-height:1.1; }
+-.brand span { display:block; margin-top:8px; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:500; }
+-nav { display:flex; gap:20px; flex-wrap:wrap; }
+-nav a { font-size:14px; text-decoration:none; padding:10px 0; }
++header { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-4); min-block-size:var(--size-topbar); padding-block:var(--space-2); padding-inline:var(--space-4); background-color:var(--color-surface); border-block-end:1px solid var(--color-border); }
++.brand { display:inline-flex; align-items:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); color:var(--color-primary); text-decoration:none; }
++.brand-name { font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-heavy); letter-spacing:0.06em; }
++.logo-tile { fill:var(--color-primary); }
++.logo-sun { fill:var(--color-accent); }
++.logo-rays { stroke:var(--color-accent); }
++.logo-horizon { stroke:var(--color-on-primary); }
++.language { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-inline-start:auto; }
++.language label { display:inline; margin:0; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); }
++.language select { inline-size:auto; }
++.language button { margin:0; }
++nav { display:flex; flex-wrap:wrap; flex-basis:100%; gap:var(--space-1); }
++nav a { display:inline-flex; align-items:center; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1px solid transparent; border-radius:var(--radius-control); color:var(--color-text-secondary); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-semibold); text-decoration:none; transition:background-color var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing); }
++nav a:hover, nav a:active { background-color:var(--color-primary-tint); color:var(--color-primary); }
++nav a[aria-current=page] { background-color:var(--color-primary-tint-strong); color:var(--color-primary); font-weight:var(--font-weight-heavy); }
+ main { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6) var(--space-8); padding-inline:var(--space-4); min-block-size:65vh; }
+ main p, .lede { max-inline-size:65ch; }
+ h1 { margin-block:0 var(--space-4); font-size:var(--font-size-xl); line-height:var(--line-height-xl); font-weight:var(--font-weight-bold); letter-spacing:-0.01em; }
+ h2 { margin-block:var(--space-7) var(--space-3); font-size:var(--font-size-lg); line-height:var(--line-height-lg); font-weight:var(--font-weight-bold); }
+ h3 { margin-block:var(--space-4) var(--space-2); font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); }
+ .eyebrow { font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-bold); color:var(--color-text-secondary); }
+ .lede { font-size:var(--font-size-md); line-height:var(--line-height-md); color:var(--color-text-secondary); }
+ .card { padding-block:var(--space-3); padding-inline:var(--space-4); border:1px solid transparent; border-radius:var(--radius-card); background:var(--color-surface); box-shadow:var(--shadow-1); color:var(--color-text); overflow-wrap:anywhere; }
+ .card h2 { margin-block-start:var(--space-2); }
+ .card > :first-child, .card > input[type=hidden]:first-child + * { margin-block-start:0; }
+ .card a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
+-.local-notice { max-width:1096px; margin:24px auto 0; font-size:14px; }
+-.local-notice form { display:inline; margin-left:12px; }
+-.local-notice button { margin:0 0 0 8px; padding:6px 12px; }
+ .notice { max-inline-size:none; margin-block:var(--space-4); padding-block:var(--space-3); padding-inline:var(--space-4); border:1px solid var(--color-border); border-radius:var(--radius-card); background:var(--color-surface); }
++.local-notice { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3); margin-block:var(--space-4) 0; margin-inline:max(var(--space-4), (100% - var(--size-chat-column)) / 2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); }
++.local-notice a { display:inline-flex; align-items:center; min-block-size:var(--size-target); }
++.local-notice form { display:inline; }
++.local-notice button { margin:0; }
+ .grid, .stack { display:grid; gap:var(--space-3); }
+ .grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }
+ .tag { display:inline; font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-text-secondary); }
+ .small { font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
+ .error { display:flex; align-items:flex-start; gap:var(--space-2); font-size:var(--font-size-sm); line-height:var(--line-height-sm); font-weight:var(--font-weight-semibold); color:var(--color-danger); }
+ .error::before { content:''; flex:none; inline-size:var(--space-4); block-size:var(--space-4); margin-block-start:calc((var(--line-height-sm) - var(--space-4)) / 2); background-color:currentColor; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 7v6M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat; }
+ label { display:block; margin-block:var(--space-4) var(--space-1); margin-inline:0; font-weight:var(--font-weight-semibold); }
+ label:has(> input:is([type=checkbox],[type=radio])) { display:flex; align-items:center; gap:var(--space-3); min-block-size:var(--size-target); margin:0; font-weight:var(--font-weight-regular); }
+ input:is([type=checkbox],[type=radio]) { inline-size:var(--space-5); block-size:var(--space-5); margin:0; flex:none; accent-color:var(--color-primary); }
+ input:not([type=checkbox],[type=radio],[type=hidden]), select, textarea { inline-size:100%; min-block-size:var(--size-target); padding-inline:var(--space-3); border:1.5px solid var(--color-border-input); border-radius:var(--radius-control); background:var(--color-surface); color:var(--color-text); font-family:inherit; font-size:var(--font-size-md); line-height:var(--line-height-md); }
+@@ -112,16 +122,17 @@ textarea { min-block-size:calc(var(--size-target) * 2); padding-block:var(--spac
+ fieldset { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,12rem),1fr)); gap:0 var(--space-4); min-inline-size:0; margin-block-start:var(--space-4); margin-inline:0; padding:0; border:0; }
+ legend { padding:0; font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); }
+ fieldset > p { grid-column:1 / -1; }
+ button, .button, .skip:focus { display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2); min-block-size:var(--size-target); min-inline-size:var(--size-target); padding-block:var(--space-2); padding-inline:var(--space-5); border:1px solid transparent; border-radius:var(--radius-control); background-color:var(--color-primary); color:var(--color-on-primary); font-family:inherit; font-size:var(--font-size-md); line-height:var(--line-height-md); font-weight:var(--font-weight-bold); text-decoration:none; cursor:pointer; transition:background-color var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing); }
+ button:hover, button:active, .button:hover, .button:active { background-color:var(--color-primary-hover); color:var(--color-on-primary); }
+ form > button { margin-block-start:var(--space-4); }
+ .secondary, .button-secondary { background-color:var(--color-primary-tint); color:var(--color-primary); }
+ .secondary:hover, .secondary:active, .button-secondary:hover, .button-secondary:active { background-color:var(--color-primary-tint-strong); color:var(--color-primary); }
+ .button-compact { padding-inline:var(--space-3); font-size:var(--font-size-sm); line-height:var(--line-height-sm); }
+ button:disabled, button:disabled:hover, button:disabled:active { background-color:var(--color-surface-neutral); color:var(--color-text-secondary); cursor:not-allowed; }
+-footer { border-top:1px solid var(--line); max-width:1168px; margin:auto; padding:32px 36px; font-size:14px; color:var(--muted); }
++footer { margin-inline:auto; max-inline-size:calc(var(--size-chat-column) + 2 * var(--space-4)); padding-block:var(--space-6); padding-inline:var(--space-4); border-block-start:1px solid var(--color-border); font-size:var(--font-size-sm); line-height:var(--line-height-sm); color:var(--color-text-secondary); }
++.visually-hidden { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+ .skip { position:absolute; inset-block-start:calc(-2 * var(--size-target)); inset-inline-start:var(--space-2); }
+ .skip:focus { inset-block-start:var(--space-2); z-index:var(--layer-toast); }
+-@media(max-width:760px) { header { align-items:flex-start; flex-direction:column; padding:24px; } nav { gap:16px; } }
++@media (width < 380px) { .brand-name { position:absolute; inline-size:1px; block-size:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; } }
+ @media (forced-colors: active) { .error::before { background-color:CanvasText; } }
+ @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration:0s !important; animation:none !important; scroll-behavior:auto !important; } }
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index ff89104..22f81e8 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,23 +1,25 @@
+ import type { Metadata } from 'next';
+ import Link from 'next/link';
+ import { ClerkProvider } from '@clerk/nextjs';
+ import { messages, changeLanguage } from '@/server/language';
+ import { LocaleProvider } from '@/ui/locale';
++import { LogoMark } from '@/ui/logo';
++import { DomainNav } from '@/ui/nav';
+ import '@fontsource/figtree/latin-400.css';
+ import '@fontsource/figtree/latin-600.css';
+ import '@fontsource/figtree/latin-700.css';
+ import '@fontsource/figtree/latin-800.css';
+ import './globals.css';
+ export const metadata: Metadata = { title:'ORAN', description:'By the people. For the people.' };
+ export default async function RootLayout({ children }: Readonly<{children:React.ReactNode}>) {
+  const {locale,text:t}=await messages();
+  const local=process.env.ORAN_LOCAL_DEV==='1';
+  const body=<LocaleProvider locale={locale}>
+   <a className="skip" href="#main">{t.skip}</a>
+-  <header><Link className="brand" href="/">ORAN<span>{t.brand}</span></Link>
+-   <nav aria-label={t.navigation}><Link href="/">{t.find}</Link><Link href="/profile">{t.profile}</Link><Link href="/organization">{t.organization}</Link><Link href="/community">{t.community}</Link><Link href="/admin">{t.admin}</Link></nav>
+-   <form action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><button>{t.apply}</button></form>
+-  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><button className="secondary">{t.signOut}</button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
++  <header><Link className="brand" href="/"><LogoMark/><span className="brand-name">ORAN</span>{' '}<span className="visually-hidden">{t.brand}</span></Link>
++   <form className="language" action={changeLanguage}><label htmlFor="locale">{t.language}</label><select id="locale" name="locale" defaultValue={locale}><option value="en">English</option><option value="es">Español</option></select><button className="secondary button-compact">{t.apply}</button></form>
++   <DomainNav label={t.navigation} items={[{href:'/',label:t.find},{href:'/profile',label:t.profile},{href:'/organization',label:t.organization},{href:'/community',label:t.community},{href:'/admin',label:t.admin}]}/>
++  </header>{local?<aside className="notice local-notice">{t.localNotice} <Link href="/sign-in">{t.switchIdentity}</Link><form action="/api/dev-session" method="post"><input type="hidden" name="identity" value="sign-out"/><button className="secondary button-compact">{t.signOut}</button></form></aside>:null}<main id="main">{children}</main><footer><strong>{t.tagline}</strong><p>{t.crisis}</p></footer>
+  </LocaleProvider>;
+  return <html lang={locale}><body>{!local && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?<ClerkProvider>{body}</ClerkProvider>:body}</body></html>;
+ }
+diff --git a/src/ui/logo.tsx b/src/ui/logo.tsx
+new file mode 100644
+index 0000000..5397606
+--- /dev/null
++++ b/src/ui/logo.tsx
+@@ -0,0 +1,12 @@
++// The ORAN mark (DESIGN_SYSTEM §5.1): a rounded tile with a half-sun above a horizon and three rays.
++// It is decorative; the link that holds it carries the name. Colors come from CSS (.logo-*), never from here.
++export function LogoMark(): React.JSX.Element {
++  return (
++    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
++      <rect className="logo-tile" width="28" height="28" rx="8" />
++      <path className="logo-sun" d="M8 18a6 6 0 0 1 12 0z" />
++      <path className="logo-rays" d="M14 10V8M8.3 12.3l-1.4-1.4M19.7 12.3l1.4-1.4" fill="none" strokeWidth="1.5" strokeLinecap="round" />
++      <path className="logo-horizon" d="M6 18h16" fill="none" strokeWidth="1.5" strokeLinecap="round" />
++    </svg>
++  );
++}
+diff --git a/src/ui/nav.tsx b/src/ui/nav.tsx
+new file mode 100644
+index 0000000..22b6899
+--- /dev/null
++++ b/src/ui/nav.tsx
+@@ -0,0 +1,22 @@
++'use client';
++import Link from 'next/link';
++import { usePathname } from 'next/navigation';
++
++export type NavItem = { href: string; label: string };
++
++// The domain navigation. It renders on the server too, so the current page is marked without JavaScript.
++export function DomainNav({ label, items }: { label: string; items: readonly NavItem[] }): React.JSX.Element {
++  const pathname = usePathname();
++  return (
++    <nav aria-label={label}>
++      {items.map((item) => {
++        const current = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(item.href + '/');
++        return (
++          <Link key={item.href} href={item.href} aria-current={current ? 'page' : undefined}>
++            {item.label}
++          </Link>
++        );
++      })}
++    </nav>
++  );
++}
+diff --git a/tests/browser/design-system.spec.ts b/tests/browser/design-system.spec.ts
+index 64416a8..1215c96 100644
+--- a/tests/browser/design-system.spec.ts
++++ b/tests/browser/design-system.spec.ts
+@@ -392,10 +392,109 @@ test('rules use tokens instead of raw colors', () => {
+   expect(rules).toContain('.card');
+   expect(rules.match(rawColor)).toBeNull();
+ 
+   // Negative controls: the guard can fail. Raw colors hidden behind a `:root` in a longer selector are still found,
+   // and an exact `:root` block is still skipped.
+   for (const css of ['html:root{color:#fff}', '.a, :root{color:rgb(0,0,0)}', '.x :root{color:hsl(0 0% 0%)}', 'a{}:root,.b{color:#000}']) {
+     expect(withoutTokenBlocks(css).match(rawColor), css).not.toBeNull();
+   }
+   expect(withoutTokenBlocks(':root{color:#fff}\n:root { color:rgb(0,0,0) }').match(rawColor)).toBeNull();
+ });
++
++test('the header is a Blend top bar with domain navigation', async ({ page }) => {
++  await page.setViewportSize({ width: 1280, height: 800 });
++  await page.goto('/');
++  const banner = page.getByRole('banner');
++  await expect(banner).toHaveCSS('background-color', 'rgb(255, 255, 255)');
++  await expect(banner).toHaveCSS('border-bottom-width', '1px');
++  await expect(banner).toHaveCSS('border-bottom-style', 'solid');
++  await expect(banner).toHaveCSS('border-bottom-color', 'rgb(225, 230, 234)');
++  await expect(page.getByRole('link', { name: 'ORAN Open Resource Access Network', exact: true })).toBeVisible();
++
++  const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
++  const links = nav.getByRole('link');
++  const names = ['Find support', 'My profile', 'Organization', 'Community', 'Admin'];
++  await expect(links).toHaveText(names);
++  const find = nav.getByRole('link', { name: 'Find support', exact: true });
++  await expect(find).toHaveAttribute('aria-current', 'page');
++  await expect(find).toHaveCSS('background-color', 'rgb(211, 230, 234)');
++  await expect(find).toHaveCSS('color', 'rgb(23, 89, 107)');
++  await expect(find).toHaveCSS('font-weight', '800');
++  for (const name of names.slice(1)) await expect(nav.getByRole('link', { name, exact: true }), name).not.toHaveAttribute('aria-current');
++
++  // On another page, no domain is current.
++  await page.goto('/sign-in');
++  await expect(links).toHaveText(names);
++  for (const name of names) await expect(nav.getByRole('link', { name, exact: true }), name + ' on /sign-in').not.toHaveAttribute('aria-current');
++
++  // Every header and notice control is a 44px target.
++  await page.goto('/');
++  const apply = page.getByRole('button', { name: 'Apply', exact: true });
++  const targets = [...(await links.all()), apply, page.getByRole('button', { name: 'Sign out', exact: true }), page.getByRole('link', { name: 'Switch identity', exact: true })];
++  for (const target of targets) {
++    const box = await target.boundingBox();
++    expect(box?.height, ((await target.textContent()) ?? '') + ' height').toBeGreaterThanOrEqual(44);
++  }
++  await expect(apply).toHaveCSS('font-size', '14px');
++  await expect(apply).toHaveCSS('background-color', 'rgb(226, 238, 240)');
++
++  // The development notice is as wide as the chat column and aligned with the page content, not the whole viewport (M6).
++  const [notice, main] = [await page.getByRole('complementary').boundingBox(), await page.getByRole('main').boundingBox()];
++  // 760px (--size-chat-column) plus 16px (--space-4) of padding on each side of main.
++  expect(notice?.width, 'notice width').toBeLessThanOrEqual(760 + 2 * 16);
++  expect(notice?.x, 'notice left edge').toBeCloseTo((main?.x ?? 0) + 16, 0);
++
++  // The bootstrap custom properties are gone, and every property the stylesheet declares is documented or derived.
++  expect([...(await readTokens(page, ['--ink', '--accent', '--paper'])).values()]).toEqual(['', '', '']);
++  const declared = new Set([...readFileSync('src/app/globals.css', 'utf8').matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]));
++  expect(declared.size, 'declared custom properties').toBeGreaterThan(50);
++  const documented = documentedTokenNames();
++  expect([...declared].filter((name) => !documented.has(name) && !derivedTokens.includes(name))).toEqual([]);
++});
++
++test('Spanish header reflows at 320 and 360 pixels', async ({ page }) => {
++  await page.goto('/');
++  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('es');
++  await page.getByRole('button', { name: 'Apply', exact: true }).click();
++  await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++
++  for (const width of [320, 360]) {
++    await page.setViewportSize({ width, height: 800 });
++    for (const path of ['/', '/sign-in']) {
++      await page.goto(path);
++      await expect(page.getByRole('combobox', { name: 'Idioma', exact: true })).toBeVisible();
++      expect(await fitsWidth(page), path + ' fits ' + width + 'px').toBe(true);
++      const reachable = [
++        page.getByRole('combobox', { name: 'Idioma', exact: true }),
++        page.getByRole('button', { name: 'Aplicar', exact: true }),
++        ...['Buscar apoyo', 'Mi perfil', 'Organización', 'Comunidad', 'Administración'].map((name) => page.getByRole('link', { name, exact: true })),
++      ];
++      for (const control of reachable) await expect(control, path + ' at ' + width + 'px').toBeInViewport();
++    }
++  }
++});
++
++test('the server marks the current domain without JavaScript and respects path boundaries', async ({ browser, baseURL }) => {
++  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
++  try {
++    const page = await context.newPage();
++    const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
++    const marked = async (path: string) => {
++      await page.goto(path);
++      const names = await nav.getByRole('link').allTextContents();
++      expect(names, path + ' links').toHaveLength(5);
++      const current: string[] = [];
++      for (const name of names) if ((await nav.getByRole('link', { name, exact: true }).getAttribute('aria-current')) === 'page') current.push(name);
++      return current;
++    };
++    expect(await marked('/')).toEqual(['Find support']);
++    expect(await marked('/sign-in')).toEqual([]);
++    // A nested path belongs to its domain; a path that only starts with the same letters does not.
++    expect(await marked('/admin/anything')).toEqual(['Admin']);
++    expect(await marked('/adminx')).toEqual([]);
++    await enterAs(page, 'Admin');
++    expect(await marked('/admin')).toEqual(['Admin']);
++    expect(await marked('/organization')).toEqual(['Organization']);
++  } finally {
++    await context.close();
++  }
++});
